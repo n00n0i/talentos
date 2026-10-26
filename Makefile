@@ -7,6 +7,7 @@ CARGO_TARGET_DIR ?= target
 SQLX_OFFLINE ?= false
 export DATABASE_URL ?= postgres://talentos:$${PG_PASSWORD:-talentos_dev_secret}@localhost:5432/talentos
 export AUTH_JWT_SECRET ?= dev-secret-change-me-in-prod-minimum-32-bytes-okay!!
+export DATABASE_AUTH_URL ?= postgres://talentos_auth:auth_dev_secret@localhost:5432/talentos
 
 .PHONY: help install infra-up infra-down db-reset sqlx-prepare \
         check fmt clippy test build release run \

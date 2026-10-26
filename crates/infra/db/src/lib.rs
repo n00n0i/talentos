@@ -32,6 +32,23 @@ impl TenantPool {
         self.inner.acquire().await
     }
 
+    /// Begin a transaction scoped to one tenant.
+    ///
+    /// `SET LOCAL` reverts at COMMIT/ROLLBACK, so a pooled connection never
+    /// carries another tenant's context. Every tenant-scoped query must run
+    /// here — RLS is FORCE-enabled, so a missing GUC reads as "no rows".
+    pub async fn begin_tenant(
+        &self,
+        tenant_id: talentos_kernel::TenantId,
+    ) -> Result<Transaction<'static, Postgres>, sqlx::Error> {
+        let mut tx = self.inner.begin().await?;
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+        Ok(tx)
+    }
+
     /// Run `f` inside a transaction whose first statement binds the tenant GUC.
     /// SET LOCAL reverts at COMMIT/ROLLBACK, so no leakage to the next borrower even
     /// though the physical connection is pooled.

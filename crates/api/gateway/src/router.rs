@@ -6,7 +6,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
-use crate::handlers::{auth, health, payroll};
+use crate::handlers::{ai, auth, health, leave, payroll};
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
 use crate::state::AppState;
@@ -28,6 +28,9 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/payroll/runs/:id/payslips",
             get(payroll::list_payslips),
         )
+        .route("/api/v1/leave/requests/:id/decision", post(leave::decide))
+        .route("/api/v1/ai/tools", get(ai::list_tools))
+        .route("/api/v1/ai/agents/run", post(ai::run_agent))
         .route(
             "/api/v1/payroll/payslips/:id/pdf",
             get(payroll::get_payslip_pdf),

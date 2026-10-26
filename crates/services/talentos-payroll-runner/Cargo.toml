@@ -1,0 +1,19 @@
+[package]
+name = "talentos-payroll-runner"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-kernel = { path = "../../core/kernel" }
+talentos-db = { path = "../../infra/db" }
+talentos-payroll = { path = "../../domain/talentos-payroll" }
+talentos-compliance = { path = "../../domain/talentos-compliance" }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }

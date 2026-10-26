@@ -112,7 +112,7 @@ async fn authenticate(
         tenant_slug,
         email
     )
-    .fetch_optional(state.pool.pool())
+    .fetch_optional(&state.auth_pool)
     .await
     .map_err(internal_db_err)?;
 
@@ -156,7 +156,7 @@ async fn record_login_success(state: &AppState, ctx: &TenantContext, addr: &Sock
         "UPDATE users SET last_login_at = now() WHERE id = $1",
         ctx.user_id.0
     )
-    .execute(state.pool.pool())
+    .execute(&state.auth_pool)
     .await
     .map_err(|e| tracing::warn!(error = %e, "failed to update last_login_at"));
 
@@ -167,7 +167,7 @@ async fn record_login_success(state: &AppState, ctx: &TenantContext, addr: &Sock
         ctx.user_id.0.to_string(),
         sqlx::types::ipnetwork::IpNetwork::from(addr.ip())
     )
-    .execute(state.pool.pool())
+    .execute(&state.auth_pool)
     .await
     .map_err(|e| tracing::warn!(error = %e, "failed to write audit_log for login"));
 }
@@ -205,7 +205,7 @@ async fn store_refresh_token(
         ctx.entity_id.map(|e| e.0),
         state.refresh_ttl_days as i32
     )
-    .execute(state.pool.pool())
+    .execute(&state.auth_pool)
     .await
     .map_err(internal_db_err)?;
     Ok(())
@@ -247,7 +247,7 @@ pub async fn refresh(
            FROM refresh_tokens WHERE token_hash = $1"#,
         hashed
     )
-    .fetch_optional(state.pool.pool())
+    .fetch_optional(&state.auth_pool)
     .await
     .map_err(internal_db_err);
 
@@ -275,7 +275,7 @@ pub async fn refresh(
            WHERE ur.user_id = $1"#,
         tok.user_id
     )
-    .fetch_one(state.pool.pool())
+    .fetch_one(&state.auth_pool)
     .await;
     let roles = match roles_result {
         Ok(r) => r.roles.unwrap_or_default(),
@@ -315,7 +315,7 @@ pub async fn refresh(
         ctx.entity_id.map(|e| e.0),
         state.refresh_ttl_days as i32,
     )
-    .fetch_optional(state.pool.pool())
+    .fetch_optional(&state.auth_pool)
     .await;
 
     match tx_result {
@@ -353,7 +353,7 @@ async fn revoke_family(state: &AppState, start_parent: Option<Vec<u8>>) {
                RETURNING parent_hash"#,
             current
         )
-        .fetch_optional(state.pool.pool())
+        .fetch_optional(&state.auth_pool)
         .await;
 
         match row {
@@ -374,13 +374,18 @@ async fn revoke_family(state: &AppState, start_parent: Option<Vec<u8>>) {
 
 /// GET /api/v1/auth/me — profile + effective permissions from verified JWT context.
 pub async fn me(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    // Tenant-scoped: RLS is FORCE-enabled, so this must run inside the GUC tx.
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
     let row = sqlx::query!(
         r#"SELECT email, full_name_th, full_name_en, last_login_at
            FROM users WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE"#,
         ctx.user_id.0,
         ctx.tenant_id.0
     )
-    .fetch_optional(state.pool.pool())
+    .fetch_optional(&mut *tx)
     .await;
 
     let u = match row {

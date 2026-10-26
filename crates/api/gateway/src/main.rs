@@ -64,6 +64,14 @@ async fn main() {
             .expect("DB connect failed"),
     );
 
+    // Auth pool bypasses RLS by design; see scripts/init-db.sql.
+    // Required explicitly: falling back to the tenant URL would silently break login.
+    let auth_db_url = std::env::var("DATABASE_AUTH_URL")
+        .expect("DATABASE_AUTH_URL must be set (role with BYPASSRLS, used only by login/refresh)");
+    let auth_pool = sqlx::PgPool::connect(&auth_db_url)
+        .await
+        .expect("DB auth connect failed");
+
     // Parse REDIS_URL so non-local deployments work.
     let redis_config = Config::from_url(&redis_url).expect("invalid REDIS_URL");
     let redis = Client::new(redis_config, None, None, None);
@@ -75,6 +83,7 @@ async fn main() {
 
     let state = AppState {
         pool: pool.clone(),
+        auth_pool,
         jwt_secret: Arc::from(jwt_secret.as_bytes()),
         redis,
         access_ttl_secs: access_ttl,

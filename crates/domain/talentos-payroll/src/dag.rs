@@ -78,7 +78,8 @@ impl PayrollDag {
             error: None,
         });
 
-        // 4. Withholding tax (PND 2567, annualised then divided by 12)
+        // 4. Withholding tax (PND 2567).
+        // `calculate_pnd_tax` already annualises AND divides by 12 — do not divide again.
         let allowances = PersonalAllowances {
             personal: dec!(30000),
             spouse: if input.is_married {
@@ -91,8 +92,7 @@ impl PayrollDag {
             pension_paid: Decimal::ZERO,
         };
         let annual_taxable = gross_with_ot.amount() * dec!(12);
-        let annual_tax = calculate_pnd_tax(annual_taxable, &allowances)?;
-        let monthly_tax = (annual_tax / dec!(12)).round_dp(2);
+        let monthly_tax = calculate_pnd_tax(annual_taxable, &allowances)?.round_dp(2);
         let tax_money = Money::from_baht(monthly_tax);
         trace.push(StepResult {
             step: "tax".into(),
@@ -277,6 +277,14 @@ mod tests {
             out.net_pay.amount(),
             out.gross_earnings.amount() - out.total_deductions.amount()
         );
+    }
+
+    #[test]
+    fn monthly_tax_is_not_divided_twice() {
+        // 85,000/mo → 1,020,000/yr → taxable 990,000 after 30k allowance
+        // progressive: 7,500 + 20,000 + 37,500 + 48,000 = 113,000/yr → 9,416.67/mo
+        let (out, _) = PayrollDag::calculate(&ctx(), input(dec!(85000))).unwrap();
+        assert_eq!(out.tax_withheld.amount(), dec!(9416.67));
     }
 
     #[test]

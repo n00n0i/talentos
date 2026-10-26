@@ -21,6 +21,10 @@ pub async fn start_payroll_run(
     Authed(ctx): Authed,
     Json(body): Json<StartPayrollRunRequest>,
 ) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
     // Validate period
     if body.period_end <= body.period_start {
         return (
@@ -36,15 +40,23 @@ pub async fn start_payroll_run(
             .into_response();
     }
 
+    // The token may be tenant-wide (entity_id = null); then the body must say which entity.
+    let entity_id = match body.entity_id.or(ctx.entity_id.map(|e| e.0)) {
+        Some(id) => id,
+        None => {
+            return bad_request("entity_id is required when the token is not entity-scoped");
+        }
+    };
+
     // Check for existing run for this period (spec §7: concurrent run prevention)
     let existing = sqlx::query!(
         "SELECT id FROM payroll_runs WHERE tenant_id = $1 AND entity_id = $2 AND period_start = $3 AND period_end = $4",
         ctx.tenant_id.0,
-        ctx.entity_id.map(|e| e.0),
+        entity_id,
         body.period_start,
         body.period_end
     )
-    .fetch_optional(state.pool.pool())
+    .fetch_optional(&mut *tx)
     .await;
 
     if let Ok(Some(_)) = existing {
@@ -65,23 +77,47 @@ pub async fn start_payroll_run(
     let run_id = Uuid::new_v4();
     let now = chrono::Utc::now();
 
-    let _ = sqlx::query!(
+    if let Err(e) = sqlx::query!(
         r#"INSERT INTO payroll_runs (id, tenant_id, entity_id, period_start, period_end, payment_date, status, total_employees, created_by, created_at)
            VALUES ($1, $2, $3, $4, $5, $6, 'draft', 0, $7, $8)"#,
         run_id,
         ctx.tenant_id.0,
-        ctx.entity_id.map(|e| e.0),
+        entity_id,
         body.period_start,
         body.period_end,
         body.payment_date,
         ctx.user_id.0,
         now
     )
-    .execute(state.pool.pool())
-    .await;
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(e);
+    }
 
-    // TODO: Start Temporal workflow here — for Phase 2, we'll create the run and return the run_id
-    // The worker will pick it up via Temporal
+    if let Err(e) = tx.commit().await {
+        return internal_err(e);
+    }
+
+    // Execute in the background so the HTTP call returns immediately.
+    // shortcut: in-process execution; swap for a Temporal workflow when the worker lands.
+    let exec_pool = state.pool.clone();
+    let exec_tenant = ctx.tenant_id;
+    let exec_run_id = run_id;
+    tokio::spawn(async move {
+        match talentos_payroll_runner::execute_run(&exec_pool, exec_tenant, exec_run_id).await {
+            Ok(summary) => tracing::info!(
+                run_id = %summary.run_id,
+                employees = summary.employees,
+                failed = summary.failed,
+                net = %summary.total_net,
+                duration_ms = summary.duration_ms,
+                "payroll run completed"
+            ),
+            Err(e) => tracing::error!(run_id = %exec_run_id, error = %e, "payroll run failed"),
+        }
+    });
 
     (
         StatusCode::CREATED,
@@ -102,6 +138,10 @@ pub async fn get_payroll_run(
     Authed(ctx): Authed,
     Path(id): Path<Uuid>,
 ) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
     let row = sqlx::query!(
         r#"SELECT id, tenant_id, entity_id, period_start, period_end, payment_date, status, total_employees,
                   total_gross, total_net, total_tax, total_sso, total_pf, workflow_id, created_by, created_at, updated_at
@@ -109,7 +149,7 @@ pub async fn get_payroll_run(
         id,
         ctx.tenant_id.0
     )
-    .fetch_optional(state.pool.pool())
+    .fetch_optional(&mut *tx)
     .await;
 
     let run = match row {
@@ -150,6 +190,10 @@ pub async fn approve_payroll_run(
     Path(id): Path<Uuid>,
     Json(_body): Json<ApprovePayrollRequest>,
 ) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
     // Signal Temporal workflow: ApprovePayroll { approver_user_id }
     // For Phase 2: update status to 'approved' in DB
     let _ = sqlx::query!(
@@ -157,8 +201,12 @@ pub async fn approve_payroll_run(
         id,
         ctx.tenant_id.0
     )
-    .execute(state.pool.pool())
+    .execute(&mut *tx)
     .await;
+
+    if let Err(e) = tx.commit().await {
+        return internal_err(e);
+    }
 
     (
         StatusCode::OK,
@@ -179,6 +227,10 @@ pub async fn list_payslips(
     Path(run_id): Path<Uuid>,
     Query(query): Query<ListPayslipsQuery>,
 ) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
     let page = query.page.unwrap_or(1).max(1);
     let per_page = query.per_page.unwrap_or(50).clamp(1, 200);
     let offset = (page - 1) * per_page;
@@ -194,7 +246,7 @@ pub async fn list_payslips(
         per_page as i64,
         offset as i64
     )
-    .fetch_all(state.pool.pool())
+    .fetch_all(&mut *tx)
     .await
     .unwrap_or_default();
 
@@ -231,13 +283,17 @@ pub async fn get_payslip_pdf(
     Authed(ctx): Authed,
     Path(payslip_id): Path<Uuid>,
 ) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
     // Look up payslip and generate MinIO signed URL
     let row = sqlx::query!(
         "SELECT id FROM payslips WHERE id = $1 AND tenant_id = $2",
         payslip_id,
         ctx.tenant_id.0
     )
-    .fetch_optional(state.pool.pool())
+    .fetch_optional(&mut *tx)
     .await;
 
     match row {
@@ -265,6 +321,8 @@ pub struct StartPayrollRunRequest {
     pub period_start: NaiveDate,
     pub period_end: NaiveDate,
     pub payment_date: NaiveDate,
+    /// Required when the caller's token is not scoped to a single entity.
+    pub entity_id: Option<Uuid>,
 }
 
 #[derive(Serialize)]
@@ -329,6 +387,20 @@ pub struct PayslipSummary {
     pub pf_employee: String,
     pub status: String,
     pub anomalies: serde_json::Value,
+}
+
+fn bad_request(message: &str) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: "invalid_request".into(),
+            message: message.to_string(),
+            details: vec![],
+            request_id: Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
+        }),
+    )
+        .into_response()
 }
 
 fn not_found() -> Response {

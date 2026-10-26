@@ -1115,3 +1115,16 @@ pub fn default_registry(
     registry.register(CheckComplianceTool::new(pool));
     registry
 }
+
+/// Names of the built-in tools, without constructing their dependencies.
+/// Used by discovery endpoints that must answer without a database or model key.
+pub const TOOL_NAMES: &[&str] = &[
+    "calculate_tax",
+    "check_compliance",
+    "detect_anomalies",
+    "draft_leave_policy",
+    "query_employee",
+    "run_payroll",
+    "search_policy",
+    "summarize_payroll_run",
+];

@@ -7,6 +7,8 @@ use talentos_db::TenantPool;
 #[derive(Clone)]
 pub struct AppState {
     pub pool: Arc<TenantPool>,
+    /// BYPASSRLS pool: login/refresh bootstrap only (tenant unknown there).
+    pub auth_pool: sqlx::PgPool,
     pub jwt_secret: Arc<[u8]>,
     pub redis: fred::clients::Client,
     pub access_ttl_secs: i64,

@@ -8,8 +8,8 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **92 passed**, 0 failed (7 DB-backed, 6 render, 5 leave, 6 wasm, 3 schema, 5 mcp, 3 memory DB, 6 RBAC) |
-| Migrations | `psql -f migrations/*.sql` on a fresh DB | 9 files apply cleanly |
+| Tests | `cargo test --workspace` | **92 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 13 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 11, rag 7, agent 7,
 payroll-runner 6 (real PostgreSQL + Chromium: payslips, totals, state machine,

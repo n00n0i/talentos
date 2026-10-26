@@ -101,14 +101,19 @@ async fn authenticate(
 ) -> Result<TenantContext, AuthError> {
     // B7: propagate sqlx errors instead of swallowing them into InvalidCredentials.
     let row = sqlx::query!(
-        r#"SELECT u.id AS user_id, u.tenant_id, u.password_hash, u.is_active, ur.entity_id,
+        r#"SELECT u.id AS user_id, u.tenant_id, u.password_hash, u.is_active,
+                  (SELECT ur2.entity_id FROM user_roles ur2
+                    WHERE ur2.user_id = u.id AND ur2.entity_id IS NOT NULL
+                    ORDER BY ur2.assigned_at LIMIT 1) AS entity_id,
                   array_remove(array_agg(DISTINCT r.name), NULL)::text[] AS roles
            FROM users u
            JOIN tenants t ON t.id = u.tenant_id AND t.slug = $1
            LEFT JOIN user_roles ur ON ur.user_id = u.id
            LEFT JOIN roles r ON r.id = ur.role_id
            WHERE lower(u.email) = $2
-           GROUP BY u.id, u.tenant_id, u.password_hash, u.is_active, ur.entity_id"#,
+           -- Group by the primary key only; roles must not be split into one row
+           -- per entity scope, or a multi-role user logs in with only one role.
+           GROUP BY u.id"#,
         tenant_slug,
         email
     )

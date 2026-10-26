@@ -46,8 +46,8 @@ jobs:
           PGPASSWORD: talentos_ci
         run: |
           psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 <<'SQL'
-          CREATE ROLE talentos_app LOGIN PASSWORD 'app_ci' NOSUPERUSER NOBYPASSRLS;
-          CREATE ROLE talentos_auth LOGIN PASSWORD 'auth_ci' BYPASSRLS;
+          CREATE ROLE talentos_app LOGIN PASSWORD 'app_ci_password' NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE talentos_auth LOGIN PASSWORD 'auth_ci_password' BYPASSRLS;
           GRANT USAGE ON SCHEMA public TO talentos_app, talentos_auth;
           GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO talentos_app, talentos_auth;
           GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO talentos_app, talentos_auth;
@@ -65,8 +65,8 @@ jobs:
       - name: Tests
         env:
           # The app role is NOBYPASSRLS: tests exercise the real policies.
-          DATABASE_URL: postgres://talentos_app:app_ci@localhost:5432/talentos
-          DATABASE_AUTH_URL: postgres://talentos_auth:auth_ci@localhost:5432/talentos
+          DATABASE_URL: postgres://talentos_app:app_ci_password@localhost:5432/talentos
+          DATABASE_AUTH_URL: postgres://talentos_auth:auth_ci_password@localhost:5432/talentos
           # Owner connection for the provisioning CLI test.
           DATABASE_ADMIN_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
         run: cargo nextest run --workspace --no-fail-fast
@@ -121,16 +121,16 @@ jobs:
       - name: Migrate, ensure roles, seed (the deploy path)
         env:
           DATABASE_ADMIN_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
-          APP_DB_PASSWORD: app_ci
-          AUTH_DB_PASSWORD: auth_ci
+          APP_DB_PASSWORD: app_ci_password
+          AUTH_DB_PASSWORD: auth_ci_password
           PGPASSWORD: talentos_ci
         run: |
           ./target/debug/talentos-gateway migrate
           psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 -q -f scripts/seed-e2e.sql
       - name: Start gateway
         env:
-          DATABASE_URL: postgres://talentos_app:app_ci@localhost:5432/talentos
-          DATABASE_AUTH_URL: postgres://talentos_auth:auth_ci@localhost:5432/talentos
+          DATABASE_URL: postgres://talentos_app:app_ci_password@localhost:5432/talentos
+          DATABASE_AUTH_URL: postgres://talentos_auth:auth_ci_password@localhost:5432/talentos
           REDIS_URL: redis://127.0.0.1:6379
           AUTH_JWT_SECRET: ci-secret-change-me-minimum-32-bytes-long!!
           GATEWAY_PORT: '18080'

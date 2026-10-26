@@ -10,7 +10,8 @@ export type IconName =
   | "settings"
   | "logout"
   | "chevron"
-  | "sparkle";
+  | "sparkle"
+  | "clover";
 
 const paths: Record<IconName, React.ReactNode> = {
   overview: (
@@ -69,6 +70,14 @@ const paths: Record<IconName, React.ReactNode> = {
     </>
   ),
   chevron: <path d="m7 10 5 5 5-5" />,
+  clover: (
+    <>
+      <circle cx="9" cy="9" r="3.2" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="9" r="3.2" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="15" r="3.2" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="15" r="3.2" fill="currentColor" stroke="none" />
+    </>
+  ),
   sparkle: (
     <>
       <path d="M12 3.5c.6 4.2 1.8 5.4 6 6-4.2.6-5.4 1.8-6 6-.6-4.2-1.8-5.4-6-6 4.2-.6 5.4-1.8 6-6Z" />

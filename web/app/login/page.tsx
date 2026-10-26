@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Icon from "@/components/Icon";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function LoginPage() {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="login-brand">
-          <span className="brand-mark">t</span> talentos
+          <span className="brand-mark"><Icon name="clover" size={20} /></span> talentos
         </div>
         <h1 style={{ fontSize: 20, marginBottom: 4 }}>เข้าสู่ระบบ</h1>
         <p className="hint" style={{ marginBottom: 20 }}>

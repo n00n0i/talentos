@@ -99,16 +99,16 @@ The editor UI lives in `demo/index.html` under **แบบฟอร์มสล�
 
 ## Design
 
-The dashboard uses a warm off-white canvas with one rounded app shell, a light
-sidebar, 20px cards, black pill actions and lavender/lime accent cards. Money
-and status stay high-contrast; the AI surface is not a permanent panel.
+The dashboard uses a sage/teal palette on a soft gray canvas: one rounded app
+shell, a top pill navigation, mint stat cards, a deep-teal payment summary rail
+and green primary actions. Headings use a display serif; numbers stay tabular.
 
-- Tokens live in `web/app/globals.css` (`--page`, `--lavender`, `--lime`,
+- Tokens live in `web/app/globals.css` (`--page`, `--sage`, `--teal`, `--mint`,
   `--radius`, spacing).
 - Fonts are self-hosted in `web/public/fonts` (Inter, Instrument Serif for
   display, Noto Sans Thai) so on-prem installs never call a CDN.
-- Responsive: below 1000px the sidebar becomes a two-row header with a
-  scrollable nav; stat cards go 2×2 and wide tables scroll inside their card.
+- Responsive: below 1000px the top bar wraps into brand + pills, stat cards go
+  2×2, the right rail stacks, and wide tables scroll inside their card.
 
 ## Web app
 

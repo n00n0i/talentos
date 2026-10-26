@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
+import Icon from "@/components/Icon";
 
 export default function AcceptInvitePage() {
   const params = useParams<{ token: string }>();
@@ -41,7 +42,7 @@ export default function AcceptInvitePage() {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="login-brand">
-          <span className="brand-mark">t</span> talentos
+          <span className="brand-mark"><Icon name="clover" size={20} /></span> talentos
         </div>
         {done ? (
           <>

@@ -8,7 +8,7 @@ async function login(page: Page) {
   await page.getByLabel("อีเมล").fill("e2e@example.com");
   await page.getByLabel("รหัสผ่าน").fill("E2ePassword123!");
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
-  await expect(page.getByRole("heading", { name: "ภาพรวม" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "ภาพรวม" })).toBeVisible();
 }
 
 test("accepts the invite and logs in", async ({ page }) => {

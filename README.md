@@ -166,6 +166,10 @@ open http://localhost   # nginx -> web:3000, /api/* and /health -> gateway:8080
   `make restore FILE=...` stops the app, restores and restarts.
 - `./scripts/deploy.sh` = migrate → rebuild → health check. `--rollback` starts
   the previous gateway/web images.
+- The embedded migrator keeps a `_sqlx_migrations` ledger. A database created by
+  the old hand-run SQL (before this ledger existed) cannot be upgraded in place;
+  recreate it with `make db-reset` on dev, or baseline it before the first
+  production deploy. Fresh installs need nothing.
 
 ## Web app
 

@@ -30,8 +30,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Install sqlx-cli
-        run: cargo install sqlx-cli --no-default-features --features postgres,rustls
+      - name: Install sqlx-cli + nextest
+        run: |
+          cargo install sqlx-cli --no-default-features --features postgres,rustls
+          cargo install cargo-nextest --locked
       - name: Install protoc
         # temporalio-protos generates code at build time when the worker is re-enabled.
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -52,7 +54,7 @@ jobs:
       - name: Tests
         env:
           DATABASE_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --no-fail-fast
 
   build-release:
     needs: quality

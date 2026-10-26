@@ -192,7 +192,7 @@ export default function UsersPage() {
                       onChange={(e) => {
                         if (e.target.value) assign(u, e.target.value);
                       }}
-                      style={{ height: 28, border: "1px solid var(--border)", borderRadius: 6 }}
+                      className="compact-select"
                     >
                       <option value="">เพิ่มบทบาท…</option>
                       {ROLES.map((r) => (

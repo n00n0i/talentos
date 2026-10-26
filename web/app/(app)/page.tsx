@@ -50,17 +50,17 @@ export default function DashboardPage() {
       {error && <p className="error">{error}</p>}
 
       <div className="grid-4">
-        <div className="card card-pad">
+        <div className="card card-pad tone-lavender">
           <div className="stat-label">พนักงานที่ใช้งาน</div>
           <div className="stat-value">{headcount ?? "—"}</div>
           <div className="stat-hint">คน</div>
         </div>
-        <div className="card card-pad">
+        <div className="card card-pad tone-dark">
           <div className="stat-label">ยอดจ่ายสุทธิรอบล่าสุด</div>
           <div className="stat-value">฿{latest ? thbShort(latest.totalNet) : "—"}</div>
           <div className="stat-hint">{latest ? `${latest.totalEmployees} คน` : "ยังไม่มีรอบ"}</div>
         </div>
-        <div className="card card-pad">
+        <div className="card card-pad tone-lime">
           <div className="stat-label">ภาษีหัก ณ ที่จ่าย</div>
           <div className="stat-value">฿{latest ? thbShort(latest.totalTax) : "—"}</div>
           <div className="stat-hint">PND.1 รอบล่าสุด</div>

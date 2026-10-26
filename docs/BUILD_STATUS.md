@@ -68,7 +68,9 @@ image (`web/Dockerfile`) was built and served `login` → session login → `/me
 against a live gateway.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with an
-RLS warning) and `/users`. Browser E2E (`web/e2e`, Playwright) passes 4/4
+RLS warning) and `/users`. UI restyled to the approved reference: rounded app
+shell, light sidebar, serif display headings, black pill actions, lavender/lime
+cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout. Browser E2E (`web/e2e`, Playwright) passes 4/4
 locally and runs in CI: invite acceptance → login, settings persistence,
 employee → attendance → payroll → approval, user invite.
 

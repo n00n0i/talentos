@@ -15,6 +15,7 @@ pub struct MeResponse {
     pub full_name_th: Option<String>,
     pub full_name_en: Option<String>,
     pub tenant_id: String,
+    pub tenant_name: Option<String>,
     pub entity_id: Option<String>,
     pub roles: Vec<String>,
     pub permissions: Vec<String>,

@@ -310,7 +310,8 @@ function EntityRow({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ height: 30, border: "1px solid var(--border)", borderRadius: 6, padding: "0 8px", width: "100%" }}
+          className="compact-input"
+          style={{ width: "100%", borderRadius: 10 }}
         />
       </td>
       <td>
@@ -318,7 +319,8 @@ function EntityRow({
           value={taxId}
           onChange={(e) => setTaxId(e.target.value)}
           placeholder="13 หลัก"
-          style={{ height: 30, border: "1px solid var(--border)", borderRadius: 6, padding: "0 8px", width: 160 }}
+          className="compact-input"
+          style={{ width: 160, borderRadius: 10 }}
         />
       </td>
       <td>

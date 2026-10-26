@@ -41,7 +41,7 @@ export default function AcceptInvitePage() {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="login-brand">
-          <span className="brand-mark">T</span> TalentOS
+          <span className="brand-mark">t</span> talentos
         </div>
         {done ? (
           <>

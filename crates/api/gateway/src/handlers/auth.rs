@@ -385,7 +385,8 @@ pub async fn me(State(state): State<AppState>, Authed(ctx): Authed) -> Response 
         Err(e) => return internal_err_to_response(e),
     };
     let row = sqlx::query!(
-        r#"SELECT email, full_name_th, full_name_en, last_login_at
+        r#"SELECT email, full_name_th, full_name_en, last_login_at,
+                  (SELECT name FROM tenants WHERE id = $2) AS tenant_name
            FROM users WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE"#,
         ctx.user_id.0,
         ctx.tenant_id.0
@@ -408,6 +409,7 @@ pub async fn me(State(state): State<AppState>, Authed(ctx): Authed) -> Response 
             full_name_th: u.full_name_th,
             full_name_en: u.full_name_en,
             tenant_id: ctx.tenant_id.to_string(),
+            tenant_name: u.tenant_name,
             entity_id: ctx.entity_id.map(|e| e.to_string()),
             roles: ctx.roles.clone(),
             permissions: perms,

@@ -97,6 +97,19 @@ GET  /api/v1/payroll/payslips/:id/render → the payslip as text/html
 
 The editor UI lives in `demo/index.html` under **แบบฟอร์มสลิป**.
 
+## Design
+
+The dashboard uses a warm off-white canvas with one rounded app shell, a light
+sidebar, 20px cards, black pill actions and lavender/lime accent cards. Money
+and status stay high-contrast; the AI surface is not a permanent panel.
+
+- Tokens live in `web/app/globals.css` (`--page`, `--lavender`, `--lime`,
+  `--radius`, spacing).
+- Fonts are self-hosted in `web/public/fonts` (Inter, Instrument Serif for
+  display, Noto Sans Thai) so on-prem installs never call a CDN.
+- Responsive: below 1000px the sidebar becomes a two-row header with a
+  scrollable nav; stat cards go 2×2 and wide tables scroll inside their card.
+
 ## Web app
 
 `web/` is a Next.js 14 app (Thai-first, Stripe-style light dashboard). It never

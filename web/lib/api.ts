@@ -68,6 +68,7 @@ export type Me = {
   full_name_th: string;
   full_name_en: string | null;
   tenant_id: string;
+  tenant_name: string | null;
   entity_id: string | null;
   roles: string[];
   permissions: string[];

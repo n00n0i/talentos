@@ -38,7 +38,7 @@ export default function LoginPage() {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="login-brand">
-          <span className="brand-mark">T</span> TalentOS
+          <span className="brand-mark">t</span> talentos
         </div>
         <h1 style={{ fontSize: 20, marginBottom: 4 }}>เข้าสู่ระบบ</h1>
         <p className="hint" style={{ marginBottom: 20 }}>

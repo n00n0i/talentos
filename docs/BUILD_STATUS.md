@@ -53,6 +53,18 @@ on the next request (old refresh token then 401, as designed). The standalone
 image (`web/Dockerfile`) was built and served `login` → session login → `/me`
 against a live gateway.
 
+## Known risks
+
+- **RLS is only as strong as the DB role.** The dev compose `talentos` role is the
+  Postgres superuser, and superusers bypass RLS. Production must run the gateway as
+  a `NOBYPASSRLS` role with grants on the tables (keep `talentos_auth` BYPASSRLS for
+  login/refresh only). Until then, tenant isolation rests on every query's explicit
+  `tenant_id` filter.
+- Payroll executes in the gateway process with a stuck-run sweeper; that is
+  recovery, not durable execution. Temporal remains unwired.
+- Attendance/leave are not yet inputs to payroll (`ot_hours` / `days_worked` are
+  still fixed values).
+
 ## Deferred — not wired
 
 | Crate | Blocker |

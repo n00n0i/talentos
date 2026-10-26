@@ -19,7 +19,7 @@ use uuid::Uuid;
 use talentos_model_gw::HuakatiClient;
 use talentos_tools::{ToolContext, ToolRegistry};
 
-use crate::middleware::auth::Authed;
+use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 
 const ALLOW_DESTRUCTIVE: &str = "x-talentos-allow-destructive";
@@ -31,6 +31,12 @@ pub async fn post(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    // MCP is an HR-ops surface: every tool can read tenant data, and memory
+    // writes are tenant-wide. A token is not enough — require HR-level access.
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+
     let message: Value = match serde_json::from_slice(&body) {
         Ok(v) => v,
         Err(e) => {
@@ -55,6 +61,11 @@ pub async fn post(
         .get(ALLOW_DESTRUCTIVE)
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v.eq_ignore_ascii_case("true"));
+    if allow_destructive {
+        if let Err(forbidden) = require(&ctx, "payroll_run", "calculate") {
+            return forbidden;
+        }
+    }
 
     match talentos_mcp::handle(&message, &registry, &tool_ctx, allow_destructive).await {
         // Notifications (e.g. notifications/initialized) have no response body.

@@ -103,7 +103,7 @@ npm install
 npm run dev                       # http://localhost:3000
 ```
 
-Production image: `docker build -f web/Dockerfile -t talentos/web .` (Next
+Production image: `docker build -f web/Dockerfile -t talentos/web web` (Next
 standalone). Set `TALENTOS_COOKIE_SECURE=false` only when serving plain HTTP on a
 trusted network.
 

@@ -4,20 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-talentos-kernel = { path = "../../core/kernel" }
-talentos-authz = { path = "../../core/authz" }
-talentos-db = { path = "../../infra/db" }
-talentos-payroll = { path = "../../domain/talentos-payroll" }
-talentos-compliance = { path = "../../domain/talentos-compliance" }
-rmcp = { version = "3.7.0", features = ["server", "macros", "schemars", "transport-io"] }
-tokio = { workspace = true }
-serde = { workspace = true }
+talentos-tools = { path = "../../ai/talentos-tools" }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
-schemars = "1.0"
-uuid = { workspace = true }
-chrono = { workspace = true }
-sqlx = { workspace = true }
-async-trait = "0.1"
-futures-util = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }

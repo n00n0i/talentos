@@ -15,7 +15,9 @@ pub struct ToolContext {
     pub entity_id: Option<EntityId>,
     pub run_id: uuid::Uuid,
     pub db: Arc<TenantPool>,
-    pub model_gw: Arc<HuakatiClient>,
+    /// `None` when HUAKATI_API_KEY is unset: local tools keep working, LLM-backed
+    /// tools are simply not registered.
+    pub model_gw: Option<Arc<HuakatiClient>>,
     /// Free-form per-request data (MCP extensions, trace ids, ...).
     pub extensions: HashMap<String, Value>,
 }

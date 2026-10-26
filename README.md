@@ -14,7 +14,7 @@ for exactly what compiles, what is tested, and what is deferred.
 - **Thai compliance**: PND 2567 progressive brackets, SSO 5% capped at ฿15,000, PF, LPA §118 severance, OT 1.5×/2×/3×
 - **Agent**: Observe → Plan → Act → Reflect loop over 8 HR tools (runs in-process; Temporal pending)
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
-- **API**: `/health`, `/api/v1/auth/*`, `/api/v1/payroll/*`, `/api/v1/leave/*`, `/api/v1/ai/*`, `/api/v1/plugins*`, `/api/v1/graphql`
+- **API**: `/health`, `/api/v1/auth/*`, `/api/v1/payroll/*`, `/api/v1/leave/*`, `/api/v1/ai/*`, `/api/v1/plugins*`, `/api/v1/graphql`, `/api/v1/mcp`
 
 ## Quick start
 
@@ -85,9 +85,25 @@ GET  /api/v1/payroll/payslips/:id/render → the payslip as text/html
 
 The editor UI lives in `demo/index.html` under **แบบฟอร์มสลิป**.
 
+## MCP
+
+`POST /api/v1/mcp` speaks JSON-RPC 2.0 (Model Context Protocol) over streamable
+HTTP. Stateless: the bearer token on every request is the tenant. Advertises the
+same tools the agent loop uses.
+
+```bash
+curl -s localhost:8080/api/v1/mcp -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+Destructive tools (payroll runs) are refused unless the request also sends
+`X-TalentOS-Allow-Destructive: true`. Without `HUAKATI_API_KEY`, the three
+LLM-backed tools are not registered; the rest keep working.
+
 ## GraphQL
 
-`POST /api/v1/graphql` (JWT required). Read-only queries: `health`, `me`,
+`POST /api/v1/graphql`, `/api/v1/mcp` (JWT required). Read-only queries: `health`, `me`,
 `employees(limit, offset)`, `payrollRuns(limit)`, `payslips(runId)`.
 Money fields are `String` on purpose — a `Float` would lose satang precision.
 

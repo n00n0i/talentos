@@ -59,7 +59,7 @@ pub async fn run_agent(
     };
 
     let registry = Arc::new(talentos_tools::tools::default_registry(
-        Arc::new(model_gw.clone()),
+        Some(Arc::new(model_gw.clone())),
         state.pool.clone(),
     ));
 

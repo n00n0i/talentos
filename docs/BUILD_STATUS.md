@@ -8,14 +8,15 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **77 passed**, 0 failed (7 DB-backed, 6 render, 5 leave, 6 wasm, 2 schema) |
+| Tests | `cargo test --workspace` | **82 passed**, 0 failed (7 DB-backed, 6 render, 5 leave, 6 wasm, 2 schema, 5 mcp) |
 | Migrations | `psql -f migrations/*.sql` on a fresh DB | 9 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 11, rag 7, agent 7,
 payroll-runner 6 (real PostgreSQL + Chromium: payslips, totals, state machine,
 template round-trip, PDF, stuck-run recovery), hr-runner 5 (leave day maths),
 wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
-graphql 2 (schema shape, money-as-string).
+graphql 2 (schema shape, money-as-string), mcp 5 (version negotiation, tool list,
+destructive guard, notifications).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -35,7 +36,8 @@ crates/ai/model-gw          huakati.online client, in-process limiter, circuit b
 crates/ai/rag               chunker, embedder, hybrid search (RRF)
 crates/ai/tools             the 8 agent tools
 crates/ai/agent             Observe → Plan → Act → Reflect loop
-crates/api/gateway          Axum: /health, /auth/*, /payroll/*
+crates/api/gateway          Axum: /health, /auth/*, /payroll/*, /mcp, /graphql
+crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT per request)
 ```
 
 ## Deferred — excluded from the workspace, not yet buildable
@@ -44,10 +46,14 @@ Each is commented out in the root `Cargo.toml` with a TODO:
 
 | Crate | Blocker |
 |---|---|
-| `crates/api/mcp` | Only the transport is missing: the tool surface already ships in-process (`ToolRegistry`) and over HTTP (`/ai/tools`, `/plugins`). A real MCP server needs a chosen transport (stdio vs streamable HTTP) and a per-request auth story before it is written. |
-
 | `crates/services/talentos-worker` | Temporal Rust SDK 1.x (`temporalio-sdk`) needs protoc-generated protos and a different macro surface than the scaffold assumed. Payroll and the agent loop already run in-process, so this is about durability, not features. |
 | `crates/ai/talentos-memory` | Depends on the `semantica` crate, which is not published to crates.io. |
+
+MCP is **done** at `POST /api/v1/mcp` (streamable HTTP, stateless). No session id,
+because the JWT on each request is the only identity — one client can never resume
+another tenant's session. Capability advertised: `tools` (the same registry the
+agent uses). Destructive tools require `X-TalentOS-Allow-Destructive: true`.
+`GET` returns 405 (no server-initiated stream) and `DELETE` 204.
 
 GraphQL is **done** at `POST /api/v1/graphql` (queries: `health`, `me`, `employees`,
 `payrollRuns`, `payslips`), executed inside a tenant transaction. Mutations stay on

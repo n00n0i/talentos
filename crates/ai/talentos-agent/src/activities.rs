@@ -100,7 +100,7 @@ impl ObserveActivity {
             entity_id: self.context.entity_id,
             run_id: self.context.run_id,
             db: self.db.clone(),
-            model_gw: Arc::new(self.model_gw.clone()),
+            model_gw: Some(Arc::new(self.model_gw.clone())),
             extensions: Default::default(),
         }
     }
@@ -225,7 +225,7 @@ impl ActActivity {
                 entity_id: self.context.entity_id,
                 run_id: self.context.run_id,
                 db: self.db.clone(),
-                model_gw: Arc::new(self.model_gw.clone()),
+                model_gw: Some(Arc::new(self.model_gw.clone())),
                 extensions: Default::default(),
             };
 

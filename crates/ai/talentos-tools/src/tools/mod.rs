@@ -1101,18 +1101,20 @@ fn validate_leave_policy(policy: &str) -> Value {
 /// Registry with every built-in tool, ready for `AgentRunner`.
 /// Tools that need shared state get the same handles the agent already holds.
 pub fn default_registry(
-    model_gw: Arc<HuakatiClient>,
+    model_gw: Option<Arc<HuakatiClient>>,
     pool: Arc<TenantPool>,
 ) -> crate::registry::ToolRegistry {
     let mut registry = crate::registry::ToolRegistry::new();
     registry.register(RunPayrollTool::new());
     registry.register(QueryEmployeeTool::new(pool.clone()));
-    registry.register(SearchPolicyTool::new(model_gw.clone(), pool.clone()));
     registry.register(CalculateTaxTool::new());
     registry.register(DetectAnomaliesTool::new(pool.clone()));
-    registry.register(DraftLeavePolicyTool::new(model_gw.clone()));
-    registry.register(SummarizePayrollRunTool::new(pool.clone(), model_gw.clone()));
-    registry.register(CheckComplianceTool::new(pool));
+    registry.register(CheckComplianceTool::new(pool.clone()));
+    if let Some(model_gw) = model_gw {
+        registry.register(SearchPolicyTool::new(model_gw.clone(), pool.clone()));
+        registry.register(DraftLeavePolicyTool::new(model_gw.clone()));
+        registry.register(SummarizePayrollRunTool::new(pool, model_gw));
+    }
     registry
 }
 

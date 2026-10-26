@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, employee_id, base_salary, gross_earnings, ot_amount, total_deductions,\n                      net_pay, tax_withheld, sso_employee, pf_employee, anomalies\n               FROM payslips WHERE payroll_run_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "employee_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "base_salary",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "gross_earnings",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "ot_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "total_deductions",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "net_pay",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "tax_withheld",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "sso_employee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "pf_employee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 10,
+        "name": "anomalies",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "eded4ed4110e77c1b59855b3aad4b70b3b92a843ef001207eb61f203aee5df4c"
+}

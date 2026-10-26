@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM payroll_runs WHERE tenant_id = $1 AND entity_id = $2 AND period_start = $3 AND period_end = $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Date",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f73464ab2ecb387a7e882964632829074a87ecbf07cc6fa495ebeb17732d3c64"
+}

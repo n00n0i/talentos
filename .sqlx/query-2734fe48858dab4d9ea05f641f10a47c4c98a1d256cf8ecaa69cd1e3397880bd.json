@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refresh_tokens SET revoked_at = now()\n               WHERE token_hash = $1 AND revoked_at IS NULL\n               RETURNING parent_hash",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "parent_hash",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2734fe48858dab4d9ea05f641f10a47c4c98a1d256cf8ecaa69cd1e3397880bd"
+}

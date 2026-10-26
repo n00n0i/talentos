@@ -1,0 +1,167 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM employees WHERE id = $1 AND tenant_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "entity_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "employee_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "first_name_th",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_name_th",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "first_name_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_name_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "national_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "birth_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 11,
+        "name": "hire_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 12,
+        "name": "termination_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 13,
+        "name": "position_title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "department",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "base_salary",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 16,
+        "name": "bank_account_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "bank_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 18,
+        "name": "tax_filing_status",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 19,
+        "name": "sso_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "pf_member",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 21,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 22,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 23,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 24,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3ca43286c460b8926baf49ff61cac32bc2cf8c2c9fb006946bd97769e21091c2"
+}

@@ -1,0 +1,119 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM payslips WHERE employee_id = $1 AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE period_start <= $2 AND period_end >= $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "payroll_run_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "employee_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "base_salary",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "gross_earnings",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 6,
+        "name": "total_deductions",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "net_pay",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "tax_withheld",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "sso_employee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 10,
+        "name": "sso_employer",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "pf_employee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 12,
+        "name": "pf_employer",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 13,
+        "name": "anomalies",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 14,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "ot_amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bf5418edf0e36e7dc4779d41fb706c408d50156a7f4e846a83d96b68f1299bfa"
+}

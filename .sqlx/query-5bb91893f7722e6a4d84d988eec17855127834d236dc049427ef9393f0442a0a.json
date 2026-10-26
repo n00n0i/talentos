@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT email, full_name_th, full_name_en, last_login_at\n           FROM users WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "full_name_th",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "full_name_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_login_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "5bb91893f7722e6a4d84d988eec17855127834d236dc049427ef9393f0442a0a"
+}

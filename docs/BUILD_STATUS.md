@@ -49,7 +49,9 @@ crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT pe
 sets `HttpOnly` cookies and `/api/gw/*` proxies with a bearer header, refreshing
 single-flight. Verified against the real gateway: login → `/auth/me` → GraphQL →
 payslip template → HTML render → 77 KB PDF, and an expired access token rotates
-on the next request (old refresh token then 401, as designed).
+on the next request (old refresh token then 401, as designed). The standalone
+image (`web/Dockerfile`) was built and served `login` → session login → `/me`
+against a live gateway.
 
 ## Deferred — not wired
 

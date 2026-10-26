@@ -1,0 +1,24 @@
+[package]
+name = "talentos-agent"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-model-gw = { path = "../talentos-model-gw" }
+talentos-rag = { path = "../talentos-rag" }
+talentos-tools = { path = "../talentos-tools" }
+talentos-mcp = { path = "../../api/mcp" }
+talentos-payroll = { path = "../../domain/talentos-payroll" }
+talentos-compliance = { path = "../../domain/talentos-compliance" }
+talentos-kernel = { path = "../../core/kernel" }
+temporal-sdk = { workspace = true }
+temporal-client = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+sqlx = { workspace = true }
+async-trait = { workspace = true }

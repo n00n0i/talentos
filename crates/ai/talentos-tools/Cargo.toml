@@ -1,0 +1,22 @@
+[package]
+name = "talentos-tools"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-mcp = { path = "../../api/mcp" }
+talentos-agent = { path = "../talentos-agent" }
+talentos-model-gw = { path = "../talentos-model-gw" }
+talentos-payroll = { path = "../../domain/talentos-payroll" }
+talentos-compliance = { path = "../../domain/talentos-compliance" }
+talentos-kernel = { path = "../../core/kernel" }
+talentos-rag = { path = "../talentos-rag" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+schemars = { workspace = true }

@@ -1,0 +1,13 @@
+[package]
+name = "talentos-db"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-kernel = { path = "../../core/kernel" }
+talentos-authz = { path = "../../core/authz" }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+futures-util = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }

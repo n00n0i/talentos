@@ -1,0 +1,34 @@
+[package]
+name = "talentos-integration-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+talentos-kernel = { path = "../../crates/core/kernel" }
+talentos-authz = { path = "../../crates/core/authz" }
+talentos-compliance = { path = "../../crates/domain/talentos-compliance" }
+talentos-payroll = { path = "../../crates/domain/talentos-payroll" }
+talentos-db = { path = "../../crates/infra/db" }
+
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "decimal", "test"] }
+reqwest = { version = "0.12", features = ["json", "cookies"] }
+uuid = { version = "1", features = ["v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+dotenvy = "0.4"
+rand = "0.8"
+futures = "0.3"
+tempfile = "3"
+portpicker = "0.2"
+jsonwebtoken = { version = "9", features = ["chrono"] }
+
+[dev-dependencies]
+cargo-nextest = "0.9"
+

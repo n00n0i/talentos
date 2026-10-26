@@ -1,0 +1,20 @@
+[package]
+name = "talentos-rag"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-model-gw = { path = "../talentos-model-gw" }
+talentos-kernel = { path = "../../core/kernel" }
+sqlx = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+rand = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+pgvector = { workspace = true }

@@ -1,0 +1,17 @@
+[package]
+name = "talentos-authz"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-kernel = { path = "../kernel" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+jsonwebtoken = { workspace = true }
+argon2 = { workspace = true }
+rand = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+tracing = { workspace = true }

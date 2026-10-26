@@ -1,0 +1,52 @@
+[package]
+name = "talentos-memory"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-kernel = { path = "../../core/kernel" }
+talentos-model-gw = { path = "../talentos-model-gw" }
+talentos-rag = { path = "../talentos-rag" }
+talentos-tools = { path = "../talentos-tools" }
+talentos-db = { path = "../../infra/db" }
+talentos-payroll = { path = "../../domain/talentos-payroll" }
+talentos-compliance = { path = "../../domain/talentos-compliance" }
+
+# Hindsight - Agent Memory System
+hindsight-client = "0.5"
+hindsight-api = { version = "0.5", features = ["embedded"] }
+
+# Semantica - Graph-Native Context Infrastructure
+semantica = { version = "0.5", features = ["full", "oxigraph", "faiss", "advanced-analytics"] }
+
+# Core dependencies
+talentos-kernel = { path = "../../core/kernel" }
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
+anyhow = "1"
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "decimal"] }
+async-trait = "0.1"
+futures = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
+anyhow = "1"
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
+
+[features]
+default = []
+full = ["hindsight-embedded", "semantica-full"]
+hindsight-embedded = ["hindsight-api/embedded"]
+semantica-full = ["semantica/full", "semantica/oxigraph", "semantica/faiss", "semantica/advanced-analytics"]

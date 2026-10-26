@@ -1,0 +1,92 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/core/kernel",
+    "crates/core/authz",
+    "crates/infra/db",
+    "crates/api/gateway",
+    "crates/api/graphql",
+    "crates/domain/talentos-compliance",
+    "crates/domain/talentos-payroll",
+    "crates/services/talentos-worker",
+    "crates/api/mcp",
+    "crates/ai/talentos-model-gw",
+    "crates/ai/talentos-rag",
+    "crates/ai/talentos-agent",
+    "crates/ai/talentos-tools",
+    "crates/ai/talentos-memory",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "PROPRIETARY"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Error handling
+thiserror = "2"
+anyhow = "1"
+# Decimal math (CRITICAL for payroll)
+rust_decimal = { version = "1", features = ["serde-with-str", "maths"] }
+rust_decimal_macros = { version = "1" }
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "decimal"] }
+# UUID / time
+uuid = { version = "1", features = ["v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+# Observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+# Config
+dotenvy = "0.4"
+# JWT
+jsonwebtoken = "9"
+# Password hashing
+argon2 = "0.5"
+# Cryptographic randomness (for refresh tokens, jti)
+rand = "0.8"
+# SHA-256 (refresh token hashing)
+sha2 = "0.10"
+# Hex encoding (refresh token representation)
+hex = "0.4"
+# Web framework
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "request-id", "timeout"] }
+# Async traits helper (for with_tenant_tx boxed futures)
+futures-util = "0.3"
+# Redis client (rate limiting, health check)
+fred = { version = "10", features = ["i-keys"] }
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "stream"] }
+# Temporal
+temporal-sdk = "0.4"
+temporal-client = "0.4"
+# Token counting
+tiktoken-rs = "0.4"
+# PDF extraction
+lopdf = "0.33"
+# Vector operations
+pgvector = "0.3"
+# Async trait
+async-trait = "0.1"
+# Schemars for JSON Schema
+schemars = "0.8"
+# Testing
+cargo-nextest = "0.9"
+# Hindsight - Agent Memory System
+hindsight-client = "0.5"
+# Semantica - Graph-Native Context Infrastructure
+semantica = { version = "0.5", features = ["full", "oxigraph", "faiss", "advanced-analytics"] }
+# Regex for validation
+regex = "1.10"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

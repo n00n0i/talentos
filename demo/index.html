@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TalentOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --border: #e3e6ea;
+    --text-primary: #1a1f36;
+    --text-secondary: #697386;
+    --text-tertiary: #a3acb9;
+    --accent: #635bff;
+    --accent-hover: #5851ea;
+    --success: #0d9488;
+    --warning: #d97706;
+    --danger: #dc2626;
+    --radius: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Layout: fixed sidebar + scrollable main */
+  .shell {
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+  }
+
+  .sidebar-logo {
+    padding: 20px 20px 16px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .sidebar-nav {
+    flex: 1;
+    padding: 0 8px;
+  }
+
+  .nav-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-tertiary);
+    padding: 20px 12px 6px;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.1s, background 0.1s;
+    text-decoration: none;
+  }
+
+  .nav-link:hover {
+    color: var(--text-primary);
+    background: var(--bg);
+  }
+
+  .nav-link.active {
+    color: var(--accent);
+    background: oklch(0.95 0.02 280);
+  }
+
+  .nav-link svg {
+    width: 16px; height: 16px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+
+  .nav-count {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+  }
+
+  .sidebar-bottom {
+    padding: 12px 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .user-block {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+
+  .user-block:hover { background: var(--bg); }
+
+  .user-initials {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .user-meta {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .user-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .user-role-text {
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+
+  /* ===== MAIN ===== */
+  .main {
+    margin-left: 220px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Top bar */
+  .topbar {
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+
+  .search-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-tertiary);
+    font-size: 13px;
+    cursor: pointer;
+    min-width: 240px;
+    transition: border-color 0.1s;
+  }
+
+  .search-trigger:hover { border-color: var(--text-tertiary); }
+
+  .search-trigger svg {
+    width: 14px; height: 14px;
+    stroke: currentColor; fill: none;
+    stroke-width: 2;
+  }
+
+  .kbd {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  .topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .icon-button {
+    width: 32px; height: 32px;
+    border-radius: var(--radius);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s;
+    position: relative;
+  }
+
+  .icon-button:hover { background: var(--bg); }
+
+  .icon-button svg {
+    width: 18px; height: 18px;
+    stroke: currentColor; fill: none;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  .notif-pip {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 6px; height: 6px;
+    background: var(--danger);
+    border-radius: 50%;
+    border: 2px solid var(--surface);
+  }
+
+  /* Content area */
+  .page {
+    padding: 32px 40px;
+    max-width: 960px;
+    flex: 1;
+  }
+
+  .page-head {
+    margin-bottom: 32px;
+  }
+
+  .page-h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+  }
+
+  .page-desc {
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+
+  /* Section */
+  .section {
+    margin-bottom: 32px;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .section-action {
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .section-action:hover { text-decoration: underline; }
+
+  /* Summary strip (แทน KPI cards แบบ Stripe) */
+  .summary-strip {
+    display: flex;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+
+  .summary-item {
+    flex: 1;
+    background: var(--surface);
+    padding: 16px 20px;
+  }
+
+  .summary-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+
+  .summary-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+
+  .summary-note {
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .summary-note.positive { color: var(--success); }
+  .summary-note.negative { color: var(--danger); }
+  .summary-note.neutral { color: var(--text-tertiary); }
+
+  /* Table */
+  .data-table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th {
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  td {
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text-primary);
+    border-bottom: 1px solid oklch(0.93 0.005 260);
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  tbody tr:hover td { background: oklch(0.98 0.002 260); }
+
+  .cell-secondary {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .mono {
+    font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  /* Status indicators (Stripe style: dot + text, no pill) */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .status::before {
+    content: '';
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .status-paid { color: var(--success); }
+  .status-processing { color: var(--warning); }
+  .status-error { color: var(--danger); }
+
+  /* Buttons */
+  .btn {
+    padding: 7px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.1s, border-color 0.1s;
+    text-decoration: none;
+  }
+
+  .btn-accent {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .btn-accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+  .btn-default {
+    background: var(--surface);
+    color: var(--text-primary);
+    border-color: var(--border);
+  }
+
+  .btn-default:hover { background: var(--bg); border-color: var(--text-tertiary); }
+
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  .btn-icon-only {
+    width: 28px; height: 28px;
+    padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  .btn-icon-only svg {
+    width: 14px; height: 14px;
+    stroke: currentColor; fill: none;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* Approval row actions */
+  .row-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.1s;
+  }
+
+  tr:hover .row-actions { opacity: 1; }
+
+  /* AI FAB (replaces permanent panel) */
+  .ai-fab {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 12px oklch(0.49 0.2 280 / 0.25);
+    transition: transform 0.15s, box-shadow 0.15s;
+    z-index: 100;
+  }
+
+  .ai-fab:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px oklch(0.49 0.2 280 / 0.35);
+  }
+
+  .ai-fab svg {
+    width: 20px; height: 20px;
+    stroke: currentColor; fill: none;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* AI Drawer (slides in from right on FAB click) */
+  .ai-drawer {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 380px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(100%);
+    transition: transform 0.2s ease;
+  }
+
+  .ai-drawer.open { transform: translateX(0); }
+
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.15);
+    z-index: 199;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+
+  .drawer-backdrop.open { opacity: 1; pointer-events: all; }
+
+  .drawer-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .drawer-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .drawer-close {
+    width: 28px; height: 28px;
+    border-radius: var(--radius);
+    border: none;
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+
+  .drawer-close:hover { background: var(--bg); color: var(--text-primary); }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .chat-msg {
+    max-width: 90%;
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .chat-agent {
+    align-self: flex-start;
+    background: var(--bg);
+    color: var(--text-primary);
+  }
+
+  .chat-user {
+    align-self: flex-end;
+    background: var(--accent);
+    color: white;
+  }
+
+  .anomaly-inline {
+    border-left: 3px solid var(--danger);
+    padding-left: 10px;
+    margin: 8px 0;
+  }
+
+  .anomaly-inline.warn {
+    border-left-color: var(--warning);
+  }
+
+  .anomaly-inline strong {
+    font-size: 12px;
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .anomaly-inline p {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .drawer-input-row {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+  }
+
+  .drawer-input {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 13px;
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .drawer-input:focus { border-color: var(--accent); }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.25);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 300;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s;
+  }
+
+  .modal-bg.show { opacity: 1; pointer-events: all; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%; max-width: 520px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  }
+
+  .modal-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+
+  .modal-head h3 { font-size: 15px; font-weight: 600; }
+
+  .modal-content { padding: 20px; }
+
+  .detail-row {
+    display: flex; justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid oklch(0.93 0.005 260);
+    font-size: 13px;
+  }
+
+  .detail-row:last-child { border-bottom: none; }
+  .detail-label { color: var(--text-secondary); }
+  .detail-value { font-weight: 500; }
+
+  .callout {
+    background: oklch(0.97 0.02 85);
+    border: 1px solid oklch(0.9 0.06 85);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .modal-foot {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end; gap: 8px;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+    .page { padding: 20px 16px; }
+    .summary-strip { flex-direction: column; }
+    .ai-drawer { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">TalentOS</div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-title">ภาพรวม</div>
+      <a class="nav-link active">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </a>
+      <a class="nav-link">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        พนักงาน
+        <span class="nav-count">127</span>
+      </a>
+      <a class="nav-link">
+        <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Payroll
+      </a>
+
+      <div class="nav-section-title">จัดการ</div>
+      <a class="nav-link">
+        <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        อนุมัติ
+        <span class="nav-count">5</span>
+      </a>
+      <a class="nav-link">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        วันหยุด/ลา
+      </a>
+      <a class="nav-link">
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+        ประเมินผลงาน
+      </a>
+
+      <div class="nav-section-title">ระบบ</div>
+      <a class="nav-link">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68 1.65 1.65 0 0 0 10 3.17V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        ตั้งค่า
+      </a>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="user-block">
+        <div class="user-initials">สช</div>
+        <div class="user-meta">
+          <div class="user-name">สมชาย ใจดี</div>
+          <div class="user-role-text">HR Admin</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar">
+      <div class="search-trigger" onclick="document.getElementById('cmdInput').focus()">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        ค้นหาหรือพิมพ์คำสั่ง...
+        <span class="kbd">⌘K</span>
+      </div>
+      <input type="text" id="cmdInput" style="position:absolute;opacity:0;width:0;height:0;" placeholder="Type a command...">
+      <div class="topbar-right">
+        <button class="icon-button">
+          <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="notif-pip"></span>
+        </button>
+      </div>
+    </header>
+
+    <div class="page">
+      <div class="page-head">
+        <h1 class="page-h1">Dashboard</h1>
+        <p class="page-desc">บริษัท เทคโนโลยีไทย จำกัด · ตุลาคม 2569</p>
+      </div>
+
+      <!-- Summary Strip (single row, connected cells — Stripe style) -->
+      <div class="summary-strip">
+        <div class="summary-item">
+          <div class="summary-label">พนักงานทั้งหมด</div>
+          <div class="summary-value">127</div>
+          <div class="summary-note positive">+3 เดือนนี้</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">เงินเดือนค้างจ่าย</div>
+          <div class="summary-value">฿0</div>
+          <div class="summary-note neutral">จ่ายครบแล้ว</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">รออนุมัติ</div>
+          <div class="summary-value">5</div>
+          <div class="summary-note negative">ล่าช้า 2 รายการ</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-label">Anomalies</div>
+          <div class="summary-value">2</div>
+          <div class="summary-note negative">ต้องตรวจสอบ</div>
+        </div>
+      </div>
+
+      <!-- Payroll Runs -->
+      <div class="section">
+        <div class="section-head">
+          <h2 class="section-title">รอบเงินเดือนล่าสุด</h2>
+          <a class="section-action" onclick="showModal()">รันงวดใหม่ →</a>
+        </div>
+        <div class="data-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>งวด</th>
+                <th>จำนวน</th>
+                <th>ยอดรวม</th>
+                <th>ภาษีหัก ณ ที่จ่าย</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ตุลาคม 2569</td>
+                <td class="cell-secondary">127 คน</td>
+                <td class="mono">฿8,456,230.00</td>
+                <td class="mono">฿412,890.00</td>
+                <td><span class="status status-processing">กำลังคำนวณ</span></td>
+              </tr>
+              <tr>
+                <td>กันยายน 2569</td>
+                <td class="cell-secondary">124 คน</td>
+                <td class="mono">฿8,234,100.50</td>
+                <td class="mono">฿398,210.00</td>
+                <td><span class="status status-paid">จ่ายเงินแล้ว</span></td>
+              </tr>
+              <tr>
+                <td>สิงหาคม 2569</td>
+                <td class="cell-secondary">122 คน</td>
+                <td class="mono">฿8,102,450.00</td>
+                <td class="mono">฿389,740.00</td>
+                <td><span class="status status-paid">จ่ายเงินแล้ว</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Pending Approvals -->
+      <div class="section">
+        <div class="section-head">
+          <h2 class="section-title">รายการรออนุมัติ</h2>
+          <a class="section-action">จัดการทั้งหมด →</a>
+        </div>
+        <div class="data-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ประเภท</th>
+                <th>ผู้ขอ</th>
+                <th>รายละเอียด</th>
+                <th>ยื่นเมื่อ</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>ลากิจ/ป่วย</td>
+                <td>
+                  <strong>วิภาดา สุขสันต์</strong><br>
+                  <span class="cell-secondary">ฝ่ายบัญชี</span>
+                </td>
+                <td>28–30 ต.ค. (3 วัน)</td>
+                <td class="cell-secondary">วันนี้ 09:15</td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn btn-default btn-sm btn-icon-only" title="อนุมัติ">
+                      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button class="btn btn-default btn-sm btn-icon-only" title="ปฏิเสธ">
+                      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>ปรับเงินเดือน</td>
+                <td>
+                  <strong>ณัฐพล มั่นคง</strong><br>
+                  <span class="cell-secondary">ฝ่ายพัฒนาธุรกิจ</span>
+                </td>
+                <td>฿65,000 → ฿72,000 (+10.8%)</td>
+                <td class="cell-secondary">เมื่อวาน 16:30</td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn btn-default btn-sm btn-icon-only" title="อนุมัติ">
+                      <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                    </button>
+                    <button class="btn btn-default btn-sm btn-icon-only" title="ปฏิเสธ">
+                      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>OT สะสม</td>
+                <td>
+                  <strong>ทีมพัฒนาซอฟต์แวร์</strong><br>
+                  <span class="cell-secondary">ฝ่ายไอที</span>
+                </td>
+                <td>42 ชั่วโมง (เกิน threshold 40 ชม.)</td>
+                <td class="cell-secondary">2 วันที่แล้ว</td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn btn-default btn-sm">ตรวจสอบ</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI Floating Button -->
+<button class="ai-fab" onclick="toggleDrawer()" title="AI Assistant">
+  <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+</button>
+
+<!-- AI Drawer -->
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="toggleDrawer()"></div>
+<div class="ai-drawer" id="aiDrawer">
+  <div class="drawer-header">
+    <span class="drawer-title">AI Assistant</span>
+    <button class="drawer-close" onclick="toggleDrawer()">×</button>
+  </div>
+  <div class="drawer-body" id="drawerBody">
+    <div class="chat-msg chat-agent">
+      สวัสดีครับคุณสมชาย มีอะไรให้ช่วย?<br><br>
+      • "รัน payroll เดือนนี้"<br>
+      • "ใคร OT เกิน 40 ชม.?"<br>
+      • "สรุปกฎหมายแรงงานใหม่"<br>
+      • "เตรียมเอกสาร ภ.ง.ด.1ก."
+    </div>
+    <div class="chat-msg chat-user">
+      มี anomaly อะไรใน payroll เดือนนี้บ้าง?
+    </div>
+    <div class="chat-msg chat-agent">
+      พบ <strong>2 ความผิดปกติ</strong>:
+      <div class="anomaly-inline">
+        <strong>OT สูงผิดปกติ</strong>
+        <p>นายอนุชา ทำงานล่วงเวลา 58 ชม. (เฉลี่ยทีม 12 ชม.)</p>
+      </div>
+      <div class="anomaly-inline warn">
+        <strong>ฐานประกันสังคมเปลี่ยน</strong>
+        <p>นางสาวปิยะดา เงินเดือนเพิ่มจาก ฿14,500 → ฿16,200 อัตรา SSO เปลี่ยนเป็นเพดาน ฿15,000</p>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:6px;">
+        <button class="btn btn-accent btn-sm">ดูรายละเอียด</button>
+        <button class="btn btn-default btn-sm">ข้ามไป</button>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-input-row">
+    <input type="text" class="drawer-input" placeholder="พิมพ์ข้อความ..." id="drawerInput">
+    <button class="btn btn-accent btn-sm" onclick="sendMsg()">ส่ง</button>
+  </div>
+</div>
+
+<!-- Payroll Modal -->
+<div class="modal-bg" id="payrollModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>ยืนยันรัน Payroll — ตุลาคม 2569</h3>
+      <button class="drawer-close" onclick="hideModal()">×</button>
+    </div>
+    <div class="modal-content">
+      <div class="detail-row">
+        <span class="detail-label">จำนวนพนักงาน</span>
+        <span class="detail-value">127 คน</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">ยอดรวมทั้งสิ้น</span>
+        <span class="detail-value mono">฿8,456,230.00</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">ภาษีหัก ณ ที่จ่าย</span>
+        <span class="detail-value mono">฿412,890.00</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">นำส่ง SSO</span>
+        <span class="detail-value mono">฿189,450.00</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-label">สุทธิจ่ายเข้าบัญชี</span>
+        <span class="detail-value mono" style="color:var(--success)">฿7,853,890.00</span>
+      </div>
+      <div class="callout">
+        ⚠ AI ตรวจพบ anomaly 2 รายการ แนะนำให้ตรวจสอบก่อนดำเนินการต่อ
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-default" onclick="hideModal()">ยกเลิก</button>
+      <button class="btn btn-accent">ยืนยันรัน Payroll</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showModal(){ document.getElementById('payrollModal').classList.add('show'); }
+function hideModal(){ document.getElementById('payrollModal').classList.remove('show'); }
+document.getElementById('payrollModal').addEventListener('click', function(e){ if(e.target===this) hideModal(); });
+
+function toggleDrawer(){
+  const d = document.getElementById('aiDrawer');
+  const b = document.getElementById('drawerBackdrop');
+  d.classList.toggle('open');
+  b.classList.toggle('open');
+}
+
+function sendMsg(){
+  const input = document.getElementById('drawerInput');
+  const body = document.getElementById('drawerBody');
+  const text = input.value.trim();
+  if(!text) return;
+  const um = document.createElement('div');
+  um.className = 'chat-msg chat-user';
+  um.textContent = text;
+  body.appendChild(um);
+  input.value = '';
+  setTimeout(()=>{
+    const am = document.createElement('div');
+    am.className = 'chat-msg chat-agent';
+    am.innerHTML = 'กำลังประมวลผล...<br><em style="color:var(--text-tertiary);font-size:11px">(Demo: เชื่อมต่อกับ Temporal + huakati API ใน Phase 4)</em>';
+    body.appendChild(am);
+    body.scrollTop = body.scrollHeight;
+  }, 600);
+  body.scrollTop = body.scrollHeight;
+}
+
+document.getElementById('drawerInput').addEventListener('keypress', function(e){ if(e.key==='Enter') sendMsg(); });
+
+document.addEventListener('keydown', function(e){
+  if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); document.getElementById('cmdInput').focus(); }
+  if(e.key==='Escape'){ hideModal(); const d=document.getElementById('aiDrawer'); if(d.classList.contains('open')) toggleDrawer(); }
+});
+
+document.querySelectorAll('.nav-link').forEach(l=>{
+  l.addEventListener('click', function(){
+    document.querySelectorAll('.nav-link').forEach(x=>x.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

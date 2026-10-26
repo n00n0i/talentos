@@ -1,0 +1,37 @@
+# Build artifacts
+/target
+**/*.rs.bk
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Strix
+strix_runs/
+.strix/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.sqlite
+*.db
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/

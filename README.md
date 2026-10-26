@@ -14,7 +14,7 @@ for exactly what compiles, what is tested, and what is deferred.
 - **Thai compliance**: PND 2567 progressive brackets, SSO 5% capped at ฿15,000, PF, LPA §118 severance, OT 1.5×/2×/3×
 - **Agent**: Observe → Plan → Act → Reflect loop over 8 HR tools (runs in-process; Temporal pending)
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
-- **API**: `/health`, `/api/v1/auth/*`, `/api/v1/payroll/*`, `/api/v1/leave/requests/:id/decision`, `/api/v1/ai/*`
+- **API**: `/health`, `/api/v1/auth/*`, `/api/v1/payroll/*`, `/api/v1/leave/*`, `/api/v1/ai/*`, `/api/v1/plugins*`, `/api/v1/graphql`
 
 ## Quick start
 
@@ -84,6 +84,16 @@ GET  /api/v1/payroll/payslips/:id/render → the payslip as text/html
 ```
 
 The editor UI lives in `demo/index.html` under **แบบฟอร์มสลิป**.
+
+## GraphQL
+
+`POST /api/v1/graphql` (JWT required). Read-only queries: `health`, `me`,
+`employees(limit, offset)`, `payrollRuns(limit)`, `payslips(runId)`.
+Money fields are `String` on purpose — a `Float` would lose satang precision.
+
+```graphql
+{ me { roles permissions } employees(limit: 5) { employeeCode baseSalary } }
+```
 
 ## WASM plugins
 

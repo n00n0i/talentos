@@ -6,7 +6,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
-use crate::handlers::{ai, auth, health, leave, payroll, plugins};
+use crate::handlers::{ai, auth, graphql, health, leave, payroll, plugins};
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
 use crate::state::AppState;
@@ -35,6 +35,7 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/leave/balances", get(leave::balances))
         .route("/api/v1/leave/requests/:id/decision", post(leave::decide))
         .route("/api/v1/ai/tools", get(ai::list_tools))
+        .route("/api/v1/graphql", post(graphql::execute))
         .route("/api/v1/plugins", get(plugins::list))
         .route("/api/v1/plugins/:name/invoke", post(plugins::invoke))
         .route("/api/v1/ai/agents/run", post(ai::run_agent))

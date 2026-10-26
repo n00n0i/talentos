@@ -14,6 +14,7 @@ pub struct AppState {
     pub access_ttl_secs: i64,
     pub refresh_ttl_days: i64,
     pub allowed_origins: Vec<String>,
+    pub graphql_schema: std::sync::Arc<talentos_graphql::TalentSchema>,
     pub started_at: std::time::Instant,
 }
 

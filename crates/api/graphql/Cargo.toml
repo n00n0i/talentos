@@ -5,13 +5,11 @@ edition.workspace = true
 
 [dependencies]
 talentos-kernel = { path = "../../core/kernel" }
-talentos-authz = { path = "../../core/authz" }
 talentos-db = { path = "../../infra/db" }
-talentos-payroll = { path = "../../domain/talentos-payroll" }
-
-async-graphql = { version = "7", features = ["chrono", "uuid", "decimal"] }
+talentos-authz = { path = "../../core/authz" }
+async-graphql = { version = "7", features = ["chrono", "uuid"] }
 async-graphql-axum = "7"
-tokio = { workspace = true, features = ["full"] }
+axum = { workspace = true }
 sqlx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -19,8 +17,3 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 rust_decimal = { workspace = true }
 tracing = { workspace = true }
-thiserror = { workspace = true }
-anyhow = { workspace = true }
-futures-util = { workspace = true }
-axum = { workspace = true }
-base64 = "0.22"

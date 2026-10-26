@@ -89,6 +89,7 @@ async fn main() {
         access_ttl_secs: access_ttl,
         refresh_ttl_days,
         allowed_origins,
+        graphql_schema: Arc::new(talentos_graphql::build_schema()),
         started_at: std::time::Instant::now(),
     };
 

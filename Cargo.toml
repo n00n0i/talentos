@@ -9,7 +9,7 @@ members = [
     "crates/api/gateway",
     # TODO(mcp+graphql): scaffolded against unverified rmcp 3.x / async-graphql APIs.
     # Re-enable once rewritten against the real crate APIs (see docs/qa/final-report.md).
-    # "crates/api/graphql",
+    "crates/api/graphql",
     "crates/domain/talentos-compliance",
     "crates/domain/talentos-payroll",
     "crates/services/talentos-payroll-runner",

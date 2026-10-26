@@ -9,4 +9,5 @@ pub mod mcp;
 pub mod memory;
 pub mod payroll;
 pub mod plugins;
+pub mod settings;
 pub mod users;

@@ -17,6 +17,7 @@ use talentos_kernel::{EntityId, Money, TenantId, UserId};
 use talentos_payroll::context::{EmployeePayrollInput, PayrollContext};
 use talentos_payroll::dag::PayrollDag;
 use talentos_payroll::result::EmployeePayrollOutput;
+use talentos_payroll::settings::PayrollSettings;
 use uuid::Uuid;
 
 pub mod pdf;
@@ -117,6 +118,25 @@ pub async fn execute_run(
 
     let period_start: chrono::NaiveDate = run.try_get("period_start")?;
 
+    // Company policy (divisor + OT multipliers). Missing row = Thai standard.
+    let settings = sqlx::query(
+        "SELECT unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate, ot_holiday_rate
+           FROM tenant_payroll_settings WHERE tenant_id = $1",
+    )
+    .bind(tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await?
+    .map(|row| -> Result<PayrollSettings, sqlx::Error> {
+        Ok(PayrollSettings {
+            unpaid_leave_divisor: row.try_get("unpaid_leave_divisor")?,
+            ot_weekday_rate: row.try_get("ot_weekday_rate")?,
+            ot_weekend_rate: row.try_get("ot_weekend_rate")?,
+            ot_holiday_rate: row.try_get("ot_holiday_rate")?,
+        })
+    })
+    .transpose()?
+    .unwrap_or_else(PayrollSettings::standard);
+
     // OT recorded for this period, grouped by statutory rate class.
     let ot_rows = sqlx::query(
         r#"SELECT employee_id,
@@ -213,6 +233,7 @@ pub async fn execute_run(
         payment_date: run.try_get("payment_date")?,
         employees: inputs.clone(),
         created_by: UserId(run.try_get("created_by")?),
+        settings,
     };
 
     // The DAG is pure and CPU-bound: keep it off the async reactor.

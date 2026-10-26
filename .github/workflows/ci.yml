@@ -84,6 +84,108 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  e2e:
+    needs: quality
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: talentos
+          POSTGRES_USER: talentos
+          POSTGRES_PASSWORD: talentos_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      SQLX_OFFLINE: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build gateway
+        run: cargo build -p talentos-gateway
+      - name: Migrate, create roles, seed
+        env:
+          PGPASSWORD: talentos_ci
+        run: |
+          for f in migrations/*.sql; do
+            psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+          psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE talentos_app LOGIN PASSWORD 'app_ci' NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE talentos_auth LOGIN PASSWORD 'auth_ci' BYPASSRLS;
+          GRANT USAGE ON SCHEMA public TO talentos_app, talentos_auth;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO talentos_app, talentos_auth;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO talentos_app, talentos_auth;
+          SQL
+          psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 -q -f scripts/seed-e2e.sql
+      - name: Start gateway
+        env:
+          DATABASE_URL: postgres://talentos_app:app_ci@localhost:5432/talentos
+          DATABASE_AUTH_URL: postgres://talentos_auth:auth_ci@localhost:5432/talentos
+          REDIS_URL: redis://127.0.0.1:6379
+          AUTH_JWT_SECRET: ci-secret-change-me-minimum-32-bytes-long!!
+          GATEWAY_PORT: '18080'
+          PAYSLIP_STORE_DIR: /tmp/payslips
+          RUST_LOG: warn
+        run: nohup ./target/debug/talentos-gateway > /tmp/gateway.log 2>&1 &
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install web deps and browser
+        working-directory: web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Build and start web
+        working-directory: web
+        env:
+          TALENTOS_API_URL: http://127.0.0.1:18080
+          TALENTOS_COOKIE_SECURE: 'false'
+        run: |
+          npm run build
+          nohup npm run start > /tmp/web.log 2>&1 &
+      - name: Wait for services
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:18080/health >/dev/null && break
+            sleep 1
+          done
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:3000/login >/dev/null && break
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:18080/health
+          curl -sf -o /dev/null http://127.0.0.1:3000/login
+      - name: Playwright
+        working-directory: web
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: npx playwright test
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure
+          path: |
+            web/test-results
+            web/playwright-report
+          retention-days: 7
+
   build-release:
     needs: [quality, web]
     runs-on: ubuntu-latest

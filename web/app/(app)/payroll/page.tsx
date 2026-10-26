@@ -46,9 +46,10 @@ export default function PayrollPage() {
     load().catch((e) => handleApiError(e, setError));
   }, [load]);
 
-  // Runs execute in the background; poll while any is still calculating.
+  // Runs execute in the background. A just-created run can still read as
+  // "draft" before the worker flips it, so poll for both states.
   useEffect(() => {
-    if (!runs?.some((r) => r.status === "calculating")) return;
+    if (!runs?.some((r) => r.status === "draft" || r.status === "calculating")) return;
     const timer = setInterval(() => {
       load().catch(() => undefined);
     }, 2500);
@@ -149,7 +150,7 @@ export default function PayrollPage() {
             />
           </div>
           <div style={{ display: "flex", alignItems: "end" }}>
-            <button className="btn btn-primary" type="submit" disabled={busy}>
+            <button className="btn btn-primary" data-testid="create-run" type="submit" disabled={busy}>
               {busy ? "กำลังสร้าง…" : "สร้างรอบ"}
             </button>
           </div>
@@ -238,7 +239,7 @@ function RunRow({
         <td className="num">฿{thb(run.totalNet)}</td>
         <td className="num" onClick={(e) => e.stopPropagation()}>
           {run.status === "pending_approval" && (
-            <button className="btn btn-sm btn-primary" disabled={busy} onClick={onApprove}>
+            <button className="btn btn-sm btn-primary" data-testid="approve-run" disabled={busy} onClick={onApprove}>
               อนุมัติ
             </button>
           )}

@@ -37,4 +37,6 @@ pub struct PayrollContext {
     pub payment_date: NaiveDate,
     pub employees: Vec<EmployeePayrollInput>,
     pub created_by: UserId,
+    #[serde(default = "crate::settings::PayrollSettings::standard")]
+    pub settings: crate::settings::PayrollSettings,
 }

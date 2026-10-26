@@ -15,8 +15,9 @@ for exactly what compiles, what is tested, and what is deferred.
 - **Agent**: Observe → Plan → Act → Reflect loop over 8 HR tools (runs in-process; Temporal pending)
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
 - **API**: `/health`, `/api/v1/auth/*`, `/api/v1/employees*`, `/api/v1/users*`,
-  `/api/v1/attendance*`, `/api/v1/payroll/*`, `/api/v1/leave/*`, `/api/v1/ai/*`,
-  `/api/v1/plugins*`, `/api/v1/graphql`, `/api/v1/mcp`
+  `/api/v1/attendance*`, `/api/v1/payroll/*`, `/api/v1/leave/*`,
+  `/api/v1/settings/*`, `/api/v1/ai/*`, `/api/v1/plugins*`, `/api/v1/graphql`,
+  `/api/v1/mcp`
 
 ## Quick start
 
@@ -145,6 +146,40 @@ Payroll reads the period's OT hours by class (weekday 1.5x, rest day 2x, public
 holiday 3x) and approved `unpaid` leave. Unpaid leave deducts `base_salary / 30`
 per day; OT is priced on `base_salary / 30 / 8`, unaffected by that deduction.
 SSO follows the explicit `sso_enrolled` flag, independent of provident fund.
+
+## Settings (admin UI)
+
+`/settings` in the web app covers:
+
+- **องค์กร** — tenant name and each legal entity's name/tax id.
+- **สูตรเงินเดือน/OT** — unpaid-leave divisor (default 30) and OT multipliers
+  (1.5 / 2 / 3). Stored in `tenant_payroll_settings` and used by the next payroll
+  run; statutory SSO/tax rates are not editable.
+- **สถานะระบบ** — the DB role and whether RLS is actually enforced, migration
+  tracking, Chromium availability and AI gateway configuration.
+
+```
+GET/PUT /api/v1/settings/payroll
+GET/PUT /api/v1/settings/organization, /settings/tenant, /settings/entities/:id
+GET     /api/v1/settings/system
+```
+
+The system card turns red if the process is running as a superuser/BYPASSRLS
+role, which is the one misconfiguration that silently disables tenant isolation.
+
+## E2E
+
+Browser tests (Playwright) live in `web/e2e` and run in CI against a real
+gateway + Postgres + Redis. They cover invite acceptance/login, settings
+persistence, employee creation, attendance → payroll → approval, and user invite.
+
+```bash
+docker compose exec -T -e PGPASSWORD=talentos_dev_secret postgres \
+  psql -U talentos -d talentos -f - < scripts/seed-e2e.sql
+cd web
+npx playwright install chromium      # first run
+npx playwright test                  # E2E_BASE_URL defaults to :3100
+```
 
 ## Authorization
 

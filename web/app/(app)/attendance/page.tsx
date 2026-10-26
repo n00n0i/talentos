@@ -117,7 +117,7 @@ export default function AttendancePage() {
         <div className="form-row">
           <div className="field">
             <label>พนักงาน</label>
-            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
+            <select data-testid="attendance-employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.employee_code} · {e.first_name_th} {e.last_name_th}
@@ -127,7 +127,7 @@ export default function AttendancePage() {
           </div>
           <div className="field">
             <label>วันที่</label>
-            <input type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} required />
+            <input data-testid="attendance-date" type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} required />
           </div>
           <div className="field">
             <label>ชั่วโมง OT</label>
@@ -136,6 +136,7 @@ export default function AttendancePage() {
               min="0"
               max="12"
               step="0.5"
+              data-testid="attendance-ot"
               value={otHours}
               onChange={(e) => setOtHours(e.target.value)}
             />
@@ -157,7 +158,7 @@ export default function AttendancePage() {
             <input value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <div style={{ display: "flex", alignItems: "end" }}>
-            <button className="btn btn-primary" type="submit" disabled={busy || !employeeId}>
+            <button className="btn btn-primary" data-testid="save-attendance" type="submit" disabled={busy || !employeeId}>
               {busy ? "กำลังบันทึก…" : "บันทึก"}
             </button>
           </div>

@@ -8,12 +8,13 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **97 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 17 files apply cleanly |
+| Tests | `cargo test --workspace` | **100 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 18 files apply cleanly |
 
-Tests by crate: kernel 5, authz 22, compliance 6, payroll 15, rag 7, agent 7,
-payroll-runner 7 (real PostgreSQL + Chromium: payslips, totals, state machine,
-template round-trip, PDF, stuck-run recovery, attendance+unpaid-leave feed), hr-runner 5 (leave day maths),
+Tests by crate: kernel 5, authz 22, compliance 6, payroll 17, rag 7, agent 7,
+payroll-runner 8 (real PostgreSQL + Chromium: payslips, totals, state machine,
+template round-trip, PDF, stuck-run recovery, attendance+unpaid-leave feed,
+tenant policy overrides), hr-runner 5 (leave day maths),
 wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
 graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
 destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
@@ -66,14 +67,19 @@ on the next request (old refresh token then 401, as designed). The standalone
 image (`web/Dockerfile`) was built and served `login` → session login → `/me`
 against a live gateway.
 
+Admin UI: `/settings` (organization, payroll/OT policy, system status with an
+RLS warning) and `/users`. Browser E2E (`web/e2e`, Playwright) passes 4/4
+locally and runs in CI: invite acceptance → login, settings persistence,
+employee → attendance → payroll → approval, user invite.
+
 ## Known risks
 
 - Payroll executes in the gateway process with a stuck-run sweeper; that is
   recovery, not durable execution. Temporal remains unwired.
-- Payroll formula assumptions, documented for HR sign-off: unpaid leave deducts
-  `base_salary / 30` per approved calendar day inside the period; OT is priced on
-  `base_salary / 30 / 8`; SSO uses the explicit `sso_enrolled` flag. If the
-  company's policy differs, change `PayrollDag::calc_gross` / the OT base once.
+- Payroll formula defaults are Thai practice (unpaid leave `base_salary / 30` per
+  day, OT on `base_salary / 30 / 8`), but the divisor and OT multipliers are now
+  tenant settings (`/settings`), so HR can adjust them without a deploy.
+  Statutory SSO/tax remain in code.
 - Attendance OT class (weekday/weekend/holiday) is chosen by the recorder, not
   derived from a holiday calendar. Wire a Thai holiday calendar before relying on
   holiday OT at scale.

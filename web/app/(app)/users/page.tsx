@@ -112,16 +112,22 @@ export default function UsersPage() {
         <h2>เชิญผู้ใช้</h2>
         <div className="form-row">
           <div className="field">
-            <label>อีเมล</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <label htmlFor="invite-email">อีเมล</label>
+            <input
+              id="invite-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
           </div>
           <div className="field">
-            <label>ชื่อ (ไทย)</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} />
+            <label htmlFor="invite-name">ชื่อ (ไทย)</label>
+            <input id="invite-name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="field">
-            <label>บทบาท</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)}>
+            <label htmlFor="invite-role">บทบาท</label>
+            <select id="invite-role" value={role} onChange={(e) => setRole(e.target.value)}>
               {ROLES.map((r) => (
                 <option key={r.value} value={r.value}>
                   {r.label}

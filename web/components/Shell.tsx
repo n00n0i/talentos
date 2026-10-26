@@ -13,7 +13,10 @@ const NAV = [
   { href: "/payslip", label: "แบบฟอร์มสลิป" },
 ];
 
-const ADMIN_NAV = [{ href: "/users", label: "ผู้ใช้" }];
+const ADMIN_NAV = [
+  { href: "/users", label: "ผู้ใช้" },
+  { href: "/settings", label: "ตั้งค่า" },
+];
 
 const TITLES: Record<string, string> = {
   "/": "ภาพรวม",
@@ -22,6 +25,7 @@ const TITLES: Record<string, string> = {
   "/payroll": "รอบเงินเดือน",
   "/payslip": "แบบฟอร์มสลิป",
   "/users": "ผู้ใช้",
+  "/settings": "ตั้งค่า",
 };
 
 export default function Shell({ children }: { children: React.ReactNode }) {

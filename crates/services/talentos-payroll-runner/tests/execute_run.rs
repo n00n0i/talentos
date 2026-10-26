@@ -274,6 +274,87 @@ async fn attendance_ot_and_unpaid_leave_feed_the_run() {
 }
 
 #[tokio::test]
+async fn tenant_policy_overrides_divisor_and_ot_rates() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, employee_ids) =
+        seed(&raw, &[("EMP050", Decimal::new(30_000, 0))]).await;
+    let employee_id = employee_ids[0];
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        "INSERT INTO tenant_payroll_settings
+           (tenant_id, unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate, ot_holiday_rate)
+         VALUES ($1, 26, 2.0, 2.0, 3.0)",
+    )
+    .bind(tenant_id)
+    .execute(&mut *tx)
+    .await
+    .expect("settings");
+    sqlx::query(
+        "INSERT INTO attendance_records
+           (tenant_id, employee_id, work_date, hours_worked, ot_hours, ot_kind)
+         VALUES ($1, $2, '2026-10-06', 8, 4, 'weekday')",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .execute(&mut *tx)
+    .await
+    .expect("attendance");
+    sqlx::query(
+        "INSERT INTO leave_requests
+           (tenant_id, entity_id, employee_id, leave_type, start_date, end_date, days, status)
+         VALUES ($1, (SELECT entity_id FROM employees WHERE id = $2), $2, 'unpaid',
+                 '2026-10-12', '2026-10-13', 2, 'approved')",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .execute(&mut *tx)
+    .await
+    .expect("leave");
+    tx.commit().await.expect("commit fixtures");
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("run should succeed");
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query(
+        "SELECT gross_earnings, ot_amount FROM payslips
+          WHERE payroll_run_id = $1 AND employee_id = $2",
+    )
+    .bind(run_id)
+    .bind(employee_id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("payslip");
+    let gross: Decimal = row.try_get("gross_earnings").expect("gross");
+    let ot: Decimal = row.try_get("ot_amount").expect("ot");
+
+    // divisor 26: unpaid 30,000/26×2 = 2,307.69; OT 30,000/26/8×4×2 = 1,153.85
+    assert_eq!(ot, Decimal::new(115_385, 2));
+    assert_eq!(gross, Decimal::new(2_884_616, 2));
+
+    let _ = tx.rollback().await;
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
 async fn second_execution_is_rejected_by_state_machine() {
     let (Some(url), Some(auth_url)) = (database_url(), recovery_url()) else {
         eprintln!("SKIP: DATABASE_URL not set");

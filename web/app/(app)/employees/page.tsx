@@ -173,7 +173,7 @@ export default function EmployeesPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <button className="btn btn-primary" onClick={() => setEditing("new")}>
+          <button className="btn btn-primary" data-testid="add-employee" onClick={() => setEditing("new")}>
             เพิ่มพนักงาน
           </button>
         </div>
@@ -188,21 +188,21 @@ export default function EmployeesPage() {
           <div className="form-row">
             <div className="field">
               <label>รหัสพนักงาน</label>
-              <input value={form.employee_code} onChange={(e) => set("employee_code", e.target.value)} required />
+              <input data-testid="employee-code" value={form.employee_code} onChange={(e) => set("employee_code", e.target.value)} required />
             </div>
             <div className="field">
               <label>ชื่อ (ไทย)</label>
-              <input value={form.first_name_th} onChange={(e) => set("first_name_th", e.target.value)} required />
+              <input data-testid="employee-first-name" value={form.first_name_th} onChange={(e) => set("first_name_th", e.target.value)} required />
             </div>
             <div className="field">
               <label>นามสกุล (ไทย)</label>
-              <input value={form.last_name_th} onChange={(e) => set("last_name_th", e.target.value)} required />
+              <input data-testid="employee-last-name" value={form.last_name_th} onChange={(e) => set("last_name_th", e.target.value)} required />
             </div>
           </div>
           <div className="form-row">
             <div className="field">
               <label>ตำแหน่ง</label>
-              <input value={form.position_title} onChange={(e) => set("position_title", e.target.value)} required />
+              <input data-testid="employee-position" value={form.position_title} onChange={(e) => set("position_title", e.target.value)} required />
             </div>
             <div className="field">
               <label>แผนก</label>
@@ -214,6 +214,7 @@ export default function EmployeesPage() {
                 type="number"
                 min="0"
                 step="0.01"
+                data-testid="employee-salary"
                 value={form.base_salary}
                 onChange={(e) => set("base_salary", e.target.value)}
                 required
@@ -223,7 +224,7 @@ export default function EmployeesPage() {
           <div className="form-row">
             <div className="field">
               <label>วันเริ่มงาน</label>
-              <input type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} required />
+              <input data-testid="employee-hire-date" type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} required />
             </div>
             <div className="field">
               <label>ธนาคาร</label>
@@ -253,7 +254,7 @@ export default function EmployeesPage() {
             </label>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" type="submit" disabled={busy}>
+            <button className="btn btn-primary" data-testid="save-employee" type="submit" disabled={busy}>
               {busy ? "กำลังบันทึก…" : "บันทึก"}
             </button>
             <button className="btn" type="button" onClick={() => setEditing(null)}>

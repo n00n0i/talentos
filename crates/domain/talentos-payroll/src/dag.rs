@@ -30,13 +30,14 @@ impl PayrollDag {
     /// Execute the full payroll DAG for one employee.
     /// Returns the computed output plus the audit trace of each step.
     pub fn calculate(
-        _ctx: &PayrollContext,
+        ctx: &PayrollContext,
         input: EmployeePayrollInput,
     ) -> Result<(EmployeePayrollOutput, Vec<StepResult>), PayrollError> {
         let mut trace = Vec::new();
 
         // 1. Gross = base salary + allowances
-        let gross = Self::calc_gross(&input)?;
+        let settings = &ctx.settings;
+        let gross = Self::calc_gross(&input, settings)?;
         trace.push(StepResult {
             step: "gross".into(),
             input: serde_json::to_value(&input)?,
@@ -46,13 +47,20 @@ impl PayrollDag {
 
         // 2. Overtime. Base wage = monthly salary / 30 / 8. Unpaid leave lowers
         // this month's gross, not the hourly rate OT is paid at.
-        let hourly_rate = (input.base_salary.amount() / dec!(30) / dec!(8)).round_dp(4);
+        let hourly_rate =
+            (input.base_salary.amount() / settings.unpaid_leave_divisor / dec!(8)).round_dp(4);
+        let rules = OtRules {
+            weekday_rate: settings.ot_weekday_rate,
+            weekend_rate: settings.ot_weekend_rate,
+            holiday_rate: settings.ot_holiday_rate,
+            ..OtRules::default()
+        };
         let ot_amount = calculate_ot(
             hourly_rate,
             input.ot_hours_weekday,
             input.ot_hours_weekend,
             input.ot_hours_holiday,
-            &OtRules::default(),
+            &rules,
         )?;
         let ot_money = Money::from_baht(ot_amount);
         let gross_with_ot = gross + ot_money;
@@ -167,10 +175,14 @@ impl PayrollDag {
         Ok((output, trace))
     }
 
-    fn calc_gross(input: &EmployeePayrollInput) -> Result<Money, PayrollError> {
+    fn calc_gross(
+        input: &EmployeePayrollInput,
+        settings: &crate::settings::PayrollSettings,
+    ) -> Result<Money, PayrollError> {
         // Unpaid leave: monthly salary / 30 per day. Paid leave never reduces pay.
         let unpaid_deduction = Money::from_baht(
-            (input.base_salary.amount() / dec!(30) * input.unpaid_leave_days).round_dp(2),
+            (input.base_salary.amount() / settings.unpaid_leave_divisor * input.unpaid_leave_days)
+                .round_dp(2),
         );
         let mut gross = input.base_salary - unpaid_deduction;
         for allowance in &input.allowances {
@@ -240,6 +252,7 @@ mod tests {
             payment_date: NaiveDate::from_ymd_opt(2026, 11, 1).unwrap(),
             employees: vec![],
             created_by: UserId(uuid::Uuid::new_v4()),
+            settings: crate::settings::PayrollSettings::standard(),
         }
     }
 

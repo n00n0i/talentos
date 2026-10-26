@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, payroll_run_id, employee_id, base_salary, gross_earnings, total_deductions,\n                  net_pay, tax_withheld, sso_employee, sso_employer, pf_employee, pf_employer,\n                  anomalies, status, created_at\n           FROM payslips WHERE payroll_run_id = $1 AND tenant_id = $2\n           ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+  "query": "SELECT p.id, p.payroll_run_id, p.employee_id, p.base_salary, p.gross_earnings,\n                  p.total_deductions, p.net_pay, p.tax_withheld, p.sso_employee, p.sso_employer,\n                  p.pf_employee, p.pf_employer, p.anomalies, p.status, p.created_at,\n                  e.employee_code, e.first_name_th, e.last_name_th\n           FROM payslips p\n           JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id\n           WHERE p.payroll_run_id = $1 AND p.tenant_id = $2\n           ORDER BY e.employee_code LIMIT $3 OFFSET $4",
   "describe": {
     "columns": [
       {
@@ -77,6 +77,21 @@
         "ordinal": 14,
         "name": "created_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 15,
+        "name": "employee_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "first_name_th",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "last_name_th",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -102,8 +117,11 @@
       false,
       false,
       false,
+      false,
+      false,
+      false,
       false
     ]
   },
-  "hash": "fb92b377c45e30c920f813fceaf33b569a6a1f9dd817bce11d66d14bd81aa1d6"
+  "hash": "69759b99896da75de441b6bbbc941927e52960209c0873e1c2a120234ac4dc96"
 }

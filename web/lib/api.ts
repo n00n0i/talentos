@@ -92,6 +92,8 @@ export type PayrollRun = {
 export type Payslip = {
   payslip_id: string;
   employee_id: string;
+  employee_code: string;
+  employee_name: string;
   base_salary: string;
   gross_earnings: string;
   net_pay: string;

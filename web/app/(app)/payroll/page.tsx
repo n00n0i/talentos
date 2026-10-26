@@ -267,13 +267,20 @@ function RunRow({
                 <tbody>
                   {payslips.map((p) => (
                     <tr key={p.payslip_id}>
-                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{p.employee_id.slice(0, 8)}</td>
+                      <td>
+                        <div style={{ fontWeight: 500 }}>{p.employee_name}</div>
+                        <div className="hint">{p.employee_code}</div>
+                      </td>
                       <td className="num">฿{thb(p.base_salary)}</td>
                       <td className="num">฿{thb(p.tax_withheld)}</td>
                       <td className="num">฿{thb(p.sso_employee)}</td>
                       <td className="num">฿{thb(p.net_pay)}</td>
                       <td>
-                        <a href={`/api/gw/api/v1/payroll/payslips/${p.payslip_id}/pdf`} target="_blank">
+                        <a
+                          className="badge accent"
+                          href={`/api/gw/api/v1/payroll/payslips/${p.payslip_id}/pdf`}
+                          target="_blank"
+                        >
                           PDF
                         </a>
                       </td>

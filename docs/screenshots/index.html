@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TalentOS — UI preview</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px; background: #e8eae4; color: #141414;
+    font-family: Inter, "Noto Sans Thai", system-ui, sans-serif;
+  }
+  header { max-width: 1200px; margin: 0 auto 24px; }
+  h1 { font-family: "Instrument Serif", Georgia, "Noto Sans Thai", serif; font-weight: 400; font-size: 38px; margin: 0 0 6px; }
+  p { margin: 0; color: #63685e; font-size: 14px; }
+  code { background: #fff; border: 1px solid #e9ebe4; border-radius: 6px; padding: 1px 5px; }
+  .grid { max-width: 1200px; margin: 0 auto; display: grid; gap: 22px; }
+  figure { margin: 0; background: #fff; border: 1px solid #e9ebe4; border-radius: 20px; overflow: hidden; box-shadow: 0 8px 30px rgba(20,20,20,.06); }
+  figure img { display: block; width: 100%; height: auto; }
+  figcaption { padding: 12px 18px; font-size: 13px; color: #63685e; border-top: 1px solid #f0f1eb; display: flex; justify-content: space-between; }
+  figcaption b { color: #141414; font-weight: 600; }
+  @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } figure.wide { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>TalentOS — UI preview</h1>
+  <p>หน้าเว็บจริง (Thai-first) · live: <code>http://localhost:3100</code> · tenant <code>e2e</code> · <code>e2e@example.com</code> / <code>E2ePassword123!</code></p>
+</header>
+<div class="grid">
+  <figure class="wide"><img src="02-dashboard.png" alt="Dashboard"><figcaption><b>ภาพรวม</b><span>stat cards + latest payroll run</span></figcaption></figure>
+  <figure><img src="03-employees.png" alt="Employees"><figcaption><b>พนักงาน</b><span>CRUD + soft terminate</span></figcaption></figure>
+  <figure><img src="04-attendance.png" alt="Attendance"><figcaption><b>เวลาและ OT</b><span>OT by statutory class</span></figcaption></figure>
+  <figure class="wide"><img src="05-payroll.png" alt="Payroll"><figcaption><b>รอบเงินเดือน</b><span>create → calculate → approve → PDF</span></figcaption></figure>
+  <figure class="wide"><img src="06-payslip-editor.png" alt="Payslip editor"><figcaption><b>แบบฟอร์มสลิป</b><span>template + live preview</span></figcaption></figure>
+  <figure><img src="07-users.png" alt="Users"><figcaption><b>ผู้ใช้</b><span>invite + roles</span></figcaption></figure>
+  <figure class="wide"><img src="08-settings.png" alt="Settings"><figcaption><b>ตั้งค่า</b><span>organization · payroll policy · system status</span></figcaption></figure>
+  <figure><img src="01-login.png" alt="Login"><figcaption><b>เข้าสู่ระบบ</b><span>cookie session</span></figcaption></figure>
+  <figure><img src="09-mobile-dashboard.png" alt="Mobile"><figcaption><b>มือถือ</b><span>390px</span></figcaption></figure>
+</div>
+</body>
+</html>

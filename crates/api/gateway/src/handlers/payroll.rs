@@ -248,11 +248,14 @@ pub async fn list_payslips(
     let offset = (page - 1) * per_page;
 
     let rows = sqlx::query!(
-        r#"SELECT id, payroll_run_id, employee_id, base_salary, gross_earnings, total_deductions,
-                  net_pay, tax_withheld, sso_employee, sso_employer, pf_employee, pf_employer,
-                  anomalies, status, created_at
-           FROM payslips WHERE payroll_run_id = $1 AND tenant_id = $2
-           ORDER BY created_at DESC LIMIT $3 OFFSET $4"#,
+        r#"SELECT p.id, p.payroll_run_id, p.employee_id, p.base_salary, p.gross_earnings,
+                  p.total_deductions, p.net_pay, p.tax_withheld, p.sso_employee, p.sso_employer,
+                  p.pf_employee, p.pf_employer, p.anomalies, p.status, p.created_at,
+                  e.employee_code, e.first_name_th, e.last_name_th
+           FROM payslips p
+           JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id
+           WHERE p.payroll_run_id = $1 AND p.tenant_id = $2
+           ORDER BY e.employee_code LIMIT $3 OFFSET $4"#,
         run_id,
         ctx.tenant_id.0,
         per_page as i64,
@@ -267,6 +270,8 @@ pub async fn list_payslips(
         .map(|r| PayslipSummary {
             payslip_id: r.id.to_string(),
             employee_id: r.employee_id.to_string(),
+            employee_code: r.employee_code,
+            employee_name: format!("{} {}", r.first_name_th, r.last_name_th),
             base_salary: r.base_salary.to_string(),
             gross_earnings: r.gross_earnings.to_string(),
             net_pay: r.net_pay.to_string(),
@@ -492,6 +497,8 @@ pub struct ListPayslipsResponse {
 pub struct PayslipSummary {
     pub payslip_id: String,
     pub employee_id: String,
+    pub employee_code: String,
+    pub employee_name: String,
     pub base_salary: String,
     pub gross_earnings: String,
     pub net_pay: String,

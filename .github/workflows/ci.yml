@@ -67,6 +67,8 @@ jobs:
           # The app role is NOBYPASSRLS: tests exercise the real policies.
           DATABASE_URL: postgres://talentos_app:app_ci@localhost:5432/talentos
           DATABASE_AUTH_URL: postgres://talentos_auth:auth_ci@localhost:5432/talentos
+          # Owner connection for the provisioning CLI test.
+          DATABASE_ADMIN_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
         run: cargo nextest run --workspace --no-fail-fast
 
   web:

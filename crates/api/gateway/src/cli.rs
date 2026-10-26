@@ -71,9 +71,10 @@ fn parse(raw: &[String]) -> CliResult<ProvisionArgs> {
 }
 
 async fn admin_pool() -> CliResult<PgPool> {
+    // Never fall back to the app role: provisioning/migration must not be
+    // constrained (or silently half-applied) by RLS.
     let url = std::env::var("DATABASE_ADMIN_URL")
-        .or_else(|_| std::env::var("DATABASE_URL"))
-        .map_err(|_| "DATABASE_ADMIN_URL (owner) or DATABASE_URL must be set")?;
+        .map_err(|_| "DATABASE_ADMIN_URL (owner connection) must be set")?;
     Ok(PgPoolOptions::new()
         .max_connections(2)
         .connect(&url)

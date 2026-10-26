@@ -85,6 +85,23 @@ GET  /api/v1/payroll/payslips/:id/render → the payslip as text/html
 
 The editor UI lives in `demo/index.html` under **แบบฟอร์มสลิป**.
 
+## WASM plugins
+
+Tenant logic runs sandboxed: no filesystem, no network, 16 MiB and a 2 s timeout,
+and the host refuses to load a plugin whose declared capabilities were not granted
+to that tenant.
+
+```
+GET  /api/v1/plugins                        → installed plugins (never returns bytes)
+POST /api/v1/plugins/:name/invoke           → {function, input} → {output}
+```
+
+Example guest: `plugins/bonus-calculator-thai` (Thai annual bonus, pure JSON in/out).
+
+```bash
+cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
+```
+
 ## Layout
 
 ```
@@ -95,6 +112,7 @@ crates/domain/compliance  Thai statutory rules
 crates/domain/payroll     pure payroll DAG
 crates/services/payroll-runner  run executor (DB + DAG)
 crates/ai/*               model gateway, RAG, agent loop, tools
+crates/ext/wasm-host      sandboxed plugin host (Extism, capability grants)
 crates/api/gateway        Axum HTTP surface
 migrations/               schema + RLS
 ```

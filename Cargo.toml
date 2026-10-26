@@ -1,5 +1,7 @@
 [workspace]
 resolver = "2"
+# WASM guest plugins build against wasm32-wasip1; keep them out of the host workspace.
+exclude = ["plugins"]
 members = [
     "crates/core/kernel",
     "crates/core/authz",
@@ -19,6 +21,7 @@ members = [
     "crates/ai/talentos-rag",
     "crates/ai/talentos-agent",
     "crates/ai/talentos-tools",
+    "crates/ext/talentos-wasm-host",
     # TODO(memory): depends on the semantica crate, which is not published to crates.io.
     # "crates/ai/talentos-memory",
 ]

@@ -1,0 +1,16 @@
+[package]
+name = "talentos-wasm-host"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+talentos-kernel = { path = "../../core/kernel" }
+extism = "1.41"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

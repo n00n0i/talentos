@@ -1,3 +1,4 @@
+mod cli;
 mod dto;
 mod handlers;
 mod middleware;
@@ -24,6 +25,32 @@ async fn main() {
         )
         .json()
         .init();
+
+    match std::env::args().nth(1).as_deref() {
+        Some("provision") => {
+            let args: Vec<String> = std::env::args().skip(2).collect();
+            if let Err(e) = cli::provision(&args).await {
+                eprintln!("provision failed: {e}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        Some("migrate") => {
+            if let Err(e) = cli::migrate().await {
+                eprintln!("migrate failed: {e}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        Some("pii-encrypt") => {
+            if let Err(e) = cli::encrypt_existing_pii().await {
+                eprintln!("pii-encrypt failed: {e}");
+                std::process::exit(1);
+            }
+            return;
+        }
+        _ => {}
+    }
 
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
@@ -81,6 +108,18 @@ async fn main() {
         .await
         .expect("Redis connect failed");
 
+    let pii = match talentos_db::pii::PiiCipher::from_env() {
+        Ok(Some(cipher)) => Some(Arc::new(cipher)),
+        Ok(None) => {
+            tracing::warn!("PII_ENCRYPTION_KEY is unset: new employee PII is stored as plaintext");
+            None
+        }
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let state = AppState {
         pool: pool.clone(),
         auth_pool: auth_pool.clone(),
@@ -90,6 +129,7 @@ async fn main() {
         refresh_ttl_days,
         allowed_origins,
         graphql_schema: Arc::new(talentos_graphql::build_schema()),
+        pii,
         memory: Arc::new(talentos_memory::MemoryStore::new(
             pool.clone(),
             talentos_model_gw::HuakatiClient::new().ok().map(Arc::new),

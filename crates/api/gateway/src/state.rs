@@ -16,6 +16,8 @@ pub struct AppState {
     pub allowed_origins: Vec<String>,
     pub graphql_schema: std::sync::Arc<talentos_graphql::TalentSchema>,
     pub memory: std::sync::Arc<talentos_memory::MemoryStore>,
+    /// `None` only when PII_ENCRYPTION_KEY is unset (dev); production must set it.
+    pub pii: Option<std::sync::Arc<talentos_db::pii::PiiCipher>>,
     pub started_at: std::time::Instant,
 }
 

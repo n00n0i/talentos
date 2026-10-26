@@ -116,20 +116,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build gateway
         run: cargo build -p talentos-gateway
-      - name: Migrate, create roles, seed
+      - name: Migrate, ensure roles, seed (the deploy path)
         env:
+          DATABASE_ADMIN_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
+          APP_DB_PASSWORD: app_ci
+          AUTH_DB_PASSWORD: auth_ci
           PGPASSWORD: talentos_ci
         run: |
-          for f in migrations/*.sql; do
-            psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 -q -f "$f"
-          done
-          psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 <<'SQL'
-          CREATE ROLE talentos_app LOGIN PASSWORD 'app_ci' NOSUPERUSER NOBYPASSRLS;
-          CREATE ROLE talentos_auth LOGIN PASSWORD 'auth_ci' BYPASSRLS;
-          GRANT USAGE ON SCHEMA public TO talentos_app, talentos_auth;
-          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO talentos_app, talentos_auth;
-          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO talentos_app, talentos_auth;
-          SQL
+          ./target/debug/talentos-gateway migrate
           psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 -q -f scripts/seed-e2e.sql
       - name: Start gateway
         env:
@@ -191,6 +185,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate compose
+        run: docker compose config -q
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:

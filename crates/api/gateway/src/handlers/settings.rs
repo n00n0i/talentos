@@ -306,6 +306,9 @@ pub async fn system(State(state): State<AppState>, Authed(ctx): Authed) -> Respo
     };
 
     let chrome = chromium_available();
+    let pii_encryption = std::env::var("PII_ENCRYPTION_KEY")
+        .map(|k| !k.trim().is_empty())
+        .unwrap_or(false);
     let model_gateway = std::env::var("HUAKATI_API_KEY")
         .map(|k| !k.trim().is_empty())
         .unwrap_or(false);
@@ -321,6 +324,7 @@ pub async fn system(State(state): State<AppState>, Authed(ctx): Authed) -> Respo
             },
             "migrations": { "tracked": tracked, "applied": applied, "latest": latest },
             "payslip_renderer": { "available": chrome },
+            "pii_encryption": { "configured": pii_encryption },
             "model_gateway": { "configured": model_gateway },
             "tenant_id": ctx.tenant_id.0,
         })),

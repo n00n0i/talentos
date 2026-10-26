@@ -17,6 +17,7 @@ type System = {
   migrations: { tracked: boolean; applied: number; latest: number | null };
   payslip_renderer: { available: boolean };
   model_gateway: { configured: boolean };
+  pii_encryption: { configured: boolean };
 };
 
 const DEFAULTS: PayrollSettings = {
@@ -225,6 +226,15 @@ export default function SettingsPage() {
                 label="ตัวสร้าง PDF สลิป"
                 ok={system?.payslip_renderer.available ?? false}
                 detail={system?.payslip_renderer.available ? "Chromium พร้อม" : "ไม่พบ Chromium (PDF จะตอบ 503)"}
+              />
+              <StatusRow
+                label="การเข้ารหัส PII"
+                ok={system?.pii_encryption.configured ?? false}
+                detail={
+                  system?.pii_encryption.configured
+                    ? "เลขบัตร/บัญชีถูกเข้ารหัสก่อนบันทึก"
+                    : "ยังไม่ตั้ง PII_ENCRYPTION_KEY — ข้อมูลใหม่จะเก็บเป็น plaintext"
+                }
               />
               <StatusRow
                 label="AI Gateway"

@@ -43,6 +43,8 @@ pub struct EmployeeBody {
     pub sso_enrolled: Option<bool>,
     pub bank_name: Option<String>,
     pub bank_account_number: Option<String>,
+    pub national_id: Option<String>,
+    pub sso_number: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -62,9 +64,11 @@ pub struct EmployeeDto {
     pub status: String,
     pub pf_member: bool,
     pub sso_enrolled: bool,
-    /// Returned so an edit cannot silently wipe payment details.
+    /// Sensitive values are only ever returned masked.
     pub bank_name: Option<String>,
-    pub bank_account_number: Option<String>,
+    pub bank_account_number_masked: Option<String>,
+    pub national_id_masked: Option<String>,
+    pub sso_number_masked: Option<String>,
 }
 
 /// GET /api/v1/employees?q=&status=&limit=
@@ -88,7 +92,7 @@ pub async fn list(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
                   first_name_en, last_name_en, position_title, department,
                   base_salary, hire_date, termination_date, status, pf_member,
-                  sso_enrolled, bank_name, bank_account_number
+                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number
              FROM employees
             WHERE tenant_id = $1
               AND ($2 = 'all' OR status = $2)
@@ -107,7 +111,8 @@ pub async fn list(
 
     match rows {
         Ok(rows) => {
-            let employees: Vec<EmployeeDto> = rows.iter().map(row_to_dto).collect();
+            let employees: Vec<EmployeeDto> =
+                rows.iter().map(|row| row_to_dto(row, &state.pii)).collect();
             (StatusCode::OK, Json(json!({ "employees": employees }))).into_response()
         }
         Err(e) => internal_err(&e.to_string()),
@@ -146,6 +151,18 @@ pub async fn create(
         Ok(id) => id,
         Err(response) => return response,
     };
+    let bank = match encrypt_field(&state.pii, body.bank_account_number.as_deref()) {
+        Ok(v) => v,
+        Err(response) => return response,
+    };
+    let national = match encrypt_field(&state.pii, body.national_id.as_deref()) {
+        Ok(v) => v,
+        Err(response) => return response,
+    };
+    let sso = match encrypt_field(&state.pii, body.sso_number.as_deref()) {
+        Ok(v) => v,
+        Err(response) => return response,
+    };
 
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
@@ -157,8 +174,8 @@ pub async fn create(
              (id, tenant_id, entity_id, employee_code, first_name_th, last_name_th,
               first_name_en, last_name_en, position_title, department, base_salary,
               hire_date, tax_filing_status, pf_member, sso_enrolled,
-              bank_name, bank_account_number)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)"#,
+              bank_name, bank_account_number, national_id, sso_number)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)"#,
     )
     .bind(id)
     .bind(ctx.tenant_id.0)
@@ -176,7 +193,9 @@ pub async fn create(
     .bind(body.pf_member.unwrap_or(false))
     .bind(body.sso_enrolled.unwrap_or(true))
     .bind(body.bank_name.as_deref())
-    .bind(body.bank_account_number.as_deref())
+    .bind(bank.as_deref())
+    .bind(national.as_deref())
+    .bind(sso.as_deref())
     .execute(&mut *tx)
     .await;
 
@@ -225,6 +244,18 @@ pub async fn update(
     if let Some(message) = validate(&body) {
         return bad_request(&message);
     }
+    let bank = match encrypt_field(&state.pii, body.bank_account_number.as_deref()) {
+        Ok(v) => v,
+        Err(response) => return response,
+    };
+    let national = match encrypt_field(&state.pii, body.national_id.as_deref()) {
+        Ok(v) => v,
+        Err(response) => return response,
+    };
+    let sso = match encrypt_field(&state.pii, body.sso_number.as_deref()) {
+        Ok(v) => v,
+        Err(response) => return response,
+    };
 
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
@@ -236,7 +267,11 @@ pub async fn update(
              first_name_en = $6, last_name_en = $7, position_title = $8,
              department = $9, base_salary = $10, hire_date = $11,
              tax_filing_status = $12, pf_member = $13, sso_enrolled = $14,
-             bank_name = $15, bank_account_number = $16, updated_at = now()
+             bank_name = $15,
+             bank_account_number = COALESCE($16, bank_account_number),
+             national_id = COALESCE($17, national_id),
+             sso_number = COALESCE($18, sso_number),
+             updated_at = now()
            WHERE id = $1 AND tenant_id = $2"#,
     )
     .bind(id)
@@ -254,7 +289,9 @@ pub async fn update(
     .bind(body.pf_member.unwrap_or(false))
     .bind(body.sso_enrolled.unwrap_or(true))
     .bind(body.bank_name.as_deref())
-    .bind(body.bank_account_number.as_deref())
+    .bind(bank.as_deref())
+    .bind(national.as_deref())
+    .bind(sso.as_deref())
     .execute(&mut *tx)
     .await;
 
@@ -402,7 +439,7 @@ async fn fetch_one(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
                   first_name_en, last_name_en, position_title, department,
                   base_salary, hire_date, termination_date, status, pf_member,
-                  sso_enrolled, bank_name, bank_account_number
+                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number
              FROM employees WHERE id = $1 AND tenant_id = $2"#,
     )
     .bind(id)
@@ -411,10 +448,13 @@ async fn fetch_one(
     .await
     .map_err(|e| e.to_string())?;
     let _ = tx.rollback().await;
-    Ok(row.as_ref().map(row_to_dto))
+    Ok(row.as_ref().map(|row| row_to_dto(row, &state.pii)))
 }
 
-fn row_to_dto(row: &sqlx::postgres::PgRow) -> EmployeeDto {
+fn row_to_dto(
+    row: &sqlx::postgres::PgRow,
+    pii: &Option<std::sync::Arc<talentos_db::pii::PiiCipher>>,
+) -> EmployeeDto {
     use sqlx::Row;
     let base_salary: Decimal = row.get("base_salary");
     EmployeeDto {
@@ -436,7 +476,42 @@ fn row_to_dto(row: &sqlx::postgres::PgRow) -> EmployeeDto {
         pf_member: row.get("pf_member"),
         sso_enrolled: row.get("sso_enrolled"),
         bank_name: row.get("bank_name"),
-        bank_account_number: row.get("bank_account_number"),
+        bank_account_number_masked: mask_value(pii, row.get("bank_account_number")),
+        national_id_masked: mask_value(pii, row.get("national_id")),
+        sso_number_masked: mask_value(pii, row.get("sso_number")),
+    }
+}
+
+fn mask_value(
+    pii: &Option<std::sync::Arc<talentos_db::pii::PiiCipher>>,
+    stored: Option<String>,
+) -> Option<String> {
+    let stored = stored?;
+    match pii {
+        Some(cipher) => cipher
+            .decrypt(&stored)
+            .ok()
+            .map(|plain| talentos_db::pii::mask_secret(&plain)),
+        None if talentos_db::pii::is_encrypted(&stored) => None,
+        None => Some(talentos_db::pii::mask_secret(&stored)),
+    }
+}
+
+// Same axum trade-off as the other guards: a ready-to-send response is the error.
+#[allow(clippy::result_large_err)]
+fn encrypt_field(
+    pii: &Option<std::sync::Arc<talentos_db::pii::PiiCipher>>,
+    value: Option<&str>,
+) -> Result<Option<String>, Response> {
+    let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(None);
+    };
+    match pii {
+        Some(cipher) => cipher
+            .encrypt(value)
+            .map(Some)
+            .map_err(|e| internal_err(&e.to_string())),
+        None => Ok(Some(value.to_string())),
     }
 }
 

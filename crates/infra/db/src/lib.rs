@@ -88,3 +88,5 @@ fn db_err(e: sqlx::Error) -> talentos_authz::AuthError {
     // B7/M8: DB failures are 500s, never 401s — outages must not masquerade as bad passwords.
     talentos_authz::AuthError::Internal(format!("db: {}", e))
 }
+
+pub mod pii;

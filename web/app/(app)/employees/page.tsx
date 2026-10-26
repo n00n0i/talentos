@@ -20,7 +20,9 @@ type Employee = {
   pf_member: boolean;
   sso_enrolled: boolean;
   bank_name: string | null;
-  bank_account_number: string | null;
+  bank_account_number_masked: string | null;
+  national_id_masked: string | null;
+  sso_number_masked: string | null;
 };
 
 type FormState = {
@@ -35,6 +37,8 @@ type FormState = {
   sso_enrolled: boolean;
   bank_name: string;
   bank_account_number: string;
+  national_id: string;
+  sso_number: string;
 };
 
 const EMPTY: FormState = {
@@ -49,6 +53,8 @@ const EMPTY: FormState = {
   sso_enrolled: true,
   bank_name: "",
   bank_account_number: "",
+  national_id: "",
+  sso_number: "",
 };
 
 export default function EmployeesPage() {
@@ -88,7 +94,10 @@ export default function EmployeesPage() {
       pf_member: editing.pf_member,
       sso_enrolled: editing.sso_enrolled,
       bank_name: editing.bank_name ?? "",
-      bank_account_number: editing.bank_account_number ?? "",
+      // Leave sensitive fields empty: empty means "keep the stored value".
+      bank_account_number: "",
+      national_id: "",
+      sso_number: "",
     });
   }, [editing]);
 
@@ -107,6 +116,8 @@ export default function EmployeesPage() {
         department: form.department.trim() || null,
         bank_name: form.bank_name.trim() || null,
         bank_account_number: form.bank_account_number.trim() || null,
+        national_id: form.national_id.trim() || null,
+        sso_number: form.sso_number.trim() || null,
       };
       if (editing === "new") {
         await gw("api/v1/employees", { method: "POST", body: JSON.stringify(body) });
@@ -232,8 +243,38 @@ export default function EmployeesPage() {
             </div>
             <div className="field">
               <label>เลขบัญชี</label>
-              <input value={form.bank_account_number} onChange={(e) => set("bank_account_number", e.target.value)} />
+              <input
+                value={form.bank_account_number}
+                placeholder={editing !== "new" && editing ? (editing.bank_account_number_masked ?? "") : ""}
+                onChange={(e) => set("bank_account_number", e.target.value)}
+              />
+              <span className="hint">
+                {editing !== "new" && editing?.bank_account_number_masked
+                  ? "เว้นว่างเพื่อคงเลขบัญชีเดิม (แสดงเฉพาะ 4 ตัวท้าย)"
+                  : "เข้ารหัสก่อนบันทึก"}
+              </span>
             </div>
+          </div>
+          <div className="form-row">
+            <div className="field">
+              <label>เลขบัตรประชาชน</label>
+              <input
+                value={form.national_id}
+                placeholder={editing !== "new" && editing ? (editing.national_id_masked ?? "") : ""}
+                onChange={(e) => set("national_id", e.target.value)}
+              />
+              <span className="hint">เข้ารหัสก่อนบันทึก · แก้แล้วแสดงเฉพาะ 4 ตัวท้าย</span>
+            </div>
+            <div className="field">
+              <label>เลขประกันสังคม</label>
+              <input
+                value={form.sso_number}
+                placeholder={editing !== "new" && editing ? (editing.sso_number_masked ?? "") : ""}
+                onChange={(e) => set("sso_number", e.target.value)}
+              />
+              <span className="hint">เว้นว่างเพื่อคงเดิม</span>
+            </div>
+            <div />
           </div>
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
             <label className="check">

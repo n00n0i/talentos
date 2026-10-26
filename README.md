@@ -9,10 +9,13 @@ for exactly what compiles, what is tested, and what is deferred.
 ## What works today
 
 - **Auth**: login / refresh with rotating refresh tokens, Argon2id, JWT (HS256), RBAC matrix (4 roles, 20 permissions)
-- **Tenancy**: PostgreSQL RLS (`FORCE`) on every tenant table; login uses a separate `BYPASSRLS` role
+- **Tenancy**: PostgreSQL RLS (`FORCE`) on every tenant table; runtime uses a `NOBYPASSRLS` role
+- **PII**: AES-256-GCM for national id / SSO number / bank account; API returns only last 4 digits
+- **Onboarding**: `talentos-gateway provision` creates a tenant, entity and first `hr_admin`
+- **Deploy**: one-command compose stack (migrate + gateway + web + nginx), backup/restore scripts
 - **Payroll**: deterministic DAG (gross → OT → SSO → PND tax → PF → net → payslip) with a per-step audit trace
 - **Thai compliance**: PND 2567 progressive brackets, SSO 5% capped at ฿15,000, PF, LPA §118 severance, OT 1.5×/2×/3×
-- **Agent**: Observe → Plan → Act → Reflect loop over 8 HR tools (runs in-process; Temporal pending)
+- **Agent**: Observe → Plan → Act → Reflect loop over the HR/memory tools (runs in-process; Temporal pending)
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
 - **API**: `/health`, `/api/v1/auth/*`, `/api/v1/employees*`, `/api/v1/users*`,
   `/api/v1/attendance*`, `/api/v1/payroll/*`, `/api/v1/leave/*`,
@@ -47,6 +50,41 @@ cargo run -p talentos-gateway
 
 `scripts/init-db.sql` creates both roles. Using the owner at runtime silently
 disables every tenant policy — never do it.
+
+### Create the first tenant
+
+Provisioning crosses tenants, so it is a CLI (owner connection), not an API:
+
+```bash
+export ADMIN_PASSWORD='choose-a-strong-one'   # >= 12 chars
+export DATABASE_ADMIN_URL=postgres://talentos:talentos_dev_secret@localhost:5432/talentos
+cargo run -p talentos-gateway -- provision \
+  --slug acme --name "ACME Co" --email admin@acme.co \
+  --entity "ACME Main" --tax-id 0105555555555
+```
+
+It creates the tenant, one entity, an `hr_admin` user and an audit entry, then
+prints the ids. Run it twice with the same slug and it fails (no silent reuse).
+
+### PII at rest
+
+`national_id`, `sso_number` and `bank_account_number` are encrypted with
+AES-256-GCM before insert and are returned only as `****1234`.
+
+```bash
+export PII_ENCRYPTION_KEY=$(openssl rand -hex 32)   # keep it in your secret store
+```
+
+If the key is missing the gateway warns and stores new values as plaintext
+(dev only). For rows written before encryption was enabled:
+
+```bash
+DATABASE_ADMIN_URL=... PII_ENCRYPTION_KEY=... \
+  cargo run -p talentos-gateway -- pii-encrypt
+```
+
+Losing the key means losing the PII (the rest of the employee record still
+works); back it up with the database.
 
 Optional, for the AI surface: `HUAKATI_API_KEY`, `HUAKATI_API_BASE`.
 
@@ -110,9 +148,28 @@ and green primary actions. Headings use a display serif; numbers stay tabular.
 - Responsive: below 1000px the top bar wraps into brand + pills, stat cards go
   2×2, the right rail stacks, and wide tables scroll inside their card.
 
+## Deploy (on-prem)
+
+```bash
+cp .env.example .env
+# set at minimum: PG_PASSWORD, APP_DB_PASSWORD, AUTH_DB_PASSWORD,
+#                 AUTH_JWT_SECRET (>= 32 bytes), PII_ENCRYPTION_KEY
+make up                 # migrate + roles, then gateway + web + nginx
+open http://localhost   # nginx -> web:3000, /api/* and /health -> gateway:8080
+```
+
+- `make migrate` runs the embedded migrations as the owner and (re)creates the
+  runtime roles with `APP_DB_PASSWORD` / `AUTH_DB_PASSWORD`. Safe to re-run.
+- The gateway and web ports bind to `127.0.0.1` only; nginx is the public entry.
+  Terminate TLS in front of nginx (or add certs to `nginx.conf`).
+- `make backup` writes a gzip dump to `./backups` (14-day retention);
+  `make restore FILE=...` stops the app, restores and restarts.
+- `./scripts/deploy.sh` = migrate → rebuild → health check. `--rollback` starts
+  the previous gateway/web images.
+
 ## Web app
 
-`web/` is a Next.js 14 app (Thai-first, Stripe-style light dashboard). It never
+`web/` is a Next.js 14 app (Thai-first, sage/teal dashboard). It never
 talks to the gateway from the browser: a route handler proxies `/api/gw/*` and
 keeps both tokens in `HttpOnly` cookies, rotating the refresh token single-flight
 so concurrent requests cannot trigger family revocation.

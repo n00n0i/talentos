@@ -8,7 +8,7 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **100 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Tests | `cargo test --workspace` | **106 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
 | Migrations | `sqlx migrate run` on a fresh DB | 18 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 17, rag 7, agent 7,
@@ -16,9 +16,10 @@ payroll-runner 8 (real PostgreSQL + Chromium: payslips, totals, state machine,
 template round-trip, PDF, stuck-run recovery, attendance+unpaid-leave feed,
 tenant policy overrides), hr-runner 5 (leave day maths),
 wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
+db 5 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking),
 graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
 destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
-RLS isolation, layer filter, expiry purge, stats), gateway 3 (RBAC gate:
+RLS isolation, layer filter, expiry purge, stats), gateway 4 (RBAC gate + tenant provisioning CLI:
 hr_admin allowed, employee refused, manager cannot approve payroll).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
@@ -32,6 +33,7 @@ Leave: create (3 days computed server-side) → overlap 409 → bad type 422 →
 ```
 crates/core/kernel          primitives: ids, Money, events, shared workflow types
 crates/core/authz           JWT, Argon2id, RBAC matrix
+crates/infra/db             TenantPool + AES-256-GCM PII cipher
 crates/infra/db             TenantPool (SET LOCAL tenant GUC)
 crates/domain/compliance    Thai PND tax, SSO, PF, LPA severance, OT
 crates/domain/payroll       deterministic payroll DAG + anomaly rules
@@ -78,6 +80,8 @@ employee → attendance → payroll → approval, user invite.
 
 - Payroll executes in the gateway process with a stuck-run sweeper; that is
   recovery, not durable execution. Temporal remains unwired.
+- PII encryption is only as safe as `PII_ENCRYPTION_KEY`; losing it loses the
+  encrypted fields. Back the key up with the database.
 - Payroll formula defaults are Thai practice (unpaid leave `base_salary / 30` per
   day, OT on `base_salary / 30 / 8`), but the divisor and OT multipliers are now
   tenant settings (`/settings`), so HR can adjust them without a deploy.

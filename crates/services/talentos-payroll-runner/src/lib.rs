@@ -555,9 +555,17 @@ pub async fn render_payslip(
         total_deductions: row.try_get("total_deductions")?,
         net_pay: row.try_get("net_pay")?,
         bank_name: row.try_get("bank_name")?,
+        // Decrypt before masking; encrypted values without a key never print.
         bank_account_masked: row
             .try_get::<Option<String>, _>("bank_account_number")?
-            .map(|acc| mask_account(&acc)),
+            .and_then(|stored| match talentos_db::pii::PiiCipher::from_env() {
+                Ok(Some(cipher)) => cipher
+                    .decrypt(&stored)
+                    .ok()
+                    .map(|plain| mask_account(&plain)),
+                _ if talentos_db::pii::is_encrypted(&stored) => None,
+                _ => Some(mask_account(&stored)),
+            }),
         anomalies: anomalies
             .as_array()
             .map(|items| {

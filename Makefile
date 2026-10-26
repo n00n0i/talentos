@@ -13,7 +13,7 @@ export AUTH_JWT_SECRET ?= dev-secret-change-me-in-prod-minimum-32-bytes-okay!!
 export DATABASE_AUTH_URL ?= postgres://talentos_auth:auth_dev_secret@localhost:5432/talentos
 
 .PHONY: help install infra-up infra-down db-reset sqlx-prepare \
-        check fmt clippy test build release run \
+        check fmt clippy test build release run up down migrate backup restore \
         deploy deploy-rollback status logs clean
 
 help: ## Show this help
@@ -34,6 +34,22 @@ infra-up: ## Start Docker Compose stack (postgres, kafka, temporal, redis, minio
 	@echo "⏳ Waiting for PostgreSQL..."
 	@until docker compose -f $(COMPOSE_FILE) exec -T postgres pg_isready -U talentos -d talentos >/dev/null 2>&1; do sleep 1; done
 	@echo "✅ Infrastructure up."
+
+up: ## Build and start the full app (migrate + gateway + web + nginx)
+	docker compose up -d --build gateway web nginx
+	@echo "✅ App at http://localhost (health: /health)"
+
+down: ## Stop the app containers (keeps data)
+	docker compose stop gateway web nginx
+
+migrate: ## Apply migrations + ensure runtime roles (owner connection)
+	docker compose run --rm migrate
+
+backup: ## Dump the database to ./backups (14-day retention)
+	./scripts/backup.sh
+
+restore: ## Restore a dump: make restore FILE=backups/talentos-....sql.gz
+	./scripts/restore.sh "$(FILE)" --force
 
 db-reset: ## Drop and recreate database from scratch (DESTRUCTIVE)
 	docker compose -f $(COMPOSE_FILE) down -v
@@ -98,7 +114,7 @@ status: ## Show container health summary
 	@curl -sf http://localhost:8080/health && echo "" || echo "❌ Gateway unhealthy"
 
 logs: ## Tail gateway + postgres logs
-	docker compose -f $(COMPOSE_FILE) logs -f --tail=100 api-gw postgres
+	docker compose -f $(COMPOSE_FILE) logs -f --tail=100 gateway web postgres
 
 clean: ## Remove build artifacts
 	cargo clean

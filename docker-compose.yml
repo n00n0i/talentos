@@ -110,18 +110,81 @@ services:
       timeout: 3s
       retries: 10
 
+  migrate:
+    image: talentos-gateway:latest
+    build: .
+    command: ["migrate"]
+    environment:
+      DATABASE_ADMIN_URL: postgres://talentos:${PG_PASSWORD:-talentos_dev_secret}@postgres:5432/talentos
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-app_dev_secret}
+      AUTH_DB_PASSWORD: ${AUTH_DB_PASSWORD:-auth_dev_secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  gateway:
+    image: talentos-gateway:latest
+    build: .
+    environment:
+      DATABASE_URL: postgres://talentos_app:${APP_DB_PASSWORD:-app_dev_secret}@postgres:5432/talentos
+      DATABASE_AUTH_URL: postgres://talentos_auth:${AUTH_DB_PASSWORD:-auth_dev_secret}@postgres:5432/talentos
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_secret}@redis:6379
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:-dev-secret-change-me-in-prod-minimum-32-bytes-okay!!}
+      AUTH_ALLOWED_ORIGINS: ${APP_URL:-http://localhost}
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-}
+      GATEWAY_PORT: "8080"
+      PAYSLIP_STORE_DIR: /var/lib/talentos/payslips
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
+      RUST_LOG: ${RUST_LOG:-info,talentos=info}
+    volumes:
+      - payslip-data:/var/lib/talentos/payslips
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  web:
+    image: talentos-web:latest
+    build: ./web
+    environment:
+      TALENTOS_API_URL: http://gateway:8080
+      TALENTOS_COOKIE_SECURE: ${TALENTOS_COOKIE_SECURE:-false}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
   nginx:
     image: nginx:1.25-alpine
     ports:
       - "80:80"
-      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - temporal
-      - temporal-ui
+      gateway:
+        condition: service_healthy
+      web:
+        condition: service_healthy
 
 volumes:
   pgdata:
   temporal-data:
   minio-data:
+  payslip-data:

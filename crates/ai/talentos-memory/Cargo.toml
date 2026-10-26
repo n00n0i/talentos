@@ -5,28 +5,18 @@ edition.workspace = true
 
 [dependencies]
 talentos-kernel = { path = "../../core/kernel" }
-talentos-model-gw = { path = "../talentos-model-gw" }
-talentos-rag = { path = "../talentos-rag" }
-talentos-tools = { path = "../talentos-tools" }
 talentos-db = { path = "../../infra/db" }
-talentos-payroll = { path = "../../domain/talentos-payroll" }
-talentos-compliance = { path = "../../domain/talentos-compliance" }
-
-# Core dependencies
-tokio = { workspace = true, features = ["full"] }
+talentos-tools = { path = "../talentos-tools" }
+talentos-model-gw = { path = "../talentos-model-gw" }
+sqlx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-anyhow = "1"
 tracing = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 rust_decimal = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "bigdecimal"] }
-async-trait = "0.1"
-futures-util = { workspace = true }
-reqwest = { version = "0.12", features = ["json"] }
+async-trait = { workspace = true }
 
-[features]
-default = []
-full = []
+[dev-dependencies]
+tokio = { workspace = true }

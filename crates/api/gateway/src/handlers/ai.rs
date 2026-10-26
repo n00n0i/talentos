@@ -58,10 +58,12 @@ pub async fn run_agent(
         Err(e) => return unavailable(&format!("model gateway not configured: {e}")),
     };
 
-    let registry = Arc::new(talentos_tools::tools::default_registry(
+    let mut built = talentos_tools::tools::default_registry(
         Some(Arc::new(model_gw.clone())),
         state.pool.clone(),
-    ));
+    );
+    talentos_memory::tools::register_tools(&mut built, state.memory.clone());
+    let registry = Arc::new(built);
 
     let agent_ctx = AgentContext {
         tenant_id: ctx.tenant_id,

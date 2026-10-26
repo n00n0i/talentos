@@ -22,8 +22,7 @@ members = [
     "crates/ai/talentos-agent",
     "crates/ai/talentos-tools",
     "crates/ext/talentos-wasm-host",
-    # TODO(memory): depends on the semantica crate, which is not published to crates.io.
-    # "crates/ai/talentos-memory",
+    "crates/ai/talentos-memory",
 ]
 
 [workspace.package]

@@ -1126,6 +1126,8 @@ pub const TOOL_NAMES: &[&str] = &[
     "detect_anomalies",
     "draft_leave_policy",
     "query_employee",
+    "recall_memory",
+    "remember_memory",
     "run_payroll",
     "search_policy",
     "summarize_payroll_run",

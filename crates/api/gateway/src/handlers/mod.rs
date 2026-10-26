@@ -4,5 +4,6 @@ pub mod graphql;
 pub mod health;
 pub mod leave;
 pub mod mcp;
+pub mod memory;
 pub mod payroll;
 pub mod plugins;

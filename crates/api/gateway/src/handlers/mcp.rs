@@ -39,8 +39,9 @@ pub async fn post(
     };
 
     let model_gw = HuakatiClient::new().ok().map(Arc::new);
-    let registry: ToolRegistry =
+    let mut registry: ToolRegistry =
         talentos_tools::tools::default_registry(model_gw.clone(), state.pool.clone());
+    talentos_memory::tools::register_tools(&mut registry, state.memory.clone());
     let tool_ctx = ToolContext {
         tenant_id: ctx.tenant_id,
         user_id: ctx.user_id,

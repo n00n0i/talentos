@@ -107,6 +107,22 @@ Production image: `docker build -f web/Dockerfile -t talentos/web .` (Next
 standalone). Set `TALENTOS_COOKIE_SECURE=false` only when serving plain HTTP on a
 trusted network.
 
+## Memory
+
+Agents remember across runs without an external service. One pgvector table,
+four layers (`working`, `episodic`, `semantic`, `procedural`), tenant-scoped by
+RLS. Recall is hybrid: embedding similarity when an embedding key is configured,
+plus Thai keyword match, importance and 30-day recency decay.
+
+```
+POST   /api/v1/ai/memory          {layer, content, importance?, ttl_seconds?, metadata?}
+GET    /api/v1/ai/memory?q=…&layers=episodic,semantic&limit=10
+GET    /api/v1/ai/memory/stats
+DELETE /api/v1/ai/memory/expired
+```
+
+The agent and MCP clients get `remember_memory` / `recall_memory` tools.
+
 ## MCP
 
 `POST /api/v1/mcp` speaks JSON-RPC 2.0 (Model Context Protocol) over streamable
@@ -160,6 +176,7 @@ crates/domain/compliance  Thai statutory rules
 crates/domain/payroll     pure payroll DAG
 crates/services/payroll-runner  run executor (DB + DAG)
 crates/ai/*               model gateway, RAG, agent loop, tools
+crates/ai/memory           agent memory on pgvector (4 layers, tenant-scoped)
 crates/ext/wasm-host      sandboxed plugin host (Extism, capability grants)
 crates/api/gateway        Axum HTTP surface
 web/                      Next.js 14 dashboard (Thai UI)

@@ -90,6 +90,10 @@ async fn main() {
         refresh_ttl_days,
         allowed_origins,
         graphql_schema: Arc::new(talentos_graphql::build_schema()),
+        memory: Arc::new(talentos_memory::MemoryStore::new(
+            pool.clone(),
+            talentos_model_gw::HuakatiClient::new().ok().map(Arc::new),
+        )),
         started_at: std::time::Instant::now(),
     };
 

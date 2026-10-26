@@ -6,7 +6,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
-use crate::handlers::{ai, auth, graphql, health, leave, mcp, payroll, plugins};
+use crate::handlers::{ai, auth, graphql, health, leave, mcp, memory, payroll, plugins};
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
 use crate::state::AppState;
@@ -42,6 +42,13 @@ pub fn build(state: AppState) -> Router {
                 .get(mcp::method_not_allowed)
                 .delete(mcp::session_close),
         )
+        .route(
+            "/api/v1/ai/memory",
+            get(memory::recall)
+                .post(memory::remember)
+                .delete(memory::purge),
+        )
+        .route("/api/v1/ai/memory/stats", get(memory::stats))
         .route("/api/v1/plugins", get(plugins::list))
         .route("/api/v1/plugins/:name/invoke", post(plugins::invoke))
         .route("/api/v1/ai/agents/run", post(ai::run_agent))

@@ -8,7 +8,7 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **82 passed**, 0 failed (7 DB-backed, 6 render, 5 leave, 6 wasm, 2 schema, 5 mcp) |
+| Tests | `cargo test --workspace` | **88 passed**, 0 failed (7 DB-backed, 6 render, 5 leave, 6 wasm, 2 schema, 5 mcp, 3 memory DB) |
 | Migrations | `psql -f migrations/*.sql` on a fresh DB | 9 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 11, rag 7, agent 7,
@@ -16,7 +16,8 @@ payroll-runner 6 (real PostgreSQL + Chromium: payslips, totals, state machine,
 template round-trip, PDF, stuck-run recovery), hr-runner 5 (leave day maths),
 wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
 graphql 2 (schema shape, money-as-string), mcp 5 (version negotiation, tool list,
-destructive guard, notifications).
+destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
+RLS isolation, layer filter, expiry purge, stats).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -56,7 +57,13 @@ Each is commented out in the root `Cargo.toml` with a TODO:
 | Crate | Blocker |
 |---|---|
 | `crates/services/talentos-worker` | Temporal Rust SDK 1.x (`temporalio-sdk`) needs protoc-generated protos and a different macro surface than the scaffold assumed. Payroll and the agent loop already run in-process, so this is about durability, not features. |
-| `crates/ai/talentos-memory` | Depends on the `semantica` crate, which is not published to crates.io. |
+
+
+Memory is **done** on pgvector: `crates/ai/talentos-memory` with four layers
+(`working` = 1 h TTL by default, `episodic`, `semantic`, `procedural`), hybrid
+recall (vector + keyword + importance + recency), tenant RLS, and
+`remember_memory`/`recall_memory` tools exposed to the agent and MCP. Graph
+edges/ontology concepts live in `metadata`; a real graph store is not built.
 
 MCP is **done** at `POST /api/v1/mcp` (streamable HTTP, stateless). No session id,
 because the JWT on each request is the only identity — one client can never resume

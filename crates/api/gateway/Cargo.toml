@@ -16,6 +16,7 @@ talentos-hr-runner = { path = "../../services/talentos-hr-runner" }
 talentos-wasm-host = { path = "../../ext/talentos-wasm-host" }
 talentos-graphql = { path = "../graphql" }
 talentos-mcp = { path = "../mcp" }
+talentos-memory = { path = "../../ai/talentos-memory" }
 async-graphql = { version = "7" }
 talentos-payroll = { path = "../../domain/talentos-payroll" }
 talentos-agent = { path = "../../ai/talentos-agent" }

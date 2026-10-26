@@ -13,6 +13,14 @@ fn database_url() -> Option<String> {
     std::env::var("DATABASE_URL").ok()
 }
 
+/// Cross-tenant sweeper queries need BYPASSRLS (the gateway uses DATABASE_AUTH_URL
+/// for exactly this). Fall back to DATABASE_URL for a single-role local setup.
+fn recovery_url() -> Option<String> {
+    std::env::var("DATABASE_AUTH_URL")
+        .ok()
+        .or_else(|| std::env::var("DATABASE_URL").ok())
+}
+
 /// Insert a tenant + entity + N employees using the tenant GUC, which is what the
 /// RLS policies expect. Returns (tenant_id, entity_id, run_id, employee_ids).
 async fn seed(pool: &PgPool, employees: &[(&str, Decimal)]) -> (Uuid, Uuid, Uuid, Vec<Uuid>) {
@@ -185,13 +193,94 @@ async fn execute_run_writes_payslips_and_totals() {
 }
 
 #[tokio::test]
-async fn second_execution_is_rejected_by_state_machine() {
+async fn attendance_ot_and_unpaid_leave_feed_the_run() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
 
     let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, entity_id, run_id, employee_ids) =
+        seed(&raw, &[("EMP040", Decimal::new(40_000, 0))]).await;
+    let employee_id = employee_ids[0];
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+
+    // 4 hours weekday OT → hourly 40,000/30/8 = 166.6667 × 4 × 1.5 = 1,000.00
+    sqlx::query(
+        "INSERT INTO attendance_records
+           (tenant_id, employee_id, work_date, hours_worked, ot_hours, ot_kind)
+         VALUES ($1, $2, '2026-10-05', 8, 4, 'weekday')",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .execute(&mut *tx)
+    .await
+    .expect("attendance");
+
+    // 2 days approved unpaid leave → 40,000 − 2,666.67 = 37,333.33
+    sqlx::query(
+        "INSERT INTO leave_requests
+           (tenant_id, entity_id, employee_id, leave_type, start_date, end_date, days, status)
+         VALUES ($1, $2, $3, 'unpaid', '2026-10-12', '2026-10-13', 2, 'approved')",
+    )
+    .bind(tenant_id)
+    .bind(entity_id)
+    .bind(employee_id)
+    .execute(&mut *tx)
+    .await
+    .expect("leave");
+    tx.commit().await.expect("commit fixtures");
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("run should succeed");
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query(
+        "SELECT gross_earnings, ot_amount, sso_employee FROM payslips
+          WHERE payroll_run_id = $1 AND employee_id = $2",
+    )
+    .bind(run_id)
+    .bind(employee_id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("payslip");
+
+    let gross: Decimal = row.try_get("gross_earnings").expect("gross");
+    let ot: Decimal = row.try_get("ot_amount").expect("ot");
+    let sso: Decimal = row.try_get("sso_employee").expect("sso");
+    assert_eq!(ot, Decimal::new(1_000, 0), "OT from attendance");
+    assert_eq!(
+        gross,
+        Decimal::new(3_833_333, 2),
+        "base − unpaid leave + OT"
+    );
+    assert_eq!(sso, Decimal::new(750, 0), "SSO capped on 38k gross");
+
+    let _ = tx.rollback().await;
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn second_execution_is_rejected_by_state_machine() {
+    let (Some(url), Some(auth_url)) = (database_url(), recovery_url()) else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&auth_url).await.expect("connect");
     let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
     let (tenant_id, _entity_id, run_id, _ids) =
         seed(&raw, &[("EMP010", Decimal::new(30_000, 0))]).await;
@@ -215,12 +304,12 @@ async fn second_execution_is_rejected_by_state_machine() {
 
 #[tokio::test]
 async fn tenant_template_round_trips_and_renders_payslip() {
-    let Some(url) = database_url() else {
+    let (Some(url), Some(auth_url)) = (database_url(), recovery_url()) else {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
 
-    let raw = PgPool::connect(&url).await.expect("connect");
+    let raw = PgPool::connect(&auth_url).await.expect("connect");
     let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
     let (tenant_id, _entity_id, run_id, _ids) =
         seed(&raw, &[("EMP020", Decimal::new(50_000, 0))]).await;
@@ -328,12 +417,12 @@ async fn missing_renderer_reports_unavailable_not_a_broken_file() {
 
 #[tokio::test]
 async fn stuck_run_is_recovered_and_completed() {
-    let Some(url) = database_url() else {
+    let (Some(url), Some(auth_url)) = (database_url(), recovery_url()) else {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
 
-    let raw = PgPool::connect(&url).await.expect("connect");
+    let raw = PgPool::connect(&auth_url).await.expect("connect");
     let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
     let (tenant_id, _entity_id, run_id, _ids) =
         seed(&raw, &[("EMP030", Decimal::new(40_000, 0))]).await;

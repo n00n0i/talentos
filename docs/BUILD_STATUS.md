@@ -8,12 +8,12 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **92 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 13 files apply cleanly |
+| Tests | `cargo test --workspace` | **97 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 17 files apply cleanly |
 
-Tests by crate: kernel 5, authz 22, compliance 6, payroll 11, rag 7, agent 7,
-payroll-runner 6 (real PostgreSQL + Chromium: payslips, totals, state machine,
-template round-trip, PDF, stuck-run recovery), hr-runner 5 (leave day maths),
+Tests by crate: kernel 5, authz 22, compliance 6, payroll 15, rag 7, agent 7,
+payroll-runner 7 (real PostgreSQL + Chromium: payslips, totals, state machine,
+template round-trip, PDF, stuck-run recovery, attendance+unpaid-leave feed), hr-runner 5 (leave day maths),
 wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
 graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
 destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
@@ -42,6 +42,19 @@ crates/api/gateway          Axum: /health, /auth/*, /payroll/*, /mcp, /graphql
 crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT per request)
 ```
 
+## Identity, RLS and access
+
+- Runtime uses `talentos_app` (`NOBYPASSRLS`); `talentos_auth` (`BYPASSRLS`) is
+  used only for login/refresh and the stuck-run sweeper. Every query goes through
+  `TenantPool::begin_tenant`.
+- Switching to the app role exposed a latent bug: `current_tenant_id()` did
+  `COALESCE(text, uuid)`, which never fired while a superuser skipped RLS. Fixed
+  in `20261030000001_fix_current_tenant_id.sql`; tests now run as the app role.
+- RBAC is enforced per handler and in GraphQL (`attendance.*`, `employee.*`,
+  `payslip.*`, `payroll_run.*`, `settings.*`, `user_management.*`).
+- Employee CRUD is soft-delete only. Invitations are hashed, single-use, 7 days.
+  Password change revokes all refresh tokens.
+
 ## Web app
 
 `web/` — Next.js 14.2.35, TypeScript strict, no UI dependency beyond React.
@@ -55,15 +68,15 @@ against a live gateway.
 
 ## Known risks
 
-- **RLS is only as strong as the DB role.** The dev compose `talentos` role is the
-  Postgres superuser, and superusers bypass RLS. Production must run the gateway as
-  a `NOBYPASSRLS` role with grants on the tables (keep `talentos_auth` BYPASSRLS for
-  login/refresh only). Until then, tenant isolation rests on every query's explicit
-  `tenant_id` filter.
 - Payroll executes in the gateway process with a stuck-run sweeper; that is
   recovery, not durable execution. Temporal remains unwired.
-- Attendance/leave are not yet inputs to payroll (`ot_hours` / `days_worked` are
-  still fixed values).
+- Payroll formula assumptions, documented for HR sign-off: unpaid leave deducts
+  `base_salary / 30` per approved calendar day inside the period; OT is priced on
+  `base_salary / 30 / 8`; SSO uses the explicit `sso_enrolled` flag. If the
+  company's policy differs, change `PayrollDag::calc_gross` / the OT base once.
+- Attendance OT class (weekday/weekend/holiday) is chosen by the recorder, not
+  derived from a holiday calendar. Wire a Thai holiday calendar before relying on
+  holiday OT at scale.
 
 ## Deferred — not wired
 

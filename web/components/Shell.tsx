@@ -8,15 +8,20 @@ import { gw, Me } from "@/lib/api";
 const NAV = [
   { href: "/", label: "ภาพรวม" },
   { href: "/employees", label: "พนักงาน" },
+  { href: "/attendance", label: "เวลาและ OT" },
   { href: "/payroll", label: "รอบเงินเดือน" },
   { href: "/payslip", label: "แบบฟอร์มสลิป" },
 ];
 
+const ADMIN_NAV = [{ href: "/users", label: "ผู้ใช้" }];
+
 const TITLES: Record<string, string> = {
   "/": "ภาพรวม",
   "/employees": "พนักงาน",
+  "/attendance": "เวลาและ OT",
   "/payroll": "รอบเงินเดือน",
   "/payslip": "แบบฟอร์มสลิป",
+  "/users": "ผู้ใช้",
 };
 
 export default function Shell({ children }: { children: React.ReactNode }) {
@@ -45,7 +50,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         </div>
         <nav className="nav">
           <div className="nav-label">งานบุคคล</div>
-          {NAV.map((item) => (
+          {[...NAV, ...(me?.roles.includes("hr_admin") ? ADMIN_NAV : [])].map((item) => (
             <Link
               key={item.href}
               href={item.href}

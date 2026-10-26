@@ -1,0 +1,207 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { gw, handleApiError } from "@/lib/api";
+
+type Employee = { id: string; employee_code: string; first_name_th: string; last_name_th: string };
+type Record = {
+  id: string;
+  employee_id: string;
+  employee_code: string;
+  work_date: string;
+  hours_worked: string;
+  ot_hours: string;
+  ot_kind: string;
+  note: string | null;
+};
+
+const KINDS = [
+  { value: "weekday", label: "วันทำงาน (1.5x)" },
+  { value: "weekend", label: "วันหยุด (2x)" },
+  { value: "holiday", label: "วันหยุดนักขัตฤกษ์ (3x)" },
+];
+
+function monthRange() {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  return { from: iso(first), to: iso(last) };
+}
+
+export default function AttendancePage() {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [records, setRecords] = useState<Record[] | null>(null);
+  const [employeeId, setEmployeeId] = useState("");
+  const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
+  const [otHours, setOtHours] = useState("0");
+  const [otKind, setOtKind] = useState("weekday");
+  const [note, setNote] = useState("");
+  const [range] = useState(monthRange);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const load = useCallback(async () => {
+    const [emps, recs] = await Promise.all([
+      gw<{ employees: Employee[] }>("api/v1/employees?status=active&limit=500"),
+      gw<{ records: Record[] }>(`api/v1/attendance?from=${range.from}&to=${range.to}`),
+    ]);
+    setEmployees(emps.employees);
+    setRecords(recs.records);
+    if (!employeeId && emps.employees[0]) setEmployeeId(emps.employees[0].id);
+  }, [range.from, range.to, employeeId]);
+
+  useEffect(() => {
+    load().catch((e) => handleApiError(e, setError));
+  }, [load]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw("api/v1/attendance", {
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: employeeId,
+          work_date: workDate,
+          hours_worked: 8,
+          ot_hours: Number(otHours || "0"),
+          ot_kind: otKind,
+          note: note.trim() || null,
+        }),
+      });
+      setNotice("บันทึกเวลาแล้ว");
+      setOtHours("0");
+      setNote("");
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(record: Record) {
+    if (!confirm(`ลบรายการวันที่ ${record.work_date} ของ ${record.employee_code}?`)) return;
+    setBusy(true);
+    try {
+      await gw(`api/v1/attendance/${record.id}`, { method: "DELETE" });
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="page-head">
+        <div>
+          <h1>เวลาและ OT</h1>
+          <p className="page-sub">บันทึก OT เพื่อให้รอบเงินเดือนคำนวณอัตราตามกฎหมาย</p>
+        </div>
+        <span className="hint">
+          {range.from} – {range.to}
+        </span>
+      </div>
+
+      {error && <p className="error">{error}</p>}
+      {notice && <p className="badge success">{notice}</p>}
+
+      <form className="card card-pad" onSubmit={submit}>
+        <h2 style={{ marginBottom: 14 }}>บันทึกเวลา</h2>
+        <div className="form-row">
+          <div className="field">
+            <label>พนักงาน</label>
+            <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.employee_code} · {e.first_name_th} {e.last_name_th}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>วันที่</label>
+            <input type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label>ชั่วโมง OT</label>
+            <input
+              type="number"
+              min="0"
+              max="12"
+              step="0.5"
+              value={otHours}
+              onChange={(e) => setOtHours(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="form-row" style={{ marginTop: 12, gridTemplateColumns: "1fr 1fr auto" }}>
+          <div className="field">
+            <label>ประเภท OT</label>
+            <select value={otKind} onChange={(e) => setOtKind(e.target.value)}>
+              {KINDS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>หมายเหตุ</label>
+            <input value={note} onChange={(e) => setNote(e.target.value)} />
+          </div>
+          <div style={{ display: "flex", alignItems: "end" }}>
+            <button className="btn btn-primary" type="submit" disabled={busy || !employeeId}>
+              {busy ? "กำลังบันทึก…" : "บันทึก"}
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <div className="card">
+        {records === null ? (
+          <div className="spinner">กำลังโหลด…</div>
+        ) : records.length === 0 ? (
+          <div className="empty">ยังไม่มีรายการในเดือนนี้</div>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                <th>พนักงาน</th>
+                <th className="num">ชั่วโมงทำงาน</th>
+                <th className="num">OT</th>
+                <th>ประเภท</th>
+                <th>หมายเหตุ</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.work_date}</td>
+                  <td>{r.employee_code}</td>
+                  <td className="num">{r.hours_worked}</td>
+                  <td className="num">{r.ot_hours}</td>
+                  <td>{KINDS.find((k) => k.value === r.ot_kind)?.label ?? r.ot_kind}</td>
+                  <td>{r.note ?? "—"}</td>
+                  <td className="num">
+                    <button className="btn btn-sm btn-danger" onClick={() => remove(r)} disabled={busy}>
+                      ลบ
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </>
+  );
+}

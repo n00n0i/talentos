@@ -44,8 +44,9 @@ impl PayrollDag {
             error: None,
         });
 
-        // 2. Overtime. Daily wage = monthly / 30, hourly = daily / 8.
-        let hourly_rate = (gross.amount() / dec!(30) / dec!(8)).round_dp(4);
+        // 2. Overtime. Base wage = monthly salary / 30 / 8. Unpaid leave lowers
+        // this month's gross, not the hourly rate OT is paid at.
+        let hourly_rate = (input.base_salary.amount() / dec!(30) / dec!(8)).round_dp(4);
         let ot_amount = calculate_ot(
             hourly_rate,
             input.ot_hours_weekday,
@@ -67,9 +68,12 @@ impl PayrollDag {
             error: None,
         });
 
-        // 3. Social Security (capped at 15,000 wage base)
-        let (sso_employee, _sso_employer) =
-            calculate_sso(gross_with_ot.amount(), &SsoRules::default());
+        // 3. Social Security (capped at 15,000 wage base). Exempt staff pay none.
+        let (sso_employee, _sso_employer) = if input.is_sso_enrolled {
+            calculate_sso(gross_with_ot.amount(), &SsoRules::default())
+        } else {
+            (Decimal::ZERO, Decimal::ZERO)
+        };
         let sso_money = Money::from_baht(sso_employee);
         trace.push(StepResult {
             step: "sso".into(),
@@ -101,8 +105,8 @@ impl PayrollDag {
             error: None,
         });
 
-        // 5. Provident Fund (only for enrolled employees)
-        let pf_amount = if input.is_sso_enrolled {
+        // 5. Provident Fund (members only)
+        let pf_amount = if input.is_pf_member {
             (gross_with_ot.amount() * input.pf_rate).round_dp(2)
         } else {
             Decimal::ZERO
@@ -111,7 +115,7 @@ impl PayrollDag {
         trace.push(StepResult {
             step: "pf".into(),
             input: serde_json::json!({
-                "enrolled": input.is_sso_enrolled,
+                "enrolled": input.is_pf_member,
                 "rate": input.pf_rate.to_string(),
             }),
             output: serde_json::to_value(pf_money)?,
@@ -164,9 +168,17 @@ impl PayrollDag {
     }
 
     fn calc_gross(input: &EmployeePayrollInput) -> Result<Money, PayrollError> {
-        let mut gross = input.base_salary;
+        // Unpaid leave: monthly salary / 30 per day. Paid leave never reduces pay.
+        let unpaid_deduction = Money::from_baht(
+            (input.base_salary.amount() / dec!(30) * input.unpaid_leave_days).round_dp(2),
+        );
+        let mut gross = input.base_salary - unpaid_deduction;
         for allowance in &input.allowances {
             gross = gross + *allowance;
+        }
+        // A bad leave record can never produce negative pay.
+        if gross.amount() < Decimal::ZERO {
+            gross = Money::from_baht(Decimal::ZERO);
         }
         Ok(gross)
     }
@@ -240,11 +252,13 @@ mod tests {
             ot_hours_weekend: Decimal::ZERO,
             ot_hours_holiday: Decimal::ZERO,
             days_worked: dec!(30),
+            unpaid_leave_days: Decimal::ZERO,
             is_married: false,
             child_count: 0,
             insurance_paid: Decimal::ZERO,
             pf_rate: dec!(0.05),
-            is_sso_enrolled: false,
+            is_sso_enrolled: true,
+            is_pf_member: false,
         }
     }
 
@@ -258,6 +272,48 @@ mod tests {
     fn sso_is_proportional_below_cap() {
         let (out, _) = PayrollDag::calculate(&ctx(), input(dec!(14000))).unwrap();
         assert_eq!(out.sso_employee.amount(), dec!(700.00));
+    }
+
+    #[test]
+    fn unpaid_leave_reduces_gross_by_salary_over_30_per_day() {
+        let mut i = input(dec!(12000));
+        i.unpaid_leave_days = dec!(2);
+        let (out, _) = PayrollDag::calculate(&ctx(), i).unwrap();
+        // 12,000 − (12,000 / 30 × 2) = 11,200 → SSO 5% = 560
+        assert_eq!(out.gross_earnings.amount(), dec!(11200.00));
+        assert_eq!(out.sso_employee.amount(), dec!(560.00));
+    }
+
+    #[test]
+    fn unpaid_leave_never_makes_net_pay_negative() {
+        let mut i = input(dec!(30000));
+        i.unpaid_leave_days = dec!(45);
+        let (out, _) = PayrollDag::calculate(&ctx(), i).unwrap();
+        assert_eq!(out.gross_earnings.amount(), dec!(0.00));
+        assert_eq!(out.net_pay.amount(), dec!(0.00));
+    }
+
+    #[test]
+    fn sso_exempt_employee_pays_no_sso() {
+        let mut i = input(dec!(30000));
+        i.is_sso_enrolled = false;
+        let (out, _) = PayrollDag::calculate(&ctx(), i).unwrap();
+        assert_eq!(out.sso_employee.amount(), dec!(0.00));
+    }
+
+    #[test]
+    fn pf_is_member_only_and_independent_of_sso() {
+        let mut i = input(dec!(30000));
+        i.is_pf_member = true;
+        let (out, _) = PayrollDag::calculate(&ctx(), i).unwrap();
+        assert_eq!(out.pf_employee.amount(), dec!(1500.00));
+        assert_eq!(out.sso_employee.amount(), dec!(750.00));
+
+        let mut not_member = input(dec!(30000));
+        not_member.is_pf_member = false;
+        let (out, _) = PayrollDag::calculate(&ctx(), not_member).unwrap();
+        assert_eq!(out.pf_employee.amount(), dec!(0.00));
+        assert_eq!(out.sso_employee.amount(), dec!(750.00));
     }
 
     #[test]

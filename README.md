@@ -14,7 +14,9 @@ for exactly what compiles, what is tested, and what is deferred.
 - **Thai compliance**: PND 2567 progressive brackets, SSO 5% capped at ฿15,000, PF, LPA §118 severance, OT 1.5×/2×/3×
 - **Agent**: Observe → Plan → Act → Reflect loop over 8 HR tools (runs in-process; Temporal pending)
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
-- **API**: `/health`, `/api/v1/auth/*`, `/api/v1/payroll/*`, `/api/v1/leave/*`, `/api/v1/ai/*`, `/api/v1/plugins*`, `/api/v1/graphql`, `/api/v1/mcp`
+- **API**: `/health`, `/api/v1/auth/*`, `/api/v1/employees*`, `/api/v1/users*`,
+  `/api/v1/attendance*`, `/api/v1/payroll/*`, `/api/v1/leave/*`, `/api/v1/ai/*`,
+  `/api/v1/plugins*`, `/api/v1/graphql`, `/api/v1/mcp`
 
 ## Quick start
 
@@ -26,15 +28,24 @@ make sqlx-prepare # offline query cache (needed for builds without a DB)
 make ci           # fmt + clippy -D warnings + tests
 ```
 
-Run the gateway:
+Run the gateway as the **app role** — `talentos_app` is `NOBYPASSRLS`, so RLS
+really applies. Migrations use the owner role:
 
 ```bash
+# migrations (owner)
 export DATABASE_URL=postgres://talentos:talentos_dev_secret@localhost:5432/talentos
+sqlx migrate run
+
+# runtime (app role)
+export DATABASE_URL=postgres://talentos_app:app_dev_secret@localhost:5432/talentos
 export DATABASE_AUTH_URL=postgres://talentos_auth:auth_dev_secret@localhost:5432/talentos
 export REDIS_URL=redis://:redis_dev_secret@localhost:6379
 export AUTH_JWT_SECRET=dev-secret-change-me-in-prod-minimum-32-bytes-okay!!
 cargo run -p talentos-gateway
 ```
+
+`scripts/init-db.sql` creates both roles. Using the owner at runtime silently
+disables every tenant policy — never do it.
 
 Optional, for the AI surface: `HUAKATI_API_KEY`, `HUAKATI_API_BASE`.
 
@@ -106,6 +117,34 @@ npm run dev                       # http://localhost:3000
 Production image: `docker build -f web/Dockerfile -t talentos/web web` (Next
 standalone). Set `TALENTOS_COOKIE_SECURE=false` only when serving plain HTTP on a
 trusted network.
+
+## People and users
+
+```
+GET/POST   /api/v1/employees            list / create
+GET/PUT/DELETE /api/v1/employees/:id    detail / update / soft-terminate
+GET        /api/v1/users                accounts + roles
+POST       /api/v1/users/invite         one-time invite link (no email service)
+POST       /api/v1/auth/accept-invite   public: token + new password
+POST       /api/v1/auth/change-password own password, revokes refresh tokens
+POST       /api/v1/users/:id/roles      add a role
+DELETE     /api/v1/users/:id            deactivate
+```
+
+Invitations are hashed, single-use and expire in 7 days. HR copies
+`/invite/<token>` to the new user; the page sets a password (12+ chars).
+
+## Attendance → payroll
+
+```
+POST /api/v1/attendance      {employee_id, work_date, ot_hours, ot_kind}
+GET  /api/v1/attendance?from=&to=&employee_id=
+```
+
+Payroll reads the period's OT hours by class (weekday 1.5x, rest day 2x, public
+holiday 3x) and approved `unpaid` leave. Unpaid leave deducts `base_salary / 30`
+per day; OT is priced on `base_salary / 30 / 8`, unaffected by that deduction.
+SSO follows the explicit `sso_enrolled` flag, independent of provident fund.
 
 ## Authorization
 

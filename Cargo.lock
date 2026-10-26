@@ -3887,6 +3887,7 @@ dependencies = [
  "futures-util",
  "hex",
  "rand 0.8.8",
+ "rust_decimal",
  "serde",
  "serde_json",
  "sha2",

@@ -16,6 +16,12 @@ async fn store() -> Option<(MemoryStore, TenantId, TenantId)> {
     let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
     let mut tx = pool.pool().begin().await.expect("begin");
     for (id, label) in [(a, "mem-a"), (b, "mem-b")] {
+        // The app role is NOBYPASSRLS: bind the GUC to the tenant being created.
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
         sqlx::query("INSERT INTO tenants (id, name, slug) VALUES ($1, $2, $3)")
             .bind(id)
             .bind(label)
@@ -103,14 +109,21 @@ async fn layer_filter_and_expiry_are_enforced() {
         .await
         .expect("remember expiring");
     let pool = store.pool_for_test();
+    let mut tx = pool.begin().await.expect("begin expiry");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant.0.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
     sqlx::query(
         "UPDATE ai_memory SET expires_at = now() - interval '1 second'
           WHERE tenant_id = $1 AND content = 'ข้อเท็จจริงที่หมดอายุแล้ว'",
     )
     .bind(tenant.0)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
     .expect("expire");
+    tx.commit().await.expect("commit expiry");
 
     let hidden = store
         .recall(tenant, "ข้อเท็จจริง", &Layer::ALL, 10)

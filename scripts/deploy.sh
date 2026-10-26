@@ -58,7 +58,10 @@ fi
 # 3. Build new image.
 docker build -t "$BUILD_TAG" -t "$NEW_TAG" -f Dockerfile .
 
-# 4. Run migrations BEFORE swapping traffic.
+# 4. Run migrations BEFORE swapping traffic. Migrations use the owner role; the
+# container itself runs as DATABASE_APP_URL (NOBYPASSRLS), or RLS is disabled.
+: "${DATABASE_APP_URL:?set DATABASE_APP_URL (NOBYPASSRLS role; DATABASE_URL is used only for migrations)}"
+: "${DATABASE_AUTH_URL:?set DATABASE_AUTH_URL (BYPASSRLS role for login/refresh)}"
 log "Running migrations..."
 DATABASE_URL="$DATABASE_URL" sqlx migrate run || die "Migration failed — aborting before traffic swap."
 
@@ -68,7 +71,8 @@ log "Starting candidate container on :$NEW_PORT ..."
 CID_NEW="$(docker run -d --rm \
     --name talentos-candidate \
     --network "${COMPOSE_FILE%.yml}_default" \
-    -e DATABASE_URL="$DATABASE_URL" \
+    -e DATABASE_URL="$DATABASE_APP_URL" \
+    -e DATABASE_AUTH_URL="$DATABASE_AUTH_URL" \
     -e REDIS_URL="$REDIS_URL" \
     -e AUTH_JWT_SECRET="$AUTH_JWT_SECRET" \
     -e GATEWAY_PORT="$NEW_PORT" \

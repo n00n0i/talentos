@@ -127,6 +127,11 @@
         "ordinal": 24,
         "name": "updated_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 25,
+        "name": "sso_enrolled",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -156,6 +161,7 @@
       true,
       false,
       true,
+      false,
       false,
       false,
       false,

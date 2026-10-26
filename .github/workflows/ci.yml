@@ -41,6 +41,17 @@ jobs:
         env:
           DATABASE_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
         run: sqlx migrate run
+      - name: Create runtime roles (RLS must actually apply in tests)
+        env:
+          PGPASSWORD: talentos_ci
+        run: |
+          psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE talentos_app LOGIN PASSWORD 'app_ci' NOSUPERUSER NOBYPASSRLS;
+          CREATE ROLE talentos_auth LOGIN PASSWORD 'auth_ci' BYPASSRLS;
+          GRANT USAGE ON SCHEMA public TO talentos_app, talentos_auth;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO talentos_app, talentos_auth;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO talentos_app, talentos_auth;
+          SQL
       - name: Prepare sqlx offline cache
         env:
           DATABASE_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
@@ -53,7 +64,9 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         env:
-          DATABASE_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
+          # The app role is NOBYPASSRLS: tests exercise the real policies.
+          DATABASE_URL: postgres://talentos_app:app_ci@localhost:5432/talentos
+          DATABASE_AUTH_URL: postgres://talentos_auth:auth_ci@localhost:5432/talentos
         run: cargo nextest run --workspace --no-fail-fast
 
   web:

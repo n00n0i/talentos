@@ -6,6 +6,7 @@
 //! All work happens inside one tenant-scoped transaction, so RLS sees the right
 //! tenant and a crash mid-run leaves the run untouched instead of half-written.
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use rust_decimal::Decimal;
@@ -92,7 +93,7 @@ pub async fn execute_run(
         .await?;
 
     let employees = sqlx::query(
-        r#"SELECT id, base_salary, tax_filing_status, pf_member
+        r#"SELECT id, base_salary, tax_filing_status, pf_member, sso_enrolled
            FROM employees
            WHERE tenant_id = $1 AND entity_id = $2
              AND status <> 'terminated'
@@ -114,19 +115,81 @@ pub async fn execute_run(
         return Err(RunError::NoEmployees);
     }
 
+    let period_start: chrono::NaiveDate = run.try_get("period_start")?;
+
+    // OT recorded for this period, grouped by statutory rate class.
+    let ot_rows = sqlx::query(
+        r#"SELECT employee_id,
+                  COALESCE(SUM(ot_hours) FILTER (WHERE ot_kind = 'weekday'), 0) AS weekday,
+                  COALESCE(SUM(ot_hours) FILTER (WHERE ot_kind = 'weekend'), 0) AS weekend,
+                  COALESCE(SUM(ot_hours) FILTER (WHERE ot_kind = 'holiday'), 0) AS holiday
+             FROM attendance_records
+            WHERE tenant_id = $1 AND work_date BETWEEN $2 AND $3
+            GROUP BY employee_id"#,
+    )
+    .bind(tenant_id.0)
+    .bind(period_start)
+    .bind(period_end)
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut overtime: HashMap<Uuid, (Decimal, Decimal, Decimal)> = HashMap::new();
+    for row in &ot_rows {
+        overtime.insert(
+            row.try_get("employee_id")?,
+            (
+                row.try_get("weekday")?,
+                row.try_get("weekend")?,
+                row.try_get("holiday")?,
+            ),
+        );
+    }
+
+    // Approved unpaid leave inside the period; partial overlaps count only the
+    // days that fall in this pay period.
+    let unpaid_rows = sqlx::query(
+        r#"SELECT employee_id,
+                  SUM(GREATEST(0, LEAST(end_date, $3) - GREATEST(start_date, $2) + 1))::numeric AS days
+             FROM leave_requests
+            WHERE tenant_id = $1
+              AND status = 'approved'
+              AND leave_type = 'unpaid'
+              AND start_date <= $3 AND end_date >= $2
+            GROUP BY employee_id"#,
+    )
+    .bind(tenant_id.0)
+    .bind(period_start)
+    .bind(period_end)
+    .fetch_all(&mut *tx)
+    .await?;
+    let unpaid: HashMap<Uuid, Decimal> = unpaid_rows
+        .iter()
+        .map(|row| {
+            Ok::<_, sqlx::Error>((
+                row.try_get::<Uuid, _>("employee_id")?,
+                row.try_get::<Decimal, _>("days")?,
+            ))
+        })
+        .collect::<Result<_, _>>()?;
+
     let inputs: Vec<EmployeePayrollInput> = employees
         .iter()
         .map(|row| -> Result<EmployeePayrollInput, sqlx::Error> {
             let pf_member: bool = row.try_get("pf_member")?;
+            let sso_enrolled: bool = row.try_get("sso_enrolled")?;
+            let employee_id: Uuid = row.try_get("id")?;
+            let (ot_weekday, ot_weekend, ot_holiday) = overtime
+                .get(&employee_id)
+                .copied()
+                .unwrap_or((Decimal::ZERO, Decimal::ZERO, Decimal::ZERO));
             Ok(EmployeePayrollInput {
-                employee_id: row.try_get("id")?,
+                employee_id,
                 base_salary: Money::from_baht(row.try_get::<Decimal, _>("base_salary")?),
                 allowances: Vec::new(),
-                // OT / leave feed in from the attendance and leave modules later.
-                ot_hours_weekday: Decimal::ZERO,
-                ot_hours_weekend: Decimal::ZERO,
-                ot_hours_holiday: Decimal::ZERO,
+                ot_hours_weekday: ot_weekday,
+                ot_hours_weekend: ot_weekend,
+                ot_hours_holiday: ot_holiday,
                 days_worked: Decimal::from(30),
+                unpaid_leave_days: unpaid.get(&employee_id).copied().unwrap_or(Decimal::ZERO),
                 is_married: row.try_get::<i16, _>("tax_filing_status")? > 1,
                 child_count: 0,
                 insurance_paid: Decimal::ZERO,
@@ -135,7 +198,8 @@ pub async fn execute_run(
                 } else {
                     Decimal::ZERO
                 },
-                is_sso_enrolled: pf_member,
+                is_sso_enrolled: sso_enrolled,
+                is_pf_member: pf_member,
             })
         })
         .collect::<Result<_, _>>()?;

@@ -104,9 +104,14 @@ async function proxy(req: NextRequest, path: string[]) {
   }
 
   const contentType = upstream.headers.get("content-type") ?? "application/json";
-  const passthrough = contentType.startsWith("application/pdf")
-    ? upstream.body
-    : await upstream.arrayBuffer();
+  // 204/304 must have a null body: passing an empty ArrayBuffer makes the
+  // Response constructor throw and the browser sees a 500.
+  const noBody = [204, 205, 304].includes(upstream.status);
+  const passthrough = noBody
+    ? null
+    : contentType.startsWith("application/pdf")
+      ? upstream.body
+      : await upstream.arrayBuffer();
 
   const res = new NextResponse(passthrough, {
     status: upstream.status,

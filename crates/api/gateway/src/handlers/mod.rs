@@ -1,5 +1,7 @@
 pub mod ai;
+pub mod attendance;
 pub mod auth;
+pub mod employees;
 pub mod graphql;
 pub mod health;
 pub mod leave;
@@ -7,3 +9,4 @@ pub mod mcp;
 pub mod memory;
 pub mod payroll;
 pub mod plugins;
+pub mod users;

@@ -5,7 +5,10 @@ SHELL := /bin/bash -o pipefail
 COMPOSE_FILE := docker-compose.yml
 CARGO_TARGET_DIR ?= target
 SQLX_OFFLINE ?= false
+# Owner role: migrations + sqlx prepare only.
 export DATABASE_URL ?= postgres://talentos:$${PG_PASSWORD:-talentos_dev_secret}@localhost:5432/talentos
+# Runtime role: NOBYPASSRLS, so RLS actually applies.
+export DATABASE_APP_URL ?= postgres://talentos_app:app_dev_secret@localhost:5432/talentos
 export AUTH_JWT_SECRET ?= dev-secret-change-me-in-prod-minimum-32-bytes-okay!!
 export DATABASE_AUTH_URL ?= postgres://talentos_auth:auth_dev_secret@localhost:5432/talentos
 
@@ -60,8 +63,8 @@ fmt-check: ## Verify formatting (fails if dirty)
 clippy: ## Lint with warnings-as-errors
 	SQLX_OFFLINE=$(SQLX_OFFLINE) cargo clippy --workspace --all-targets -- -D warnings
 
-test: ## Run unit tests via nextest
-	SQLX_OFFLINE=$(SQLX_OFFLINE) cargo nextest run --workspace
+test: ## Run unit tests via nextest (as the RLS-enforcing app role)
+	DATABASE_URL=$(DATABASE_APP_URL) SQLX_OFFLINE=$(SQLX_OFFLINE) cargo nextest run --workspace
 
 lint: fmt-check clippy ## Combined quality gate
 
@@ -77,8 +80,8 @@ build: ## Debug build of gateway binary
 release: ## Optimized release build
 	SQLX_OFFLINE=$(SQLX_OFFLINE) cargo build --release -p talentos-gateway
 
-run: build ## Run gateway locally against running infra
-	RUST_LOG=$${RUST_LOG:-info,talentos=debug} ./target/debug/talentos-gateway
+run: build ## Run gateway locally against running infra (app role, RLS on)
+	DATABASE_URL=$(DATABASE_APP_URL) RUST_LOG=$${RUST_LOG:-info,talentos=debug} ./target/debug/talentos-gateway
 
 # ============================================================
 # DEPLOYMENT (on-prem production)

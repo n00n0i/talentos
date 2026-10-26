@@ -6,7 +6,9 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
-use crate::handlers::{ai, auth, graphql, health, leave, mcp, memory, payroll, plugins};
+use crate::handlers::{
+    ai, attendance, auth, employees, graphql, health, leave, mcp, memory, payroll, plugins, users,
+};
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
 use crate::state::AppState;
@@ -14,10 +16,29 @@ use crate::state::AppState;
 pub fn build(state: AppState) -> Router {
     let public = Router::new()
         .route("/api/v1/auth/login", post(auth::login))
-        .route("/api/v1/auth/refresh", post(auth::refresh));
+        .route("/api/v1/auth/refresh", post(auth::refresh))
+        .route("/api/v1/auth/accept-invite", post(users::accept_invite));
 
     let protected = Router::new()
         .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/auth/change-password", post(users::change_password))
+        .route(
+            "/api/v1/employees",
+            get(employees::list).post(employees::create),
+        )
+        .route(
+            "/api/v1/employees/:id",
+            get(employees::get)
+                .put(employees::update)
+                .delete(employees::terminate),
+        )
+        .route("/api/v1/users", get(users::list))
+        .route("/api/v1/users/invite", post(users::invite))
+        .route("/api/v1/users/:id/roles", post(users::assign_role))
+        .route(
+            "/api/v1/users/:id",
+            axum::routing::delete(users::deactivate),
+        )
         .route("/api/v1/payroll/runs", post(payroll::start_payroll_run))
         .route("/api/v1/payroll/runs/:id", get(payroll::get_payroll_run))
         .route(
@@ -31,6 +52,14 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/v1/leave/requests",
             get(leave::list).post(leave::create),
+        )
+        .route(
+            "/api/v1/attendance",
+            get(attendance::list).post(attendance::upsert),
+        )
+        .route(
+            "/api/v1/attendance/:id",
+            axum::routing::delete(attendance::delete),
         )
         .route("/api/v1/leave/balances", get(leave::balances))
         .route("/api/v1/leave/requests/:id/decision", post(leave::decide))

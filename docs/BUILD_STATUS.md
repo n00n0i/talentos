@@ -8,11 +8,11 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **55 passed**, 0 failed (3 of them DB-backed) |
+| Tests | `cargo test --workspace` | **61 passed**, 0 failed (3 DB-backed + 6 render) |
 | Migrations | `psql -f migrations/*.sql` on a fresh DB | 9 files apply cleanly |
 
-Tests by crate: kernel 5, authz 22, compliance 6, payroll 6, rag 7, agent 7,
-payroll-runner 2 (real PostgreSQL: payslips + totals + state machine).
+Tests by crate: kernel 5, authz 22, compliance 6, payroll 11, rag 7, agent 7,
+payroll-runner 3 (real PostgreSQL: payslips, totals, state machine, template round-trip).
 
 Manual HTTP smoke test (local, real Postgres + Redis): health → login → `/auth/me`
 → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -53,5 +53,7 @@ phase boundary is already isolated, so the Temporal swap is a wiring change, not
 - Payroll runs execute in-process (`tokio::spawn`) instead of on Temporal, so a process
   restart during a run leaves it in `calculating`.
 - `POST /payroll/runs` requires `entity_id` in the body when the JWT is tenant-wide.
+- Payslip output is printable HTML, not PDF yet; a PDF pipeline is still pending.
+- Only one default template per tenant is editable through the API (no per-entity or multiple named templates in the UI).
 - In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
 - Single static HS256 signing key (no JWKS rotation yet).

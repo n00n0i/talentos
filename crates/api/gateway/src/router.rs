@@ -32,8 +32,16 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/ai/tools", get(ai::list_tools))
         .route("/api/v1/ai/agents/run", post(ai::run_agent))
         .route(
+            "/api/v1/payroll/payslips/:id/render",
+            get(payroll::render_payslip),
+        )
+        .route(
             "/api/v1/payroll/payslips/:id/pdf",
-            get(payroll::get_payslip_pdf),
+            get(payroll::render_payslip),
+        )
+        .route(
+            "/api/v1/payslip/template",
+            get(payroll::get_template).put(payroll::put_template),
         )
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),

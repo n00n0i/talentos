@@ -46,10 +46,25 @@ POST /api/v1/payroll/runs          {period_start, period_end, payment_date, enti
 GET  /api/v1/payroll/runs/:id      → status: pending_approval + totals
 GET  /api/v1/payroll/runs/:id/payslips
 POST /api/v1/payroll/runs/:id/approve
+GET  /api/v1/payroll/payslips/:id/render   → printable HTML (tenant template applied)
 ```
 
 `entity_id` is required when the caller's JWT is tenant-wide rather than
 entity-scoped.
+
+## Custom payslip
+
+Tenants brand their own payslip (name, logo URL, accent colour, paper size,
+which sections appear, footer). Configuration only — no markup is stored, and
+every interpolated value is HTML-escaped, so branding cannot inject script.
+
+```
+GET  /api/v1/payslip/template   → current template (defaults when unset)
+PUT  /api/v1/payslip/template   → upsert; 422 with a reason on invalid config
+GET  /api/v1/payroll/payslips/:id/render → the payslip as text/html
+```
+
+The editor UI lives in `demo/index.html` under **แบบฟอร์มสลิป**.
 
 ## Layout
 

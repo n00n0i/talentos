@@ -212,3 +212,77 @@ async fn second_execution_is_rejected_by_state_machine() {
 
     cleanup(&raw, tenant_id).await;
 }
+
+#[tokio::test]
+async fn tenant_template_round_trips_and_renders_payslip() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, _ids) =
+        seed(&raw, &[("EMP020", Decimal::new(50_000, 0))]).await;
+
+    let template = talentos_payroll::render::PayslipTemplate {
+        company_display_name: Some("บริษัท ทดสอบ จำกัด".into()),
+        accent_color: "#b91c1c".into(),
+        footer_text: Some("เอกสารทดสอบ".into()),
+        show_fields: vec!["sso".into(), "tax".into()],
+        ..Default::default()
+    };
+    talentos_payroll_runner::save_template(&tenant_pool, TenantId(tenant_id), &template)
+        .await
+        .expect("save template");
+
+    let loaded = talentos_payroll_runner::load_template(&tenant_pool, TenantId(tenant_id))
+        .await
+        .expect("load template");
+    assert_eq!(loaded.accent_color, "#b91c1c");
+    assert_eq!(
+        loaded.show_fields,
+        vec!["sso".to_string(), "tax".to_string()]
+    );
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("run");
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let payslip_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM payslips WHERE payroll_run_id = $1 LIMIT 1")
+            .bind(run_id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("payslip id");
+    let _ = tx.rollback().await;
+
+    let html =
+        talentos_payroll_runner::render_payslip(&tenant_pool, TenantId(tenant_id), payslip_id)
+            .await
+            .expect("render");
+    assert!(html.contains("บริษัท ทดสอบ จำกัด"));
+    assert!(html.contains("#b91c1c"));
+    assert!(html.contains("เอกสารทดสอบ"));
+    assert!(html.contains("ประกันสังคม"));
+    assert!(!html.contains("กองทุนสำรองเลี้ยงชีพ"), "pf hidden by template");
+
+    // invalid templates are refused before touching the database
+    let bad = talentos_payroll::render::PayslipTemplate {
+        accent_color: "red".into(),
+        ..Default::default()
+    };
+    let err = talentos_payroll_runner::save_template(&tenant_pool, TenantId(tenant_id), &bad).await;
+    assert!(matches!(
+        err,
+        Err(talentos_payroll_runner::RunError::InvalidTemplate(_))
+    ));
+
+    cleanup(&raw, tenant_id).await;
+}

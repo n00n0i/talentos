@@ -32,6 +32,8 @@ pub enum RunError {
     Calc(#[from] talentos_payroll::error::PayrollError),
     #[error("serialization error: {0}")]
     Serde(#[from] serde_json::Error),
+    #[error("invalid payslip template: {0}")]
+    InvalidTemplate(String),
 }
 
 /// Result of a completed run.
@@ -323,3 +325,178 @@ async fn write_event(
 /// Unused re-export guard: keeps `PgPool` imported for future read-only helpers.
 #[allow(dead_code)]
 pub(crate) type ReadPool = PgPool;
+
+// ---------------------------------------------------------------------------
+// Payslip template + rendering
+// ---------------------------------------------------------------------------
+
+/// Tenant-editable payslip config, falling back to defaults when unset.
+pub async fn load_template(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+) -> Result<talentos_payroll::render::PayslipTemplate, RunError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let row = sqlx::query(
+        r#"SELECT company_display_name, logo_url, accent_color, footer_text,
+                  show_fields, paper_size
+           FROM payslip_templates
+           WHERE tenant_id = $1 AND is_default = TRUE
+           ORDER BY entity_id NULLS LAST, updated_at DESC
+           LIMIT 1"#,
+    )
+    .bind(tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    let Some(row) = row else {
+        return Ok(Default::default());
+    };
+    let fields: serde_json::Value = row.try_get("show_fields")?;
+    Ok(talentos_payroll::render::PayslipTemplate {
+        company_display_name: row.try_get("company_display_name")?,
+        logo_url: row.try_get("logo_url")?,
+        accent_color: row.try_get("accent_color")?,
+        footer_text: row.try_get("footer_text")?,
+        show_fields: fields
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        paper_size: row.try_get("paper_size")?,
+    })
+}
+
+/// Upsert the tenant's default template. Validation happens before any write.
+pub async fn save_template(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    template: &talentos_payroll::render::PayslipTemplate,
+) -> Result<(), RunError> {
+    talentos_payroll::render::validate_template(template)
+        .map_err(|e| RunError::InvalidTemplate(e.to_string()))?;
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    sqlx::query(
+        r#"INSERT INTO payslip_templates
+             (tenant_id, entity_id, name, is_default, company_display_name, logo_url,
+              accent_color, footer_text, show_fields, paper_size)
+           VALUES ($1, NULL, 'default', TRUE, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (tenant_id, entity_id, name) DO UPDATE SET
+             company_display_name = EXCLUDED.company_display_name,
+             logo_url = EXCLUDED.logo_url,
+             accent_color = EXCLUDED.accent_color,
+             footer_text = EXCLUDED.footer_text,
+             show_fields = EXCLUDED.show_fields,
+             paper_size = EXCLUDED.paper_size,
+             is_default = TRUE,
+             updated_at = now()"#,
+    )
+    .bind(tenant_id.0)
+    .bind(&template.company_display_name)
+    .bind(&template.logo_url)
+    .bind(&template.accent_color)
+    .bind(&template.footer_text)
+    .bind(serde_json::json!(template.show_fields))
+    .bind(&template.paper_size)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Render one payslip with the tenant's template. Returns printable HTML.
+pub async fn render_payslip(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    payslip_id: Uuid,
+) -> Result<String, RunError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let row = sqlx::query(
+        r#"SELECT p.base_salary, p.ot_amount, p.gross_earnings, p.sso_employee,
+                  p.tax_withheld, p.pf_employee, p.total_deductions, p.net_pay,
+                  p.anomalies,
+                  e.employee_code, e.first_name_th, e.last_name_th, e.position_title,
+                  e.department, e.bank_name, e.bank_account_number,
+                  r.period_start, r.period_end, r.payment_date,
+                  ent.name AS entity_name
+           FROM payslips p
+           JOIN employees e ON e.id = p.employee_id
+           JOIN payroll_runs r ON r.id = p.payroll_run_id
+           JOIN entities ent ON ent.id = r.entity_id
+           WHERE p.id = $1"#,
+    )
+    .bind(payslip_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(RunError::NotFound(payslip_id))?;
+    tx.commit().await?;
+
+    let anomalies: serde_json::Value = row.try_get("anomalies")?;
+    let period_start: chrono::NaiveDate = row.try_get("period_start")?;
+    let period_end: chrono::NaiveDate = row.try_get("period_end")?;
+    let payment_date: chrono::NaiveDate = row.try_get("payment_date")?;
+
+    let data = talentos_payroll::render::PayslipRenderData {
+        company_name: row.try_get::<String, _>("entity_name")?,
+        period_label: format!(
+            "{} – {}",
+            period_start.format("%d/%m/%Y"),
+            period_end.format("%d/%m/%Y")
+        ),
+        payment_date: payment_date.format("%d/%m/%Y").to_string(),
+        employee_name: format!(
+            "{} {}",
+            row.try_get::<String, _>("first_name_th")?,
+            row.try_get::<String, _>("last_name_th")?
+        ),
+        employee_code: row.try_get("employee_code")?,
+        position_title: row.try_get("position_title")?,
+        department: row.try_get("department")?,
+        base_salary: row.try_get("base_salary")?,
+        ot_amount: row.try_get("ot_amount")?,
+        gross_earnings: row.try_get("gross_earnings")?,
+        sso_employee: row.try_get("sso_employee")?,
+        tax_withheld: row.try_get("tax_withheld")?,
+        pf_employee: row.try_get("pf_employee")?,
+        total_deductions: row.try_get("total_deductions")?,
+        net_pay: row.try_get("net_pay")?,
+        bank_name: row.try_get("bank_name")?,
+        bank_account_masked: row
+            .try_get::<Option<String>, _>("bank_account_number")?
+            .map(|acc| mask_account(&acc)),
+        anomalies: anomalies
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .map(|a| talentos_payroll::render::PayslipAnomaly {
+                        severity: a
+                            .get("severity")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("info")
+                            .to_string(),
+                        message: a
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or_default()
+                            .to_string(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+    };
+
+    let template = load_template(pool, tenant_id).await?;
+    Ok(talentos_payroll::render::render_html(&template, &data))
+}
+
+fn mask_account(acc: &str) -> String {
+    let digits: String = acc.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() <= 4 {
+        return "****".to_string();
+    }
+    format!("****{}", &digits[digits.len() - 4..])
+}

@@ -698,6 +698,10 @@
         พนักงาน
         <span class="nav-count">127</span>
       </a>
+      <a class="nav-link" data-page="payslip">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        แบบฟอร์มสลิป
+      </a>
       <a class="nav-link">
         <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
         Payroll
@@ -752,7 +756,7 @@
       </div>
     </header>
 
-    <div class="page">
+    <div class="page" id="page-dashboard">
       <div class="page-head">
         <h1 class="page-h1">Dashboard</h1>
         <p class="page-desc">บริษัท เทคโนโลยีไทย จำกัด · ตุลาคม 2569</p>
@@ -901,6 +905,67 @@
         </div>
       </div>
     </div>
+
+      <!-- ===== Payslip template page ===== -->
+      <div class="page" id="page-payslip" hidden>
+        <div class="page-head">
+          <h1 class="page-h1">แบบฟอร์มสลิปเงินเดือน</h1>
+          <p class="page-desc">ปรับตราบริษัท สี และรายการที่แสดงบนสลิป — บันทึกแล้วมีผลกับทุกสลิปของบริษัท</p>
+        </div>
+
+        <div class="payslip-layout">
+          <form class="card" id="tplForm" style="padding:20px;max-width:none">
+            <div class="form-row">
+              <label for="tplCompany">ชื่อบริษัทบนสลิป</label>
+              <input id="tplCompany" class="input" placeholder="เว้นว่างเพื่อใช้ชื่อนิติบุคคล" maxlength="120">
+            </div>
+            <div class="form-row">
+              <label for="tplLogo">URL โลโก้ (https://…)</label>
+              <input id="tplLogo" class="input" placeholder="https://example.com/logo.png">
+              <p class="hint">รับเฉพาะ http/https — ระบบไม่เก็บ HTML จากผู้ใช้</p>
+            </div>
+            <div class="form-row form-row-inline">
+              <div>
+                <label for="tplColor">สีหลัก</label>
+                <input id="tplColor" type="color" value="#0369a1" class="color-input">
+              </div>
+              <div>
+                <label for="tplPaper">ขนาดกระดาษ</label>
+                <select id="tplPaper" class="input">
+                  <option value="A4">A4</option>
+                  <option value="A5">A5</option>
+                  <option value="Letter">Letter</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <label>รายการที่แสดง</label>
+              <div class="checkbox-grid">
+                <label><input type="checkbox" data-field="ot" checked> ค่าล่วงเวลา (OT)</label>
+                <label><input type="checkbox" data-field="sso" checked> ประกันสังคม</label>
+                <label><input type="checkbox" data-field="tax" checked> ภาษีหัก ณ ที่จ่าย</label>
+                <label><input type="checkbox" data-field="pf" checked> กองทุนสำรองเลี้ยงชีพ</label>
+                <label><input type="checkbox" data-field="bank" checked> บัญชีธนาคาร</label>
+                <label><input type="checkbox" data-field="anomalies" checked> ข้อสังเกต</label>
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="tplFooter">ข้อความท้ายสลิป</label>
+              <textarea id="tplFooter" class="input" rows="2" maxlength="500"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button type="button" class="btn btn-accent" id="tplSave">บันทึก</button>
+              <button type="button" class="btn btn-default" id="tplReset">ค่าเริ่มต้น</button>
+              <span id="tplStatus" class="hint" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+
+          <div>
+            <div class="section-head"><h2 class="section-title">ตัวอย่างสลิป</h2></div>
+            <div class="payslip-preview" id="tplPreview"></div>
+          </div>
+        </div>
+      </div>
   </div>
 </div>
 
@@ -1026,6 +1091,113 @@ document.addEventListener('keydown', function(e){
   if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); document.getElementById('cmdInput').focus(); }
   if(e.key==='Escape'){ hideModal(); const d=document.getElementById('aiDrawer'); if(d.classList.contains('open')) toggleDrawer(); }
 });
+
+// ===== Payslip template page =====
+const tpl = {
+  company_display_name: null, logo_url: null, accent_color: '#0369a1',
+  footer_text: null, show_fields: ['ot','sso','tax','pf','bank','anomalies'], paper_size: 'A4',
+};
+const SAMPLE = {
+  company: 'บริษัท เทคโนโลยีไทย จำกัด', period: '01/10/2026 – 31/10/2026', paydate: '01/11/2026',
+  emp: 'สมชาย ใจดี', code: 'EMP001', position: 'Software Engineer', dept: 'IT',
+  base: '85,000.00', ot: '1,500.00', gross: '86,500.00', sso: '750.00',
+  tax: '9,416.67', pf: '4,250.00', deduct: '14,416.67', net: '72,083.33',
+  bank: 'BBL ****1234',
+};
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderPreview(){
+  const show = f => tpl.show_fields.includes(f);
+  const accent = /^#[0-9a-fA-F]{6}$/.test(tpl.accent_color) ? tpl.accent_color : '#0369a1';
+  const company = (tpl.company_display_name || '').trim() || SAMPLE.company;
+  const logo = tpl.logo_url ? `<img class="ps-logo" src="${esc(tpl.logo_url)}" alt="">` : '';
+  const rows = [];
+  rows.push(`<tr><td>เงินเดือนฐาน</td><td class="num">${SAMPLE.base}</td></tr>`);
+  if (show('ot')) rows.push(`<tr><td>ค่าล่วงเวลา (OT)</td><td class="num">${SAMPLE.ot}</td></tr>`);
+  rows.push(`<tr><td><strong>รายได้รวม</strong></td><td class="num"><strong>${SAMPLE.gross}</strong></td></tr>`);
+  if (show('sso')) rows.push(`<tr><td>ประกันสังคม (ลูกจ้าง)</td><td class="num">-${SAMPLE.sso}</td></tr>`);
+  if (show('tax')) rows.push(`<tr><td>ภาษีหัก ณ ที่จ่าย</td><td class="num">-${SAMPLE.tax}</td></tr>`);
+  if (show('pf')) rows.push(`<tr><td>กองทุนสำรองเลี้ยงชีพ</td><td class="num">-${SAMPLE.pf}</td></tr>`);
+  rows.push(`<tr><td>รวมรายการหัก</td><td class="num">-${SAMPLE.deduct}</td></tr>`);
+  rows.push(`<tr class="ps-total"><td>เงินได้สุทธิ</td><td class="num">${SAMPLE.net}</td></tr>`);
+  const warn = show('anomalies')
+    ? `<div class="ps-warn">[warning] OT สูงกว่าค่าเฉลี่ยทีม</div>` : '';
+  const bank = show('bank') ? `<div><span>บัญชี:</span> ${esc(SAMPLE.bank)}</div>` : '';
+
+  document.getElementById('tplPreview').innerHTML = `
+    <div class="ps-floor" style="--ps-accent:${accent}">
+      <div class="ps-top">
+        <div>${logo}<div class="ps-brand">${esc(company)}</div></div>
+        <div style="text-align:right;font-weight:600">เงินเดือน / PAYSLIP<br>
+          <span class="ps-muted" style="font-weight:400">${esc(SAMPLE.period)}</span></div>
+      </div>
+      <div class="ps-grid">
+        <div><span>พนักงาน:</span> ${esc(SAMPLE.emp)}</div>
+        <div><span>รหัส:</span> ${esc(SAMPLE.code)}</div>
+        <div><span>ตำแหน่ง:</span> ${esc(SAMPLE.position)}</div>
+        <div><span>แผนก:</span> ${esc(SAMPLE.dept)}</div>
+        <div><span>วันจ่าย:</span> ${esc(SAMPLE.paydate)}</div>
+        <div>${bank}</div>
+      </div>
+      <table class="ps-table">
+        <thead><tr><th>รายการ</th><th style="text-align:right">จำนวน (บาท)</th></tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+      ${warn}
+      <div class="ps-foot">${esc(tpl.footer_text || 'เอกสารนี้สร้างโดยระบบ TalentOS — กรุณาติดต่อฝ่ายบุคคลหากพบข้อผิดพลาด')}</div>
+    </div>`;
+}
+
+function readForm(){
+  tpl.company_display_name = document.getElementById('tplCompany').value.trim() || null;
+  tpl.logo_url = document.getElementById('tplLogo').value.trim() || null;
+  tpl.accent_color = document.getElementById('tplColor').value;
+  tpl.paper_size = document.getElementById('tplPaper').value;
+  tpl.footer_text = document.getElementById('tplFooter').value.trim() || null;
+  tpl.show_fields = Array.from(document.querySelectorAll('[data-field]'))
+    .filter(c => c.checked).map(c => c.dataset.field);
+}
+
+function validate(){
+  if (tpl.logo_url && !/^https?:\/\//.test(tpl.logo_url)) return 'URL โลโก้ต้องขึ้นต้นด้วย http:// หรือ https://';
+  if (tpl.footer_text && tpl.footer_text.length > 500) return 'ข้อความท้ายสลิปยาวเกิน 500 ตัวอักษร';
+  return null;
+}
+
+function setStatus(msg, ok){
+  const el = document.getElementById('tplStatus');
+  el.textContent = msg;
+  el.style.color = ok ? 'var(--success)' : 'var(--danger)';
+}
+
+document.getElementById('tplForm').addEventListener('input', () => { readForm(); renderPreview(); });
+document.getElementById('tplSave').addEventListener('click', async () => {
+  readForm();
+  const problem = validate();
+  if (problem) { setStatus(problem, false); return; }
+  // Wire to PUT /api/v1/payslip/template once the session token is available.
+  setStatus('บันทึกแล้ว (เดโม: ยังไม่เชื่อม API)', true);
+});
+document.getElementById('tplReset').addEventListener('click', () => {
+  document.getElementById('tplCompany').value = '';
+  document.getElementById('tplLogo').value = '';
+  document.getElementById('tplColor').value = '#0369a1';
+  document.getElementById('tplPaper').value = 'A4';
+  document.getElementById('tplFooter').value = '';
+  document.querySelectorAll('[data-field]').forEach(c => c.checked = true);
+  readForm(); renderPreview(); setStatus('', true);
+});
+
+function showPage(name){
+  document.getElementById('page-dashboard').hidden = name !== 'dashboard';
+  document.getElementById('page-payslip').hidden = name !== 'payslip';
+}
+document.querySelectorAll('.nav-link[data-page]').forEach(l => {
+  l.addEventListener('click', () => showPage(l.dataset.page));
+});
+document.querySelector('.nav-link.active')?.addEventListener('click', () => showPage('dashboard'));
+readForm(); renderPreview();
 
 document.querySelectorAll('.nav-link').forEach(l=>{
   l.addEventListener('click', function(){

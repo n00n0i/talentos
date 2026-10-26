@@ -277,41 +277,79 @@ pub async fn list_payslips(
         .into_response()
 }
 
-/// GET /api/v1/payroll/payslips/:id/pdf
-pub async fn get_payslip_pdf(
+/// GET /api/v1/payroll/payslips/:id/render — printable payslip (text/html).
+/// Uses the tenant's payslip template; `/pdf` is kept as an alias so existing
+/// clients keep working until a real PDF pipeline lands.
+pub async fn render_payslip(
     State(state): State<AppState>,
     Authed(ctx): Authed,
     Path(payslip_id): Path<Uuid>,
 ) -> Response {
-    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
-        Ok(tx) => tx,
-        Err(e) => return internal_err(e),
-    };
-    // Look up payslip and generate MinIO signed URL
-    let row = sqlx::query!(
-        "SELECT id FROM payslips WHERE id = $1 AND tenant_id = $2",
-        payslip_id,
-        ctx.tenant_id.0
-    )
-    .fetch_optional(&mut *tx)
-    .await;
+    match talentos_payroll_runner::render_payslip(&state.pool, ctx.tenant_id, payslip_id).await {
+        Ok(html) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            html,
+        )
+            .into_response(),
+        Err(talentos_payroll_runner::RunError::NotFound(_)) => not_found(),
+        Err(e) => {
+            tracing::error!(error = %e, "payslip render failed");
+            internal_err_msg("payslip could not be rendered")
+        }
+    }
+}
 
-    match row {
-        Ok(Some(_)) => {}
-        Ok(None) => return not_found(),
-        Err(e) => return internal_err(e),
-    };
+/// GET /api/v1/payslip/template — current tenant template (defaults when unset).
+pub async fn get_template(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    match talentos_payroll_runner::load_template(&state.pool, ctx.tenant_id).await {
+        Ok(t) => (StatusCode::OK, Json(t)).into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "load template failed");
+            internal_err_msg("template could not be loaded")
+        }
+    }
+}
 
-    // TODO: Generate PDF and upload to MinIO, then return signed URL
-    // For Phase 2: return placeholder
+/// PUT /api/v1/payslip/template — upsert the default template.
+/// Validation returns 422 so the UI can point at the offending field.
+pub async fn put_template(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(template): Json<talentos_payroll::render::PayslipTemplate>,
+) -> Response {
+    match talentos_payroll_runner::save_template(&state.pool, ctx.tenant_id, &template).await {
+        Ok(()) => (StatusCode::OK, Json(template)).into_response(),
+        Err(talentos_payroll_runner::RunError::InvalidTemplate(msg)) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(ErrorResponse {
+                error: "invalid_template".into(),
+                message: msg,
+                details: vec![],
+                request_id: Uuid::new_v4().to_string(),
+                retry_after_seconds: None,
+            }),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "save template failed");
+            internal_err_msg("template could not be saved")
+        }
+    }
+}
+
+fn internal_err_msg(message: &str) -> Response {
     (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "payslip_id": payslip_id.to_string(),
-            "pdf_url": format!("https://minio.example.com/talentos-files/payslips/{}.pdf", payslip_id),
-            "expires_at": (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339(),
-        })),
-    ).into_response()
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorResponse {
+            error: "internal_error".into(),
+            message: message.to_string(),
+            details: vec![],
+            request_id: Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
+        }),
+    )
+        .into_response()
 }
 
 // --- DTOs ---

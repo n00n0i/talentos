@@ -2570,6 +2570,7 @@ dependencies = [
  "talentos-db",
  "talentos-kernel",
  "talentos-model-gw",
+ "talentos-payroll",
  "talentos-payroll-runner",
  "talentos-rag",
  "talentos-tools",

@@ -46,7 +46,7 @@ BUILD_TAG="talentos/api-gw:${GIT_SHA}-$(date +%Y%m%d%H%M%S)"
 log "Building $BUILD_TAG"
 
 # 1. Compile release binary locally first to catch errors early.
-cargo build --release -p talents-gateway
+cargo build --release -p talentos-gateway
 
 # 2. Record what's currently deployed so rollback has a target.
 CURRENT_IMAGE="$(docker inspect -f '{{.Config.Image}}' talentos-api-gw-1 2>/dev/null || echo "")"

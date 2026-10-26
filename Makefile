@@ -72,13 +72,13 @@ ci: lint test ## Full CI gate (what the pipeline runs)
 # ============================================================
 
 build: ## Debug build of gateway binary
-	SQLX_OFFLINE=$(SQLX_OFFLINE) cargo build -p talents-gateway
+	SQLX_OFFLINE=$(SQLX_OFFLINE) cargo build -p talentos-gateway
 
 release: ## Optimized release build
-	SQLX_OFFLINE=$(SQLX_OFFLINE) cargo build --release -p talents-gateway
+	SQLX_OFFLINE=$(SQLX_OFFLINE) cargo build --release -p talentos-gateway
 
 run: build ## Run gateway locally against running infra
-	RUST_LOG=$${RUST_LOG:-info,talentos=debug} ./target/debug/talents-gateway
+	RUST_LOG=$${RUST_LOG:-info,talentos=debug} ./target/debug/talentos-gateway
 
 # ============================================================
 # DEPLOYMENT (on-prem production)

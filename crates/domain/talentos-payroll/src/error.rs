@@ -27,6 +27,9 @@ pub enum PayrollError {
     #[error("missing required field: {field}")]
     MissingField { field: String },
 
+    #[error("serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+
     #[error("internal error: {0}")]
     Internal(String),
 }

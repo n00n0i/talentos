@@ -1,17 +1,19 @@
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
-use talentos_kernel::{EntityId, TenantId, UserId, Money};
 use serde::{Deserialize, Serialize};
+use talentos_kernel::{EntityId, Money, TenantId, UserId};
 
+/// Immutable per-employee input to the payroll DAG.
+/// All quantities are `Decimal` — payroll input never uses floats.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmployeePayrollInput {
     pub employee_id: uuid::Uuid,
     pub base_salary: Money,
     pub allowances: Vec<Money>,
-    pub ot_hours_weekday: f64,
-    pub ot_hours_weekend: f64,
-    pub ot_hours_holiday: f64,
-    pub days_worked: f64,
+    pub ot_hours_weekday: Decimal,
+    pub ot_hours_weekend: Decimal,
+    pub ot_hours_holiday: Decimal,
+    pub days_worked: Decimal,
     pub is_married: bool,
     pub child_count: u32,
     pub insurance_paid: Decimal,
@@ -19,6 +21,7 @@ pub struct EmployeePayrollInput {
     pub is_sso_enrolled: bool,
 }
 
+/// Immutable snapshot of a payroll run. The DAG is a pure function of this.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PayrollContext {
     pub run_id: uuid::Uuid,

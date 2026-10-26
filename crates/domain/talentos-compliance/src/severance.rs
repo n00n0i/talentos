@@ -1,7 +1,7 @@
+use crate::error::ComplianceError;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
-use crate::error::ComplianceError;
 
 /// Severance tier definition per Thai Labour Protection Act (LPA) Section 118.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,12 +14,37 @@ pub struct SeveranceTier {
 impl SeveranceTier {
     pub fn default_tiers() -> Vec<SeveranceTier> {
         vec![
-            SeveranceTier { min_years: 0.25, max_years: Some(0.5), days: 30 },  // 120 days to 1 year (or 3-6 months)
-            SeveranceTier { min_years: 1.0, max_years: Some(3.0), days: 90 },    // 1 to 3 years
-            SeveranceTier { min_years: 3.0, max_years: Some(6.0), days: 180 },   // 3 to 6 years
-            SeveranceTier { min_years: 6.0, max_years: Some(10.0), days: 240 },  // 6 to 10 years
-            SeveranceTier { min_years: 10.0, max_years: Some(20.0), days: 300 }, // 10 to 20 years
-            SeveranceTier { min_years: 20.0, max_years: None, days: 400 },       // 20+ years
+            // LPA Section 118: 120 days but < 1 year
+            SeveranceTier {
+                min_years: 120.0 / 365.0,
+                max_years: Some(1.0),
+                days: 30,
+            },
+            SeveranceTier {
+                min_years: 1.0,
+                max_years: Some(3.0),
+                days: 90,
+            },
+            SeveranceTier {
+                min_years: 3.0,
+                max_years: Some(6.0),
+                days: 180,
+            },
+            SeveranceTier {
+                min_years: 6.0,
+                max_years: Some(10.0),
+                days: 240,
+            },
+            SeveranceTier {
+                min_years: 10.0,
+                max_years: Some(20.0),
+                days: 300,
+            },
+            SeveranceTier {
+                min_years: 20.0,
+                max_years: None,
+                days: 400,
+            },
         ]
     }
 }
@@ -31,10 +56,14 @@ pub fn calculate_severance(
     years_of_service: f64,
 ) -> Result<Decimal, ComplianceError> {
     if last_monthly_wage.is_sign_negative() {
-        return Err(ComplianceError::NegativeAmount { field: "last_monthly_wage".into() });
+        return Err(ComplianceError::NegativeAmount {
+            field: "last_monthly_wage".into(),
+        });
     }
     if years_of_service < 0.0 {
-        return Err(ComplianceError::NegativeAmount { field: "years_of_service".into() });
+        return Err(ComplianceError::NegativeAmount {
+            field: "years_of_service".into(),
+        });
     }
 
     let tiers = SeveranceTier::default_tiers();

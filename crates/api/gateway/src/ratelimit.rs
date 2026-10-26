@@ -7,13 +7,8 @@ use fred::prelude::*;
 ///
 /// **Fail-open**: if Redis is unreachable, allow the request through but log loudly.
 /// Availability > perfect throttling — a brute-force attacker gets one free pass, not an outage.
-pub async fn check(
-    redis: &RedisClient,
-    key: &str,
-    max: u32,
-    window: Duration,
-) -> Result<(), u64> {
-    let count = match redis.incr::<u32, _, _>(key, 1u32).await {
+pub async fn check(redis: &Client, key: &str, max: u32, window: Duration) -> Result<(), u64> {
+    let count = match redis.incr::<u32, _>(key).await {
         Ok(c) => c,
         Err(e) => {
             tracing::error!(error = %e, "redis rate-limit error — failing open");
@@ -32,15 +27,15 @@ pub async fn check(
     }
 
     if count > max {
-        let ttl: Option<u64> = redis.ttl(key).await.unwrap_or(None);
+        let ttl: Option<u64> = redis.ttl::<u64, _>(key).await.ok();
         return Err(ttl.unwrap_or(window.as_secs()));
     }
     Ok(())
 }
 
 /// Clear the failure counter after a successful login (both windows).
-pub async fn reset(redis: &RedisClient, keys: &[String]) {
+pub async fn reset(redis: &Client, keys: &[String]) {
     for k in keys {
-        let _: () = redis.unlink(k).await.unwrap_or(());
+        let _: () = redis.unlink::<(), _>(k).await.unwrap_or(());
     }
 }

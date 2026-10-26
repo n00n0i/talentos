@@ -1,28 +1,23 @@
-use std::sync::Arc;
+use axum::extract::connect_info::ConnectInfo;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
-use axum::extract::connect_info::ConnectInfo;
-use std::net::SocketAddr;
-use sqlx::PgPool;
-use uuid::Uuid;
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use talents_kernel::{TenantId, EntityId, UserId, Money};
-use talents_db::TenantPool;
+use std::net::SocketAddr;
+use uuid::Uuid;
 
-use crate::dto::responses::{ErrorResponse, HealthResponse};
+use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::Authed;
-use crate::ratelimit;
 use crate::state::AppState;
 
 /// POST /api/v1/payroll/runs
 pub async fn start_payroll_run(
     State(state): State<AppState>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    ConnectInfo(_addr): ConnectInfo<SocketAddr>,
     Authed(ctx): Authed,
     Json(body): Json<StartPayrollRunRequest>,
 ) -> Response {
@@ -37,7 +32,8 @@ pub async fn start_payroll_run(
                 request_id: Uuid::new_v4().to_string(),
                 retry_after_seconds: None,
             }),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // Check for existing run for this period (spec §7: concurrent run prevention)
@@ -61,7 +57,8 @@ pub async fn start_payroll_run(
                 request_id: Uuid::new_v4().to_string(),
                 retry_after_seconds: None,
             }),
-        ).into_response();
+        )
+            .into_response();
     }
 
     // Create payroll run in draft status
@@ -95,7 +92,8 @@ pub async fn start_payroll_run(
             period_end: body.period_end.to_string(),
             payment_date: body.payment_date.to_string(),
         }),
-    ).into_response()
+    )
+        .into_response()
 }
 
 /// GET /api/v1/payroll/runs/:id
@@ -125,23 +123,24 @@ pub async fn get_payroll_run(
         Json(GetPayrollRunResponse {
             run_id: run.id.to_string(),
             tenant_id: run.tenant_id.to_string(),
-            entity_id: run.entity_id.map(|e| e.to_string()),
+            entity_id: run.entity_id.to_string(),
             period_start: run.period_start.to_string(),
             period_end: run.period_end.to_string(),
             payment_date: run.payment_date.to_string(),
             status: run.status,
             total_employees: run.total_employees,
-            total_gross: run.total_gross.map(|v| v.to_string()),
-            total_net: run.total_net.map(|v| v.to_string()),
-            total_tax: run.total_tax.map(|v| v.to_string()),
-            total_sso: run.total_sso.map(|v| v.to_string()),
-            total_pf: run.total_pf.map(|v| v.to_string()),
+            total_gross: run.total_gross.to_string(),
+            total_net: run.total_net.to_string(),
+            total_tax: run.total_tax.to_string(),
+            total_sso: run.total_sso.to_string(),
+            total_pf: run.total_pf.to_string(),
             workflow_id: run.workflow_id,
             created_by: run.created_by.to_string(),
             created_at: run.created_at.to_rfc3339(),
             updated_at: run.updated_at.to_rfc3339(),
         }),
-    ).into_response()
+    )
+        .into_response()
 }
 
 /// POST /api/v1/payroll/runs/:id/approve
@@ -149,7 +148,7 @@ pub async fn approve_payroll_run(
     State(state): State<AppState>,
     Authed(ctx): Authed,
     Path(id): Path<Uuid>,
-    Json(body): Json<ApprovePayrollRequest>,
+    Json(_body): Json<ApprovePayrollRequest>,
 ) -> Response {
     // Signal Temporal workflow: ApprovePayroll { approver_user_id }
     // For Phase 2: update status to 'approved' in DB
@@ -169,7 +168,8 @@ pub async fn approve_payroll_run(
             "approved_by": ctx.user_id.to_string(),
             "approved_at": chrono::Utc::now().to_rfc3339(),
         })),
-    ).into_response()
+    )
+        .into_response()
 }
 
 /// GET /api/v1/payroll/runs/:id/payslips
@@ -198,23 +198,31 @@ pub async fn list_payslips(
     .await
     .unwrap_or_default();
 
-    let payslips = rows.into_iter().map(|r| PayslipSummary {
-        payslip_id: r.id.to_string(),
-        employee_id: r.employee_id.to_string(),
-        base_salary: r.base_salary.to_string(),
-        gross_earnings: r.gross_earnings.to_string(),
-        net_pay: r.net_pay.to_string(),
-        tax_withheld: r.tax_withheld.to_string(),
-        sso_employee: r.sso_employee.to_string(),
-        pf_employee: r.pf_employee.to_string(),
-        status: r.status,
-        anomalies: r.anomalies,
-    }).collect();
+    let payslips = rows
+        .into_iter()
+        .map(|r| PayslipSummary {
+            payslip_id: r.id.to_string(),
+            employee_id: r.employee_id.to_string(),
+            base_salary: r.base_salary.to_string(),
+            gross_earnings: r.gross_earnings.to_string(),
+            net_pay: r.net_pay.to_string(),
+            tax_withheld: r.tax_withheld.to_string(),
+            sso_employee: r.sso_employee.to_string(),
+            pf_employee: r.pf_employee.to_string(),
+            status: r.status,
+            anomalies: r.anomalies,
+        })
+        .collect();
 
     (
         StatusCode::OK,
-        Json(ListPayslipsResponse { payslips, page, per_page }),
-    ).into_response()
+        Json(ListPayslipsResponse {
+            payslips,
+            page,
+            per_page,
+        }),
+    )
+        .into_response()
 }
 
 /// GET /api/v1/payroll/payslips/:id/pdf
@@ -232,8 +240,8 @@ pub async fn get_payslip_pdf(
     .fetch_optional(state.pool.pool())
     .await;
 
-    let _ = match row {
-        Ok(Some(_)) => {},
+    match row {
+        Ok(Some(_)) => {}
         Ok(None) => return not_found(),
         Err(e) => return internal_err(e),
     };
@@ -272,17 +280,17 @@ pub struct StartPayrollRunResponse {
 pub struct GetPayrollRunResponse {
     pub run_id: String,
     pub tenant_id: String,
-    pub entity_id: Option<String>,
+    pub entity_id: String,
     pub period_start: String,
     pub period_end: String,
     pub payment_date: String,
     pub status: String,
     pub total_employees: i32,
-    pub total_gross: Option<String>,
-    pub total_net: Option<String>,
-    pub total_tax: Option<String>,
-    pub total_sso: Option<String>,
-    pub total_pf: Option<String>,
+    pub total_gross: String,
+    pub total_net: String,
+    pub total_tax: String,
+    pub total_sso: String,
+    pub total_pf: String,
     pub workflow_id: Option<String>,
     pub created_by: String,
     pub created_at: String,
@@ -291,6 +299,8 @@ pub struct GetPayrollRunResponse {
 
 #[derive(Deserialize)]
 pub struct ApprovePayrollRequest {
+    /// Optional human note; persisted with the approval audit entry.
+    #[allow(dead_code)]
     pub reason: Option<String>,
 }
 
@@ -331,7 +341,8 @@ fn not_found() -> Response {
             request_id: Uuid::new_v4().to_string(),
             retry_after_seconds: None,
         }),
-    ).into_response()
+    )
+        .into_response()
 }
 
 fn internal_err(e: sqlx::Error) -> Response {
@@ -345,5 +356,6 @@ fn internal_err(e: sqlx::Error) -> Response {
             request_id: uuid::Uuid::new_v4().to_string(),
             retry_after_seconds: None,
         }),
-    ).into_response()
+    )
+        .into_response()
 }

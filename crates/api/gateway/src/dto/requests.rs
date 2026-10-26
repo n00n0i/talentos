@@ -17,7 +17,10 @@ impl LoginRequest {
         if self.password.len() < 8 || self.password.len() > 128 {
             errs.push(("password", "must be between 8 and 128 characters"));
         }
-        if !self.tenant_slug.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        if !self
+            .tenant_slug
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
             || !(2..=63).contains(&self.tenant_slug.len())
         {
             errs.push(("tenant_slug", "must match [a-z0-9-]{2,63}"));

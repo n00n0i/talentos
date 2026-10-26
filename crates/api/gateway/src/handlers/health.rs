@@ -1,6 +1,11 @@
 use std::time::Duration;
 
-use axum::{extract::State, http::StatusCode, response::{IntoResponse, Response}, Json};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use fred::prelude::*;
 
 use crate::dto::responses::{HealthChecks, HealthResponse};
@@ -11,22 +16,20 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// GET /health — probes DB and Redis with a hard timeout (spec §5).
 pub async fn health(State(state): State<AppState>) -> Response {
     let db_check = tokio::time::timeout(Duration::from_secs(3), state.pool.ping()).await;
-    let redis_check = tokio::time::timeout(
-        Duration::from_secs(3),
-        state.redis.get::<i32, _, _>("healthcheck"),
-    )
-    .await;
+    let redis_check =
+        tokio::time::timeout(Duration::from_secs(3), state.redis.ping::<String>(None)).await;
 
     let db_ok = matches!(db_check, Ok(Ok(())));
-    // Redis returning nil for a missing key is still "connected"; only timeouts/errors fail.
-    let redis_ok = match redis_check {
-        Ok(Ok(_)) | Ok(Err(fred::error::Error::Protocol(_))) => true,
-        _ => false,
-    };
+    // A PING reply (even "PONG") means the socket is live; only timeouts/errors fail.
+    let redis_ok = matches!(redis_check, Ok(Ok(_)));
 
     let healthy = db_ok && redis_ok;
     (
-        if healthy { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE },
+        if healthy {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        },
         Json(HealthResponse {
             status: if healthy { "ok" } else { "degraded" },
             version: VERSION,

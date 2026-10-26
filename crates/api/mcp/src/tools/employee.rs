@@ -9,8 +9,8 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use talents_db::TenantPool;
-use talents_kernel::{TenantContext, TenantId};
+use talentos_db::TenantPool;
+use talentos_kernel::{TenantContext, TenantId};
 use crate::auth::{extract_from_request_context, to_error_data};
 use crate::error::{mcp_error, codes};
 use crate::tools::{tool_def, read_only_annotation, route_dyn};

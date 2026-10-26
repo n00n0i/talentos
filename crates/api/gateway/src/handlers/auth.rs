@@ -2,12 +2,17 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use axum::extract::connect_info::ConnectInfo;
-use axum::{extract::State, http::StatusCode, response::{IntoResponse, Response}, Json};
-use sqlx::Error as SqlxError;
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use sha2::{Digest, Sha256};
+use sqlx::Error as SqlxError;
 
-use talents_authz::{jwt, password, rbac, AuthError};
-use talents_kernel::{EntityId, TenantContext, TenantId, UserId};
+use talentos_authz::{jwt, password, rbac, AuthError};
+use talentos_kernel::{EntityId, TenantContext, TenantId, UserId};
 
 use crate::dto::requests::{LoginRequest, RefreshRequest};
 use crate::dto::responses::{ErrorResponse, FieldError, MeResponse, TokenResponse};
@@ -37,7 +42,10 @@ pub async fn login(
                 message: "Request validation failed".into(),
                 details: errs
                     .iter()
-                    .map(|(f, m)| FieldError { field: (*f).into(), message: (*m).into() })
+                    .map(|(f, m)| FieldError {
+                        field: (*f).into(),
+                        message: (*m).into(),
+                    })
                     .collect(),
                 request_id: uuid::Uuid::new_v4().to_string(),
                 retry_after_seconds: None,
@@ -124,16 +132,19 @@ async fn authenticate(
     }
 
     // M2: reject zero-role users (spec §6.3). A user must have at least one role.
-    if row.roles.is_empty() {
+    let roles = row.roles.unwrap_or_default();
+    if roles.is_empty() {
         tracing::warn!(user_id = %row.user_id, "login rejected: user has no roles assigned");
-        return Err(AuthError::InsufficientPermission { reason: "no roles".into() });
+        return Err(AuthError::InsufficientPermission {
+            reason: "no roles".into(),
+        });
     }
 
     let ctx = TenantContext {
         tenant_id: TenantId(row.tenant_id),
         entity_id: row.entity_id.map(EntityId),
         user_id: UserId(row.user_id),
-        roles: row.roles,
+        roles,
     };
     Ok(ctx)
 }
@@ -151,10 +162,10 @@ async fn record_login_success(state: &AppState, ctx: &TenantContext, addr: &Sock
 
     let _ = sqlx::query!(
         r#"INSERT INTO audit_log (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state, ip_address)
-           VALUES ($1, 'user', $2, 'auth.login', 'session', $2, '{}'::jsonb, $3)"#,
+           VALUES ($1, 'user', $2, 'auth.login', 'session', $2, '{}'::jsonb, $3::inet)"#,
         ctx.tenant_id.0,
-        ctx.user_id.0,
-        addr.ip() as std::net::IpAddr
+        ctx.user_id.0.to_string(),
+        sqlx::types::ipnetwork::IpNetwork::from(addr.ip())
     )
     .execute(state.pool.pool())
     .await
@@ -210,7 +221,9 @@ pub async fn refresh(
     // M6: apply IP-based rate limiting to refresh endpoint too.
     let ip = addr.ip();
     let rl_key = format!("rl:refresh:ip:{ip}");
-    if let Err(retry_after) = ratelimit::check(&state.redis, &rl_key, 30, Duration::from_secs(60)).await {
+    if let Err(retry_after) =
+        ratelimit::check(&state.redis, &rl_key, 30, Duration::from_secs(60)).await
+    {
         return (
             StatusCode::TOO_MANY_REQUESTS,
             [(axum::http::header::RETRY_AFTER, retry_after.to_string())],
@@ -221,7 +234,8 @@ pub async fn refresh(
                 request_id: uuid::Uuid::new_v4().to_string(),
                 retry_after_seconds: Some(retry_after),
             }),
-        ).into_response();
+        )
+            .into_response();
     }
 
     let hashed = hash_refresh(&body.refresh_token);
@@ -240,7 +254,7 @@ pub async fn refresh(
     let tok = match lookup {
         Ok(Some(t)) => t,
         Ok(None) => return auth_err_to_response(AuthError::TokenExpired),
-        Err(e) => return internal_err_to_response(e),
+        Err(e) => return auth_err_to_response(e),
     };
 
     // Reuse detection: already-revoked token presented again → theft scenario, revoke family.
@@ -264,7 +278,7 @@ pub async fn refresh(
     .fetch_one(state.pool.pool())
     .await;
     let roles = match roles_result {
-        Ok(r) => r.roles,
+        Ok(r) => r.roles.unwrap_or_default(),
         Err(e) => return internal_err_to_response(e),
     };
 
@@ -301,18 +315,22 @@ pub async fn refresh(
         ctx.entity_id.map(|e| e.0),
         state.refresh_ttl_days as i32,
     )
-    .execute(state.pool.pool())
+    .fetch_optional(state.pool.pool())
     .await;
 
     match tx_result {
-        Ok(res) if res.rows_affected() > 0 => {
-            ratelimit::reset(&state.redis, &[rl_key.clone()]).await;
-            (StatusCode::OK, Json(TokenResponse {
-                access_token: access,
-                refresh_token: raw_new,
-                token_type: "Bearer",
-                expires_in: state.access_ttl_secs,
-            })).into_response()
+        Ok(Some(_)) => {
+            ratelimit::reset(&state.redis, std::slice::from_ref(&rl_key)).await;
+            (
+                StatusCode::OK,
+                Json(TokenResponse {
+                    access_token: access,
+                    refresh_token: raw_new,
+                    token_type: "Bearer",
+                    expires_in: state.access_ttl_secs,
+                }),
+            )
+                .into_response()
         }
         Ok(_) => {
             // Concurrent consumption won the race — reject replay.
@@ -413,8 +431,7 @@ fn internal_err_to_response(_e: SqlxError) -> Response {
 }
 
 fn auth_err_to_response(e: AuthError) -> Response {
-    let status =
-        StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::UNAUTHORIZED);
+    let status = StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::UNAUTHORIZED);
     (
         status,
         Json(ErrorResponse {

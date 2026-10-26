@@ -1,33 +1,30 @@
 use thiserror::Error;
 
-/// Errors that can occur in the RAG pipeline
+/// Errors that can occur in the RAG pipeline.
 #[derive(Error, Debug)]
 pub enum RAGError {
-    #[error("Database error: {0}")]
+    #[error("database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
 
-    #[error("Model gateway error: {0}")]
-    ModelGatewayError(#[from] crate::error::ModelError),
+    #[error("model gateway error: {0}")]
+    ModelGatewayError(#[from] talentos_model_gw::ModelError),
 
-    #[error("Document not found: {0}")]
+    #[error("document not found: {0}")]
     DocumentNotFound(String),
 
-    #[error("Invalid document format: {0}")]
+    #[error("invalid document format: {0}")]
     InvalidFormat(String),
 
-    #[error("Embedding generation failed: {0}")]
+    #[error("embedding generation failed: {0}")]
     EmbeddingFailed(String),
 
-    #[error("Search failed: {0}")]
+    #[error("search failed: {0}")]
     SearchFailed(String),
 
-    #[error("Chunking failed: {0}")]
+    #[error("chunking failed: {0}")]
     ChunkingFailed(String),
 
-    #[error("PDF extraction failed: {0}")]
-    PdfExtractionFailed(String),
-
-    #[error("Serialization error: {0}")]
+    #[error("serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
 
     #[error("UUID parse error: {0}")]

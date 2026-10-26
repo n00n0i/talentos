@@ -8,8 +8,8 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use talents_db::TenantPool;
-use talents_kernel::TenantContext;
+use talentos_db::TenantPool;
+use talentos_kernel::TenantContext;
 use crate::auth::{extract_from_request_context, to_error_data};
 use crate::error::{mcp_error, codes, mcp_error_with_details};
 use crate::tools::{tool_def, read_only_annotation, destructive_annotation, route_dyn};

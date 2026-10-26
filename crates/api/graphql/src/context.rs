@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use async_graphql::Context;
 use axum::http::HeaderMap;
-use talents_db::TenantPool;
-use talents_kernel::{TenantContext, TenantId, UserId, EntityId};
+use talentos_db::TenantPool;
+use talentos_kernel::{TenantContext, TenantId, UserId, EntityId};
 
 /// Shared state injected into every GraphQL request.
 pub struct GraphQLContext {

@@ -1,15 +1,17 @@
-use crate::models::{HybridSearchResult, RankedChunk, SearchFilters, DocumentChunk, Citation, DocReference};
-use sqlx::{PgPool, Row};
-use talents_model_gw::HuakatiClient;
-use uuid::Uuid;
-use chrono::NaiveDate;
-use tracing::debug;
+//! Hybrid retrieval: pgvector cosine similarity + Postgres full-text, fused with RRF.
 
-/// Hybrid search combining vector similarity + keyword search with RRF reranking
+use sqlx::{PgPool, Row};
+use talentos_model_gw::HuakatiClient;
+use uuid::Uuid;
+
+use crate::error::RAGError;
+use crate::models::{DocumentChunk, HybridSearchResult, RankedChunk, SearchFilters};
+
+/// Combines a dense (embedding) arm and a sparse (tsvector) arm.
 pub struct HybridSearch {
     model_gw: HuakatiClient,
     pool: PgPool,
-    rrf_k: i32, // RRF constant (typically 60)
+    rrf_k: f32,
 }
 
 impl HybridSearch {
@@ -17,247 +19,273 @@ impl HybridSearch {
         Self {
             model_gw,
             pool,
-            rrf_k: 60,
+            rrf_k: 60.0,
         }
     }
 
-    /// Perform hybrid search
+    /// Run both arms and fuse the rankings.
     pub async fn search(
         &self,
         tenant_id: &str,
         query: &str,
         filters: &SearchFilters,
         top_k: usize,
-    ) -> Result<HybridSearchResult, crate::error::RAGError> {
-        // Generate query embedding
-        let query_embedding = self.model_gw.embed(tenant_id, query).await?;
+    ) -> Result<HybridSearchResult, RAGError> {
+        let embedding = self.model_gw.embed(tenant_id, query).await?;
+        let vector_hits = self
+            .vector_search(tenant_id, &embedding, filters, top_k * 2)
+            .await?;
+        let keyword_hits = self
+            .keyword_search(tenant_id, query, filters, top_k * 2)
+            .await?;
+        let fused = self.reciprocal_rank_fusion(&vector_hits, &keyword_hits, top_k);
 
-        // Perform vector search
-        let vector_results = self.vector_search(tenant_id, &query_embedding, filters, top_k * 2).await?;
-
-        // Perform keyword search
-        let keyword_results = self.keyword_search(tenant_id, query, filters, top_k * 2).await?;
-
-        // Combine with RRF
-        let combined = self.reciprocal_rank_fusion(vector_results, keyword_results, top_k);
-
-        // Convert to ranked chunks
-        let mut ranked_chunks = Vec::new();
-        for (chunk, rank) in combined.into_iter().enumerate() {
-            ranked_chunks.push(RankedChunk {
-                chunk: chunk.clone(),
-                vector_score: chunk.vector_score.unwrap_or(0.0),
-                keyword_score: chunk.keyword_score.unwrap_or(0.0),
-                rrf_score: 1.0 / (self.rrf_k as f32 + rank as f32 + 1.0),
-            });
-        }
-
-        // Sort by RRF score descending
-        ranked_chunks.sort_by(|a, b| b.rrf_score.partial_cmp(&a.rrf_score).unwrap_or(std::cmp::Ordering::Equal));
-
-        let total_hits = ranked_chunks.len();
-
+        let total_hits = fused.len();
         Ok(HybridSearchResult {
-            chunks: ranked_chunks.into_iter().take(top_k).collect(),
+            chunks: fused,
             query: query.to_string(),
             filters: filters.clone(),
             total_hits,
         })
     }
 
-    /// Vector similarity search using pgvector
     async fn vector_search(
         &self,
         tenant_id: &str,
-        query_embedding: &[f32],
+        embedding: &[f32],
         filters: &SearchFilters,
         limit: usize,
-    ) -> Result<Vec<DocumentChunk>, crate::error::RAGError> {
-        let vector_str = format!("[{}]", query_embedding.iter().map(|f| f.to_string()).collect::<Vec<_>>().join(","));
+    ) -> Result<Vec<DocumentChunk>, RAGError> {
+        let tenant = Uuid::parse_str(tenant_id)?;
+        let vector = format!(
+            "[{}]",
+            embedding
+                .iter()
+                .map(|f| f.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
 
-        let mut query = r#"
-            SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.embedding, dc.word_count, dc.created_at,
-                   ad.tenant_id, ad.entity_id, ad.doc_type, ad.source_path
+        let rows = sqlx::query(
+            r#"
+            SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.word_count, dc.created_at,
+                   ad.source_path,
+                   1 - (dc.embedding <=> $2::vector) AS similarity
             FROM ai_document_chunks dc
             JOIN ai_documents ad ON ad.id = dc.document_id
             WHERE ad.tenant_id = $1
-        "#.to_string();
+              AND dc.embedding IS NOT NULL
+              AND ($3::text IS NULL OR ad.doc_type = $3)
+              AND ($4::uuid IS NULL OR ad.entity_id = $4)
+            ORDER BY dc.embedding <=> $2::vector
+            LIMIT $5
+            "#,
+        )
+        .bind(tenant)
+        .bind(vector)
+        .bind(filters.doc_type.as_deref())
+        .bind(filters.entity_id)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
 
-        let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Postgres> + Send + Sync>> = vec![Box::new(Uuid::parse_str(tenant_id)?)];
-
-        if let Some(entity_id) = filters.entity_id {
-            query.push_str(" AND ad.entity_id = $2");
-            params.push(Box::new(entity_id));
-        }
-
-        if let Some(doc_type) = &filters.doc_type {
-            let param_idx = params.len() + 1;
-            query.push_str(&format!(" AND ad.doc_type = ${}", param_idx));
-            params.push(Box::new(doc_type.to_string()));
-        }
-
-        if let Some(date_from) = filters.date_from {
-            let param_idx = params.len() + 1;
-            query.push_str(&format!(" AND ad.created_at >= ${}", param_idx));
-            params.push(Box::new(date_from));
-        }
-
-        if let Some(date_to) = filters.date_to {
-            let param_idx = params.len() + 1;
-            query.push_str(&format!(" AND ad.created_at <= ${}", param_idx));
-            params.push(Box::new(date_to));
-        }
-
-        query.push_str(&format!(" ORDER BY dc.embedding <=> ${}::vector LIMIT {}", params.len() + 1, limit));
-        params.push(Box::new(vector_str));
-
-        // Note: In practice, use sqlx::query_as with proper types
-        // This is a simplified version - actual implementation would use query_as!
-        let rows = sqlx::query(&query)
-            .bind(tenant_id)
-            .bind(&vector_str)
-            .fetch_all(&self.pool)
-            .await?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            let embedding: Option<Vec<f32>> = row.try_get("embedding").ok().flatten();
-            results.push(DocumentChunk {
-                id: row.try_get("id")?,
-                document_id: row.try_get("document_id")?,
-                chunk_index: row.try_get("chunk_index")?,
-                content: row.try_get("content")?,
-                embedding,
-                word_count: row.try_get("word_count")?,
-                created_at: row.try_get("created_at")?,
-                vector_score: Some(1.0 - row.try_get::<f32, _>("distance").unwrap_or(1.0)), // cosine distance to similarity
-                keyword_score: None,
-            });
-        }
-
-        Ok(results)
+        rows.into_iter()
+            .map(|row| {
+                Ok(DocumentChunk {
+                    id: row.try_get("id")?,
+                    document_id: row.try_get("document_id")?,
+                    chunk_index: row.try_get("chunk_index")?,
+                    content: row.try_get("content")?,
+                    embedding: None,
+                    word_count: row.try_get("word_count")?,
+                    created_at: row.try_get("created_at")?,
+                    source_path: row.try_get("source_path").ok(),
+                    vector_score: row.try_get::<f32, _>("similarity").ok(),
+                    keyword_score: None,
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()
+            .map_err(Into::into)
     }
 
-    /// Keyword search using PostgreSQL tsvector
     async fn keyword_search(
         &self,
         tenant_id: &str,
         query: &str,
         filters: &SearchFilters,
         limit: usize,
-    ) -> Result<Vec<DocumentChunk>, crate::error::RAGError> {
-        let ts_query = query
-            .split_whitespace()
-            .map(|w| format!("{}:*", w))
-            .collect::<Vec<_>>()
-            .join(" & ");
+    ) -> Result<Vec<DocumentChunk>, RAGError> {
+        let tenant = Uuid::parse_str(tenant_id)?;
 
-        let mut query = r#"
-            SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.embedding, dc.word_count, dc.created_at,
-                   ad.tenant_id, ad.entity_id, ad.doc_type, ad.source_path,
-                   ts_rank_cd(dc.tsv, plainto_tsquery('thai', $2)) as rank
+        // shortcut: 'simple' config — no Thai stemming until a tokenizer extension is installed
+        let rows = sqlx::query(
+            r#"
+            SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.word_count, dc.created_at,
+                   ad.source_path,
+                   ts_rank_cd(dc.tsv, plainto_tsquery('simple', $2)) AS rank
             FROM ai_document_chunks dc
             JOIN ai_documents ad ON ad.id = dc.document_id
             WHERE ad.tenant_id = $1
-              AND dc.tsv @@ plainto_tsquery('thai', $2)
-        "#.to_string();
+              AND dc.tsv @@ plainto_tsquery('simple', $2)
+              AND ($3::text IS NULL OR ad.doc_type = $3)
+              AND ($4::uuid IS NULL OR ad.entity_id = $4)
+            ORDER BY rank DESC
+            LIMIT $5
+            "#,
+        )
+        .bind(tenant)
+        .bind(query)
+        .bind(filters.doc_type.as_deref())
+        .bind(filters.entity_id)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await?;
 
-        let mut params_count = 2;
-
-        if let Some(entity_id) = filters.entity_id {
-            params_count += 1;
-            query.push_str(&format!(" AND ad.entity_id = ${}", params_count));
-        }
-
-        if let Some(doc_type) = &filters.doc_type {
-            params_count += 1;
-            query.push_str(&format!(" AND ad.doc_type = ${}", params_count));
-        }
-
-        query.push_str(&format!(" ORDER BY rank DESC LIMIT {}", limit));
-
-        // This is simplified - actual implementation would use query_as with proper binding
-        let rows = sqlx::query(&query)
-            .bind(tenant_id)
-            .bind(&ts_query)
-            .fetch_all(&self.pool)
-            .await?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            let embedding: Option<Vec<f32>> = row.try_get("embedding").ok().flatten();
-            results.push(DocumentChunk {
-                id: row.try_get("id")?,
-                document_id: row.try_get("document_id")?,
-                chunk_index: row.try_get("chunk_index")?,
-                content: row.try_get("content")?,
-                embedding,
-                word_count: row.try_get("word_count")?,
-                created_at: row.try_get("created_at")?,
-                vector_score: None,
-                keyword_score: Some(row.try_get("rank").unwrap_or(0.0)),
-            });
-        }
-
-        Ok(results)
+        rows.into_iter()
+            .map(|row| {
+                Ok(DocumentChunk {
+                    id: row.try_get("id")?,
+                    document_id: row.try_get("document_id")?,
+                    chunk_index: row.try_get("chunk_index")?,
+                    content: row.try_get("content")?,
+                    embedding: None,
+                    word_count: row.try_get("word_count")?,
+                    created_at: row.try_get("created_at")?,
+                    source_path: row.try_get("source_path").ok(),
+                    vector_score: None,
+                    keyword_score: row.try_get::<f32, _>("rank").ok(),
+                })
+            })
+            .collect::<Result<Vec<_>, sqlx::Error>>()
+            .map_err(Into::into)
     }
 
-    /// Reciprocal Rank Fusion
+    /// Reciprocal Rank Fusion over the two ranked lists.
     fn reciprocal_rank_fusion(
         &self,
-        vector_results: Vec<DocumentChunk>,
-        keyword_results: Vec<DocumentChunk>,
+        vector_hits: &[DocumentChunk],
+        keyword_hits: &[DocumentChunk],
         top_k: usize,
-    ) -> Vec<DocumentChunk> {
-        use std::collections::HashMap;
-
-        // Map chunk id -> (vector_rank, keyword_rank, chunk_data)
-        let mut ranks: HashMap<Uuid, (Option<usize>, Option<usize>, DocumentChunk)> = HashMap::new();
-
-        for (rank, chunk) in vector_results.into_iter().enumerate() {
-            ranks.entry(chunk.id)
-                .or_insert_with(|| (None, None, chunk.clone()))
-                .0 = Some(rank);
-        }
-
-        for (rank, chunk) in keyword_results.into_iter().enumerate() {
-            ranks.entry(chunk.id)
-                .or_insert_with(|| (None, None, chunk.clone()))
-                .1 = Some(rank);
-        }
-
-        // Calculate RRF scores
-        let mut scored: Vec<(DocumentChunk, f32)> = Vec::new();
-
-        for (chunk_id, (v_rank_opt, k_rank_opt, chunk_data)) in ranks {
-            let rrf_score = v_rank_opt.map(|r| 1.0 / (self.rrf_k as f32 + r as f32 + 1.0)).unwrap_or(0.0)
-                + k_rank_opt.map(|r| 1.0 / (self.rrf_k as f32 + r as f32 + 1.0)).unwrap_or(0.0);
-
-            scored.push((chunk_data, rrf_score));
-        }
-
-        // Sort by RRF score descending
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Take top_k
-        scored.into_iter().take(top_k).map(|(chunk, _)| chunk).collect()
+    ) -> Vec<RankedChunk> {
+        reciprocal_rank_fusion(self.rrf_k, vector_hits, keyword_hits, top_k)
     }
 
-    /// Build citations from ranked chunks for LLM context
+    /// Convert ranked chunks into kernel `Citation`s for LLM grounding.
     pub fn build_citations(
         &self,
-        ranked_chunks: &[RankedChunk],
+        ranked: &[RankedChunk],
         tenant_id: Uuid,
-    ) -> Vec<Citation> {
-        ranked_chunks.iter().map(|rc| Citation {
-            chunk_text: rc.chunk.content.clone(),
-            source_doc: DocReference {
-                tenant_id,
-                doc_id: rc.chunk.document_id,
-                source_path: "".to_string(), // Would be populated from document metadata
-            },
-            similarity: rc.rrf_score,
-            chunk_index: rc.chunk.chunk_index as usize,
-        }).collect()
+    ) -> Vec<talentos_kernel::shared::Citation> {
+        ranked
+            .iter()
+            .map(|rc| talentos_kernel::shared::Citation {
+                chunk_text: rc.chunk.content.clone(),
+                source_doc: talentos_kernel::shared::DocReference {
+                    tenant_id,
+                    doc_id: rc.chunk.document_id,
+                    source_path: rc.chunk.source_path.clone().unwrap_or_default(),
+                },
+                similarity: rc.rrf_score,
+                chunk_index: rc.chunk.chunk_index as usize,
+            })
+            .collect()
+    }
+}
+
+/// Pure RRF: rank-fuse two ranked lists. Deterministic, no I/O.
+fn reciprocal_rank_fusion(
+    rrf_k: f32,
+    vector_hits: &[DocumentChunk],
+    keyword_hits: &[DocumentChunk],
+    top_k: usize,
+) -> Vec<RankedChunk> {
+    use std::collections::HashMap;
+
+    let mut merged: HashMap<i64, RankedChunk> = HashMap::new();
+
+    for (rank, chunk) in vector_hits.iter().enumerate() {
+        let contribution = 1.0 / (rrf_k + rank as f32 + 1.0);
+        let entry = merged.entry(chunk.id).or_insert_with(|| RankedChunk {
+            chunk: chunk.clone(),
+            vector_score: 0.0,
+            keyword_score: 0.0,
+            rrf_score: 0.0,
+        });
+        entry.vector_score = chunk.vector_score.unwrap_or(0.0);
+        entry.rrf_score += contribution;
+    }
+
+    for (rank, chunk) in keyword_hits.iter().enumerate() {
+        let contribution = 1.0 / (rrf_k + rank as f32 + 1.0);
+        let entry = merged.entry(chunk.id).or_insert_with(|| RankedChunk {
+            chunk: chunk.clone(),
+            vector_score: 0.0,
+            keyword_score: 0.0,
+            rrf_score: 0.0,
+        });
+        entry.keyword_score = chunk.keyword_score.unwrap_or(0.0);
+        entry.rrf_score += contribution;
+    }
+
+    let mut ranked: Vec<RankedChunk> = merged.into_values().collect();
+    ranked.sort_by(|a, b| {
+        b.rrf_score
+            .partial_cmp(&a.rrf_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    ranked.truncate(top_k);
+    ranked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chunk(id: i64, vector_score: Option<f32>, keyword_score: Option<f32>) -> DocumentChunk {
+        DocumentChunk {
+            id,
+            document_id: Uuid::nil(),
+            chunk_index: 0,
+            content: format!("chunk {id}"),
+            embedding: None,
+            word_count: 2,
+            created_at: chrono::Utc::now(),
+            source_path: None,
+            vector_score,
+            keyword_score,
+        }
+    }
+
+    #[test]
+    fn rrf_prefers_chunk_present_in_both_arms() {
+        let vector = vec![chunk(1, Some(0.9), None), chunk(2, Some(0.8), None)];
+        let keyword = vec![chunk(3, None, Some(0.5)), chunk(2, None, Some(0.4))];
+        let fused = reciprocal_rank_fusion(60.0, &vector, &keyword, 10);
+        assert_eq!(fused[0].chunk.id, 2, "chunk in both arms must win");
+    }
+
+    #[test]
+    fn rrf_respects_top_k() {
+        let vector = vec![
+            chunk(1, Some(0.9), None),
+            chunk(2, Some(0.8), None),
+            chunk(3, Some(0.7), None),
+        ];
+        assert_eq!(reciprocal_rank_fusion(60.0, &vector, &[], 2).len(), 2);
+    }
+
+    #[test]
+    fn rrf_empty_inputs_yield_empty() {
+        assert!(reciprocal_rank_fusion(60.0, &[], &[], 5).is_empty());
+    }
+
+    #[test]
+    fn rrf_is_deterministic() {
+        let v = vec![chunk(1, Some(0.9), None), chunk(2, Some(0.8), None)];
+        let k = vec![chunk(2, None, Some(0.6))];
+        let a = reciprocal_rank_fusion(60.0, &v, &k, 5);
+        let b = reciprocal_rank_fusion(60.0, &v, &k, 5);
+        assert_eq!(a[0].chunk.id, b[0].chunk.id);
+        assert_eq!(a[0].rrf_score, b[0].rrf_score);
     }
 }

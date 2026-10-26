@@ -1,10 +1,9 @@
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use talents_kernel::{EntityId, TenantContext, TenantId, UserId};
+use talentos_kernel::{EntityId, TenantContext, TenantId, UserId};
 
 use crate::error::AuthError;
 
@@ -63,8 +62,8 @@ pub fn verify_access_token(token: &str, secret: &[u8]) -> Result<TenantContext, 
     validation.required_spec_claims = ["exp".into()].into_iter().collect();
     validation.validate_exp = true;
 
-    let data = decode::<Claims>(token, &DecodingKey::from_secret(secret), &validation)
-        .map_err(|e| match e.kind() {
+    let data = decode::<Claims>(token, &DecodingKey::from_secret(secret), &validation).map_err(
+        |e| match e.kind() {
             jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
             jsonwebtoken::errors::ErrorKind::ImmatureSignature => AuthError::TokenMalformed,
             jsonwebtoken::errors::ErrorKind::InvalidSignature
@@ -73,7 +72,8 @@ pub fn verify_access_token(token: &str, secret: &[u8]) -> Result<TenantContext, 
             | jsonwebtoken::errors::ErrorKind::Json(_)
             | jsonwebtoken::errors::ErrorKind::Utf8(_) => AuthError::TokenSignatureInvalid,
             _ => AuthError::TokenMalformed,
-        })?;
+        },
+    )?;
 
     let c = data.claims;
     let user_id = Uuid::parse_str(&c.sub).map_err(|_| AuthError::TokenMalformed)?;
@@ -94,7 +94,8 @@ pub fn verify_access_token(token: &str, secret: &[u8]) -> Result<TenantContext, 
 /// Generate an opaque refresh token: random 256-bit hex (64 chars). Not a JWT.
 pub fn generate_refresh_token() -> String {
     let mut buf = [0u8; 32];
-    rand::rng().fill_bytes(&mut buf);
+    use rand::RngCore;
+    rand::thread_rng().fill_bytes(&mut buf);
     hex::encode(buf)
 }
 
@@ -164,7 +165,8 @@ mod tests {
     fn wrong_key_rejected() {
         let ctx = test_ctx();
         let token = issue_access_token(&ctx, SECRET, 900).unwrap();
-        let err = verify_access_token(&token, b"a-completely-different-secret-key-32byt").unwrap_err();
+        let err =
+            verify_access_token(&token, b"a-completely-different-secret-key-32byt").unwrap_err();
         assert!(matches!(err, AuthError::TokenSignatureInvalid));
     }
 

@@ -1,0 +1,49 @@
+# Build status — verified locally
+
+Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, PostgreSQL 16 + pgvector.
+
+## Gate results
+
+| Gate | Command | Result |
+|---|---|---|
+| Format | `cargo fmt --all -- --check` | pass |
+| Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
+| Tests | `cargo test --workspace` | **52 passed**, 0 failed |
+| Migrations | `psql -f migrations/*.sql` on a fresh DB | 9 files apply cleanly |
+
+Tests by crate: kernel 5, authz 22, compliance 6, payroll 5, rag 7, agent 7.
+
+## Compiling workspace members
+
+```
+crates/core/kernel          primitives: ids, Money, events, shared workflow types
+crates/core/authz           JWT, Argon2id, RBAC matrix
+crates/infra/db             TenantPool (SET LOCAL tenant GUC)
+crates/domain/compliance    Thai PND tax, SSO, PF, LPA severance, OT
+crates/domain/payroll       deterministic payroll DAG + anomaly rules
+crates/ai/model-gw          huakati.online client, in-process limiter, circuit breaker
+crates/ai/rag               chunker, embedder, hybrid search (RRF)
+crates/ai/tools             the 8 agent tools
+crates/ai/agent             Observe → Plan → Act → Reflect loop
+crates/api/gateway          Axum: /health, /auth/*, /payroll/*
+```
+
+## Deferred — excluded from the workspace, not yet buildable
+
+Each is commented out in the root `Cargo.toml` with a TODO:
+
+| Crate | Blocker |
+|---|---|
+| `crates/api/mcp` | Scaffolded against an rmcp API that does not match rmcp 3.7 (`ServerServiceExt`, `handler::server::Router`). Needs a rewrite against the real builder API. |
+| `crates/api/graphql` | Same class of issue: resolvers were written without compiling against async-graphql 7. |
+| `crates/services/talentos-worker` | Temporal Rust SDK 1.x (`temporalio-sdk`) needs protoc-generated protos and a different macro surface than the scaffold assumed. |
+| `crates/ai/talentos-memory` | Depends on the `semantica` crate, which is not published to crates.io. |
+
+The agent loop currently runs in-process (`AgentRunner`) instead of on Temporal; the
+phase boundary is already isolated, so the Temporal swap is a wiring change, not a rewrite.
+
+## Known shortcuts (grep `shortcut:`)
+
+- `to_tsvector('simple', ...)` for Thai keyword search — no Thai tokenizer installed yet.
+- In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
+- Single static HS256 signing key (no JWKS rotation yet).

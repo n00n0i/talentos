@@ -1,25 +1,6 @@
-// Shared model types - re-exported from talentos-agent
+//! Wire types for the OpenAI-compatible chat + embeddings API.
 
-pub use talentos_agent::states::{
-    AgentContext,
-    Observation,
-    Citation,
-    DocReference,
-    ActionPlan,
-    PlanStep,
-    ActResult,
-    ToolResult,
-    Reflection,
-    WorkflowState,
-    WorkflowPhase,
-    StepSnapshot,
-    HumanApprovalSignal,
-    ApprovalDecision,
-    AdditionalContextSignal,
-    AgentResult,
-    AgentError,
-    WorkflowPhase as ModelWorkflowPhase,
-};
+use serde::{Deserialize, Serialize};
 
 /// Chat completion request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,6 +11,10 @@ pub struct ChatRequest {
     pub tools: Option<Vec<ToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
 }
 
 /// Chat completion response
@@ -40,10 +25,11 @@ pub struct ChatResponse {
     pub created: i64,
     pub model: String,
     pub choices: Vec<ChatChoice>,
+    #[serde(default)]
     pub usage: Option<TokenUsage>,
 }
 
-/// Chat choice
+/// A single completion choice
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatChoice {
     pub index: u32,
@@ -55,56 +41,34 @@ pub struct ChatChoice {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     pub role: String,
+    #[serde(default)]
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
 }
 
-/// Tool call in a chat response
+/// Tool call emitted by the model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     pub id: String,
-    pub r#type: String,
+    #[serde(rename = "type")]
+    pub call_type: String,
     pub function: ToolCallFunction,
 }
 
-/// Function call details
+/// Function name + JSON-encoded arguments
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallFunction {
     pub name: String,
     pub arguments: String,
 }
 
-/// Tool definition for function calling
+/// Tool definition advertised to the model
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDef {
     pub name: String,
     pub description: String,
     pub parameters: serde_json::Value,
-}
-
-/// Message in a chat conversation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message {
-    pub role: String,
-    pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<ToolCall>>,
-}
-
-/// Tool call in a chat response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCall {
-    pub id: String,
-    pub r#type: String,
-    pub function: ToolCallFunction,
-}
-
-/// Function call details
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallFunction {
-    pub name: String,
-    pub arguments: String,
 }
 
 /// Embedding request
@@ -120,10 +84,11 @@ pub struct EmbeddingResponse {
     pub object: String,
     pub data: Vec<EmbeddingData>,
     pub model: String,
-    pub usage: TokenUsage,
+    #[serde(default)]
+    pub usage: Option<TokenUsage>,
 }
 
-/// Single embedding data
+/// A single embedding vector
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmbeddingData {
     pub object: String,
@@ -131,16 +96,20 @@ pub struct EmbeddingData {
     pub index: u32,
 }
 
-/// Token usage information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Token usage reported by the provider
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TokenUsage {
+    #[serde(default)]
     pub prompt_tokens: u64,
+    #[serde(default)]
     pub completion_tokens: u64,
+    #[serde(default)]
     pub total_tokens: u64,
+    #[serde(default)]
     pub cached_tokens: u64,
 }
 
-/// Ollama chat request
+/// Ollama chat request (local fallback)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OllamaChatRequest {
     pub model: String,
@@ -159,55 +128,10 @@ pub struct OllamaMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OllamaChatResponse {
     pub model: String,
+    #[serde(default)]
     pub created_at: String,
     pub message: OllamaMessage,
+    #[serde(default)]
     pub done: bool,
     pub done_reason: Option<String>,
-}
-
-/// Ollama message
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OllamaMessage {
-    pub role: String,
-    pub content: String,
-}
-
-/// Tool definition for function calling
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDef {
-    pub name: String,
-    pub description: String,
-    pub parameters: serde_json::Value,
-}
-
-/// Message in a chat conversation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message {
-    pub role: String,
-    pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<ToolCall>>,
-}
-
-/// Tool call in a chat response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCall {
-    pub id: String,
-    pub r#type: String,
-    pub function: ToolCallFunction,
-}
-
-/// Function call details
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallFunction {
-    pub name: String,
-    pub arguments: String,
-}
-
-/// Tool definition for function calling
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolDef {
-    pub name: String,
-    pub description: String,
-    pub parameters: serde_json::Value,
 }

@@ -1,11 +1,11 @@
+use super::dag::StepResult;
+use crate::anomaly::Anomaly;
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use talentos_kernel::{Money, TenantId, UserId};
 use uuid::Uuid;
-use chrono::{NaiveDate, DateTime, Utc};
-use crate::anomaly::Anomaly;
-use super::dag::StepResult;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EmployeePayrollOutput {
     pub employee_id: Uuid,
     pub base_salary: Money,
@@ -19,7 +19,7 @@ pub struct EmployeePayrollOutput {
     pub anomalies: Vec<Anomaly>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PayrollResult {
     pub run_id: Uuid,
     pub tenant_id: TenantId,

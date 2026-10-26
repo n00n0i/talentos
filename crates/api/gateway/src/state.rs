@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use axum::extract::FromRef;
 
-use talents_db::TenantPool;
+use talentos_db::TenantPool;
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: Arc<TenantPool>,
     pub jwt_secret: Arc<[u8]>,
-    pub redis: fred::clients::RedisClient,
+    pub redis: fred::clients::Client,
     pub access_ttl_secs: i64,
     pub refresh_ttl_days: i64,
     pub allowed_origins: Vec<String>,

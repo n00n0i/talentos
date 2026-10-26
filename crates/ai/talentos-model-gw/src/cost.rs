@@ -1,13 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// Token usage tracking for cost calculation
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TokenUsage {
-    pub prompt_tokens: u64,
-    pub completion_tokens: u64,
-    pub total_tokens: u64,
-    pub cached_tokens: u64,
-}
+pub use crate::models::TokenUsage;
 
 impl TokenUsage {
     /// Calculate estimated cost in USD
@@ -22,7 +15,7 @@ impl TokenUsage {
 
         let input_cost = (self.prompt_tokens as f64 / 1_000_000.0) * input_per_m;
         let output_cost = (self.completion_tokens as f64 / 1_000_000.0) * output_per_m;
-        
+
         input_cost + output_cost
     }
 }

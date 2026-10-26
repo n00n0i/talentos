@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use fred::prelude::*;
 
-use talents_db::TenantPool;
 use state::AppState;
+use talentos_db::TenantPool;
 
 #[tokio::main]
 async fn main() {
@@ -29,7 +29,10 @@ async fn main() {
     let redis_url = std::env::var("REDIS_URL").expect("REDIS_URL must be set");
     let jwt_secret = std::env::var("AUTH_JWT_SECRET").expect("AUTH_JWT_SECRET must be set");
     if jwt_secret.len() < 32 {
-        eprintln!("FATAL: AUTH_JWT_SECRET must be >= 32 bytes, got {}", jwt_secret.len());
+        eprintln!(
+            "FATAL: AUTH_JWT_SECRET must be >= 32 bytes, got {}",
+            jwt_secret.len()
+        );
         std::process::exit(1);
     }
     let bind_addr: SocketAddr = std::env::var("GATEWAY_PORT")
@@ -55,17 +58,19 @@ async fn main() {
         .map(|s| s.trim().to_string())
         .collect();
 
-    let pool = Arc::new(TenantPool::connect(&db_url, max_conns).await.expect("DB connect failed"));
+    let pool = Arc::new(
+        TenantPool::connect(&db_url, max_conns)
+            .await
+            .expect("DB connect failed"),
+    );
 
-    // B3: Parse REDIS_URL into RedisConfig so non-local deployments work.
-    let redis_config = RedisConfig::from_url(&redis_url).expect("invalid REDIS_URL");
-    let redis = RedisClient::new(redis_config, None, PerfConfig::default());
+    // Parse REDIS_URL so non-local deployments work.
+    let redis_config = Config::from_url(&redis_url).expect("invalid REDIS_URL");
+    let redis = Client::new(redis_config, None, None, None);
     redis.init().await.expect("Redis init failed");
-    let conns = Connections::new_all_non_blocking(false, &redis);
-    futures_util::future::join_all(conns)
+    redis
+        .ping::<String>(None)
         .await
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
         .expect("Redis connect failed");
 
     let state = AppState {
@@ -86,7 +91,7 @@ async fn main() {
     tracing::info!(%bind_addr, "gateway listening");
 
     axum::serve(
-        listener.into_inner(),
+        listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())

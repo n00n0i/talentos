@@ -2,11 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use rmcp::model::Extensions;
 use serde_json::Value;
-use talents_kernel::{TenantContext, TenantId, UserId, EntityId};
-use talents_db::TenantPool;
-use talents_model_gw::HuakatiClient;
+use talentos_db::TenantPool;
+use talentos_kernel::{EntityId, TenantId, UserId};
+use talentos_model_gw::HuakatiClient;
 
 /// Tool execution context
 #[derive(Clone)]
@@ -17,7 +16,8 @@ pub struct ToolContext {
     pub run_id: uuid::Uuid,
     pub db: Arc<TenantPool>,
     pub model_gw: Arc<HuakatiClient>,
-    pub extensions: Extensions,
+    /// Free-form per-request data (MCP extensions, trace ids, ...).
+    pub extensions: HashMap<String, Value>,
 }
 
 /// Trait for agent tools
@@ -36,6 +36,14 @@ pub struct ToolResult {
     pub success: bool,
     pub output: Value,
     pub error: Option<String>,
+}
+
+/// Definition of a tool as advertised to an LLM.
+#[derive(Debug, Clone)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    pub parameters: Value,
 }
 
 /// Tool registry
@@ -63,13 +71,41 @@ impl ToolRegistry {
         self.tools.keys().map(|s| s.as_str()).collect()
     }
 
-    pub fn execute(&self, name: &str, input: Value, ctx: &ToolContext) -> Result<ToolResult, String> {
-        self.tools
+    /// Execute a tool by name. Returns `Err` only when the tool is unknown;
+    /// tool-level failures come back as `ToolResult { success: false, .. }`.
+    pub async fn execute(
+        &self,
+        name: &str,
+        input: Value,
+        ctx: &ToolContext,
+    ) -> Result<ToolResult, String> {
+        let tool = self
+            .tools
             .get(name)
-            .ok_or_else(|| format!("Tool '{}' not found", name))?
-            .execute(input, ctx)
-            .await
-            .map_err(|e| e.to_string())
+            .ok_or_else(|| format!("Tool '{}' not found", name))?;
+        Ok(tool.execute(input, ctx).await)
+    }
+
+    /// Names of every registered tool, in registration order.
+    pub fn get_tool_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.tools.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    /// Tool definitions for LLM function calling.
+    pub fn get_tool_definitions(&self) -> Vec<ToolDefinition> {
+        let mut defs: Vec<ToolDefinition> = self
+            .tools
+            .values()
+            .map(|t| ToolDefinition {
+                name: t.name().to_string(),
+                description: t.description().to_string(),
+                parameters: t.input_schema(),
+            })
+            .collect();
+        defs.sort_by(|a, b| a.name.cmp(&b.name));
+        defs
     }
 }
 

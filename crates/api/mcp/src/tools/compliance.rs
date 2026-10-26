@@ -7,8 +7,8 @@ use rmcp::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use talents_compliance::{calculate_pnd_tax, calculate_sso, calculate_severance, PersonalAllowances, SsoRules, SeveranceTier};
-use talents_kernel::{Money, TenantContext};
+use talentos_compliance::{calculate_pnd_tax, calculate_sso, calculate_severance, PersonalAllowances, SsoRules, SeveranceTier};
+use talentos_kernel::{Money, TenantContext};
 use crate::auth::{extract_from_request_context, to_error_data};
 use crate::error::{mcp_error, codes};
 use crate::tools::{tool_def, read_only_annotation, route_dyn};
@@ -99,7 +99,7 @@ pub fn calculate_tax_preview() -> crate::tools::ToolRoute<crate::McpServer> {
                 .map_err(|e| mcp_error(codes::INTERNAL_ERROR, &e.to_string()))?;
 
             // Build bracket breakdown
-            let brackets = talents_compliance::TaxBracket::default_2567_brackets();
+            let brackets = talentos_compliance::TaxBracket::default_2567_brackets();
             let mut remaining = taxable_annual;
             let mut brackets_applied = Vec::new();
 

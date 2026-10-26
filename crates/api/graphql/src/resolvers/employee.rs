@@ -35,7 +35,7 @@ impl EmployeeQueries {
                     )
                     .fetch_optional(&mut **tx)
                     .await
-                    .map_err(|e| talents_authz::AuthError::Internal(e.to_string()))
+                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
                 })
             })
             .await
@@ -86,7 +86,7 @@ impl EmployeeQueries {
                     )
                     .fetch_all(&mut **tx)
                     .await
-                    .map_err(|e| talents_authz::AuthError::Internal(e.to_string()))
+                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
                 })
             })
             .await
@@ -174,7 +174,7 @@ impl EmployeeMutations {
                     )
                     .fetch_one(&mut **tx)
                     .await
-                    .map_err(|e| talents_authz::AuthError::Internal(e.to_string()))
+                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
                 })
             })
             .await
@@ -234,7 +234,7 @@ impl EmployeeMutations {
                     )
                     .fetch_one(&mut **tx)
                     .await
-                    .map_err(|e| talents_authz::AuthError::Internal(e.to_string()))
+                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
                 })
             })
             .await
@@ -271,7 +271,7 @@ impl EmployeeMutations {
                     )
                     .fetch_one(&mut **tx)
                     .await
-                    .map_err(|e| talents_authz::AuthError::Internal(e.to_string()))
+                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
                 })
             })
             .await

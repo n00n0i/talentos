@@ -1,4 +1,5 @@
 use rust_decimal::prelude::*;
+use rust_decimal::RoundingStrategy;
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Sub};
 
@@ -12,10 +13,15 @@ pub struct Money {
 }
 
 impl Money {
-    pub const ZERO: Money = Money { amount: Decimal::ZERO };
+    pub const ZERO: Money = Money {
+        amount: Decimal::ZERO,
+    };
 
+    /// Round half away from zero — the convention Thai payroll uses.
     pub fn from_baht(value: Decimal) -> Self {
-        Self { amount: value.round_dp(2) }
+        Self {
+            amount: value.round_dp_with_strategy(2, RoundingStrategy::MidpointAwayFromZero),
+        }
     }
 
     pub fn from_satang(satang: i64) -> Self {
@@ -29,7 +35,11 @@ impl Money {
     }
 
     pub fn satang(&self) -> i64 {
-        (self.amount * dec!(100)).round().to_string().parse().unwrap_or(i64::MAX)
+        (self.amount * Decimal::from(100))
+            .round()
+            .to_string()
+            .parse()
+            .unwrap_or(i64::MAX)
     }
 
     pub fn is_zero(&self) -> bool {
@@ -62,7 +72,7 @@ impl std::fmt::Display for Money {
 }
 
 impl TryFrom<String> for Money {
-    type Error = DecimalError;
+    type Error = rust_decimal::Error;
     fn try_from(s: String) -> Result<Self, Self::Error> {
         s.parse::<Decimal>().map(Self::from_baht)
     }
@@ -77,11 +87,12 @@ impl From<Money> for String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_decimal_macros::dec;
 
     #[test]
-    fn money_rounds_to_two_decimals() {
+    fn money_rounds_half_away_from_zero() {
         let m = Money::from_baht(dec!(85000.005));
-        assert_eq!(m.amount(), dec!(85000.01)); // banker's rounding via round_dp
+        assert_eq!(m.amount(), dec!(85000.01));
     }
 
     #[test]
@@ -97,6 +108,13 @@ mod tests {
         let m = Money::from_baht(dec!(12345.67));
         let json = serde_json::to_string(&m).unwrap();
         assert_eq!(json, "\"12345.67\"");
+    }
+
+    #[test]
+    fn satang_roundtrip() {
+        let m = Money::from_satang(8_500_000);
+        assert_eq!(m.satang(), 8_500_000);
+        assert_eq!(m.amount(), dec!(85000));
     }
 
     #[test]

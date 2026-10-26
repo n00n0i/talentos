@@ -1,7 +1,7 @@
+use crate::error::ComplianceError;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
-use crate::error::ComplianceError;
 
 /// Tax bracket definition for progressive income tax calculation (e.g. PND 2567).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -14,13 +14,41 @@ pub struct TaxBracket {
 impl TaxBracket {
     pub fn default_2567_brackets() -> Vec<TaxBracket> {
         vec![
-            TaxBracket { lower: dec!(0), upper: Some(dec!(150000)), rate: dec!(0.00) },
-            TaxBracket { lower: dec!(150001), upper: Some(dec!(300000)), rate: dec!(0.05) },
-            TaxBracket { lower: dec!(300001), upper: Some(dec!(500000)), rate: dec!(0.10) },
-            TaxBracket { lower: dec!(500001), upper: Some(dec!(750000)), rate: dec!(0.15) },
-            TaxBracket { lower: dec!(750001), upper: Some(dec!(1000000)), rate: dec!(0.20) },
-            TaxBracket { lower: dec!(1000001), upper: Some(dec!(2000000)), rate: dec!(0.25) },
-            TaxBracket { lower: dec!(2000001), upper: None, rate: dec!(0.30) },
+            TaxBracket {
+                lower: dec!(0),
+                upper: Some(dec!(150000)),
+                rate: dec!(0.00),
+            },
+            TaxBracket {
+                lower: dec!(150001),
+                upper: Some(dec!(300000)),
+                rate: dec!(0.05),
+            },
+            TaxBracket {
+                lower: dec!(300001),
+                upper: Some(dec!(500000)),
+                rate: dec!(0.10),
+            },
+            TaxBracket {
+                lower: dec!(500001),
+                upper: Some(dec!(750000)),
+                rate: dec!(0.15),
+            },
+            TaxBracket {
+                lower: dec!(750001),
+                upper: Some(dec!(1000000)),
+                rate: dec!(0.20),
+            },
+            TaxBracket {
+                lower: dec!(1000001),
+                upper: Some(dec!(2000000)),
+                rate: dec!(0.25),
+            },
+            TaxBracket {
+                lower: dec!(2000001),
+                upper: None,
+                rate: dec!(0.30),
+            },
         ]
     }
 }
@@ -59,13 +87,15 @@ pub fn calculate_pnd_tax(
     allowances: &PersonalAllowances,
 ) -> Result<Decimal, ComplianceError> {
     if taxable_annual.is_sign_negative() {
-        return Err(ComplianceError::NegativeAmount { field: "taxable_annual".into() });
+        return Err(ComplianceError::NegativeAmount {
+            field: "taxable_annual".into(),
+        });
     }
 
     // Calculate deductions
     let personal_deduction = allowances.personal;
     let spouse_deduction = allowances.spouse;
-    
+
     // Child allowance: 20,000 THB each, max 3 children
     let effective_children = std::cmp::min(allowances.child_count, 3);
     let child_deduction = Decimal::from(effective_children) * dec!(20000);
@@ -76,7 +106,11 @@ pub fn calculate_pnd_tax(
     // Pension / RMF deduction: max 500,000 THB
     let pension_deduction = std::cmp::min(allowances.pension_paid, dec!(500000));
 
-    let total_allowances = personal_deduction + spouse_deduction + child_deduction + insurance_deduction + pension_deduction;
+    let total_allowances = personal_deduction
+        + spouse_deduction
+        + child_deduction
+        + insurance_deduction
+        + pension_deduction;
 
     let net_taxable = if taxable_annual > total_allowances {
         taxable_annual - total_allowances
@@ -85,40 +119,6 @@ pub fn calculate_pnd_tax(
     };
 
     let brackets = TaxBracket::default_2567_brackets();
-    let mut annual_tax = Decimal::ZERO;
-
-    for bracket in brackets {
-        if net_taxable <= bracket.lower {
-            continue;
-        }
-
-        let upper_bound = match bracket.upper {
-            Some(u) => std::cmp::min(net_taxable, u),
-            None => net_taxable,
-        };
-
-        let taxable_in_bracket = upper_bound - (bracket.lower - dec!(1)).max(bracket.lower - dec!(0)); 
-        // More robust: calculate span in bracket
-        let span = match bracket.upper {
-            Some(u) => (u - bracket.lower + dec!(1)).min(net_taxable - bracket.lower + dec!(1)),
-            None => net_taxable - bracket.lower + dec!(1),
-        };
-
-        if span > Decimal::ZERO {
-            // Amount subject to this bracket rate
-            let taxable_amount = match bracket.upper {
-                Some(u) => (net_taxable.min(u) - bracket.lower).max(Decimal::ZERO) + (if bracket.lower == dec!(0) { Decimal::ZERO } else { Decimal::ZERO }),
-                None => (net_taxable - bracket.lower).max(Decimal::ZERO),
-            };
-            
-            // Wait, standard progressive bracket calculation:
-            // For bracket 150001 - 300000:
-            let taxable_in_this_bracket = match bracket.upper {
-                Some(u) => (net_taxable.min(u) - (bracket.lower - dec!(0.01))).max(Decimal::ZERO), // simplified below
-                None => (net_taxable - (bracket.lower - dec!(0.01))).max(Decimal::ZERO),
-            };
-        }
-    }
 
     // Clean progressive calculation implementation:
     let mut remaining = net_taxable;
@@ -175,7 +175,10 @@ mod tests {
         assert_eq!(calculate_pnd_tax(dec!(0), &allowances).unwrap(), dec!(0));
 
         // 150,000 -> 0 tax (0-150k is 0%)
-        assert_eq!(calculate_pnd_tax(dec!(150000), &allowances).unwrap(), dec!(0));
+        assert_eq!(
+            calculate_pnd_tax(dec!(150000), &allowances).unwrap(),
+            dec!(0)
+        );
 
         // 150,001 -> taxable 1 THB at 5% = 0.05 / 12 = 0.00
         let tax_150001 = calculate_pnd_tax(dec!(150001), &allowances).unwrap();

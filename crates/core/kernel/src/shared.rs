@@ -1,8 +1,10 @@
 //! Shared workflow types - single source of truth for agent workflow types
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
+
+use crate::tenant::{EntityId, TenantId, UserId};
 
 /// Agent workflow state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +78,12 @@ impl WorkflowState {
                 *emp = context;
             }
         }
+    }
+}
+
+impl Default for WorkflowState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -157,7 +165,7 @@ pub struct ToolResult {
 /// Reflection from REFLECT phase
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reflection {
-    pub score: f32, // 0.0 to 1.0
+    pub score: f32,
     pub assessment: String,
     pub missing_info: Vec<String>,
     pub should_replan: bool,
@@ -181,12 +189,47 @@ pub struct PendingApproval {
     pub approved_at: Option<DateTime<Utc>>,
 }
 
-/// Agent context passed to activities
+/// Human approval signal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HumanApprovalSignal {
+    pub run_id: Uuid,
+    pub approver_user_id: Uuid,
+    pub tool_name: String,
+    pub decision: ApprovalDecision,
+    pub comment: Option<String>,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Approval decision
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ApprovalDecision {
+    Approve,
+    Reject,
+}
+
+/// Human rejection signal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HumanRejectionSignal {
+    pub tool_name: String,
+    pub approver_user_id: Uuid,
+    pub comment: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Additional context signal
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdditionalContextSignal {
+    pub context: serde_json::Value,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Agent context passed to activities. The id newtypes keep tenant/user/entity
+/// distinct at the type level — the same guarantee every other crate relies on.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentContext {
-    pub tenant_id: Uuid,
-    pub user_id: Uuid,
-    pub entity_id: Option<Uuid>,
+    pub tenant_id: TenantId,
+    pub user_id: UserId,
+    pub entity_id: Option<EntityId>,
     pub roles: Vec<String>,
     pub run_id: Uuid,
 }
@@ -218,325 +261,11 @@ pub enum AgentError {
     #[error("Tool execution failed: {0}")]
     ToolFailed(String),
     #[error("Model error: {0}")]
-    ModelError(#[from] crate::model_gw::error::ModelError),
+    ModelError(String),
     #[error("RAG error: {0}")]
-    RagError(#[from] crate::rag::error::RAGError),
+    RagError(String),
     #[error("Temporal error: {0}")]
     TemporalError(String),
-}
-
-/// Result from ACT phase
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActResult {
-    pub tool_results: Vec<ToolResult>,
-    pub is_complete: bool,
-    pub error: Option<String>,
-}
-
-/// Single tool execution result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolResult {
-    pub tool_name: String,
-    pub success: bool,
-    pub output: serde_json::Value,
-    pub error: Option<String>,
-    pub duration_ms: u64,
-}
-
-/// Reflection from REFLECT phase
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Reflection {
-    pub score: f32, // 0.0 to 1.0
-    pub assessment: String,
-    pub missing_info: Vec<String>,
-    pub should_replan: bool,
-}
-
-/// Step snapshot for history
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StepSnapshot {
-    pub phase: WorkflowPhase,
-    pub timestamp: DateTime<Utc>,
-    pub data: serde_json::Value,
-}
-
-/// Pending approval
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingApproval {
-    pub tool_name: String,
-    pub approved: bool,
-    pub approver_id: Option<Uuid>,
-    pub comment: Option<String>,
-    pub approved_at: Option<DateTime<Utc>>,
-}
-
-/// Human approval signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanApprovalSignal {
-    pub run_id: Uuid,
-    pub approver_user_id: Uuid,
-    pub tool_name: String,
-    pub decision: ApprovalDecision,
-    pub comment: Option<String>,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Approval decision
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ApprovalDecision {
-    Approve,
-    Reject,
-}
-
-/// Human rejection signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanRejectionSignal {
-    pub tool_name: String,
-    pub approver_user_id: Uuid,
-    pub comment: String,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Additional context signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdditionalContextSignal {
-    pub context: serde_json::Value,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Single step in the action plan
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlanStep {
-    pub tool_name: String,
-    pub parameters: serde_json::Value,
-    pub description: String,
-    pub is_destructive: bool,
-}
-
-/// Action plan from PLAN phase
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActionPlan {
-    pub steps: Vec<PlanStep>,
-    pub expected_outcome: String,
-    pub requires_approval: bool,
-    pub approval_tool: Option<String>,
-}
-
-/// Single step in the action plan
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PlanStep {
-    pub tool_name: String,
-    pub parameters: serde_json::Value,
-    pub description: String,
-    pub is_destructive: bool,
-}
-
-/// Single tool execution result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolResult {
-    pub tool_name: String,
-    pub success: bool,
-    pub output: serde_json::Value,
-    pub error: Option<String>,
-    pub duration_ms: u64,
-}
-
-/// Reflection from REFLECT phase
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Reflection {
-    pub score: f32, // 0.0 to 1.0
-    pub assessment: String,
-    pub missing_info: Vec<String>,
-    pub should_replan: bool,
-}
-
-/// Step snapshot for history
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StepSnapshot {
-    pub phase: WorkflowPhase,
-    pub timestamp: DateTime<Utc>,
-    pub data: serde_json::Value,
-}
-
-/// Pending approval
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingApproval {
-    pub tool_name: String,
-    pub approved: bool,
-    pub approver_id: Option<Uuid>,
-    pub comment: Option<String>,
-    pub approved_at: Option<DateTime<Utc>>,
-}
-
-/// Human approval signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanApprovalSignal {
-    pub run_id: Uuid,
-    pub approver_user_id: Uuid,
-    pub tool_name: String,
-    pub decision: ApprovalDecision,
-    pub comment: Option<String>,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Approval decision
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ApprovalDecision {
-    Approve,
-    Reject,
-}
-
-/// Human rejection signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanRejectionSignal {
-    pub tool_name: String,
-    pub approver_user_id: Uuid,
-    pub comment: String,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Additional context signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdditionalContextSignal {
-    pub context: serde_json::Value,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Agent result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum AgentResult {
-    Success(ActResult),
-    Failed(String),
-    MaxCyclesExceeded,
-    ApprovalRejected(String),
-}
-
-/// Agent error
-#[derive(thiserror::Error, Debug)]
-pub enum AgentError {
-    #[error("Max cycles exceeded")]
-    MaxCyclesExceeded,
-    #[error("Approval rejected: {0}")]
-    ApprovalRejected(String),
-    #[error("Tool execution failed: {0}")]
-    ToolFailed(String),
-    #[error("Model error: {0}")]
-    ModelError(#[from] crate::model_gw::error::ModelError),
-    #[error("RAG error: {0}")]
-    RagError(#[from] crate::rag::error::RAGError),
-    #[error("Temporal error: {0}")]
-    TemporalError(String),
-}
-
-/// Human rejection signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanRejectionSignal {
-    pub tool_name: String,
-    pub approver_user_id: Uuid,
-    pub comment: String,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Additional context signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdditionalContextSignal {
-    pub context: serde_json::Value,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Agent context passed to activities
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentContext {
-    pub tenant_id: Uuid,
-    pub user_id: Uuid,
-    pub entity_id: Option<Uuid>,
-    pub roles: Vec<String>,
-    pub run_id: Uuid,
-}
-
-/// Input for starting an agent workflow
-#[derive(Clone, Serialize, Deserialize)]
-pub struct AgentInput {
-    pub agent_type: String,
-    pub task: String,
-    pub context: AgentContext,
-}
-
-/// Result from ACT phase
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActResult {
-    pub tool_results: Vec<ToolResult>,
-    pub is_complete: bool,
-    pub error: Option<String>,
-}
-
-/// Single tool execution result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolResult {
-    pub tool_name: String,
-    pub success: bool,
-    pub output: serde_json::Value,
-    pub error: Option<String>,
-    pub duration_ms: u64,
-}
-
-/// Reflection from REFLECT phase
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Reflection {
-    pub score: f32, // 0.0 to 1.0
-    pub assessment: String,
-    pub missing_info: Vec<String>,
-    pub should_replan: bool,
-}
-
-/// Step snapshot for history
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StepSnapshot {
-    pub phase: WorkflowPhase,
-    pub timestamp: DateTime<Utc>,
-    pub data: serde_json::Value,
-}
-
-/// Pending approval
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PendingApproval {
-    pub tool_name: String,
-    pub approved: bool,
-    pub approver_id: Option<Uuid>,
-    pub comment: Option<String>,
-    pub approved_at: Option<DateTime<Utc>>,
-}
-
-/// Human approval signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanApprovalSignal {
-    pub run_id: Uuid,
-    pub approver_user_id: Uuid,
-    pub tool_name: String,
-    pub decision: ApprovalDecision,
-    pub comment: Option<String>,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Approval decision
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum ApprovalDecision {
-    Approve,
-    Reject,
-}
-
-/// Human rejection signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HumanRejectionSignal {
-    pub tool_name: String,
-    pub approver_user_id: Uuid,
-    pub comment: String,
-    pub timestamp: DateTime<Utc>,
-}
-
-/// Additional context signal
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AdditionalContextSignal {
-    pub context: serde_json::Value,
-    pub timestamp: DateTime<Utc>,
+    #[error("Internal error: {0}")]
+    Internal(String),
 }

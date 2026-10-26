@@ -1,9 +1,6 @@
 use std::time::Instant;
 
 use axum::{extract::Request, middleware::Next, response::Response};
-use tower_http::request_id::MakeRequestUuid;
-
-pub use MakeRequestUuid as RequestIdLayer;
 
 /// Structured access log: method, path, status, latency, request_id.
 /// Never logs Authorization headers or bodies (spec §4.5).

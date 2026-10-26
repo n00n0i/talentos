@@ -4,7 +4,7 @@
 use futures_util::future::BoxFuture;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use sqlx::{Postgres, Transaction};
-use talents_kernel::TenantContext;
+use talentos_kernel::TenantContext;
 
 pub struct TenantPool {
     inner: PgPool,
@@ -28,9 +28,7 @@ impl TenantPool {
     /// BYPASSRLS-only: use exclusively for the login / refresh-token bootstrap lookup,
     /// where the tenant is not yet known and the query must filter explicitly by
     /// (tenant_slug_or_id, email). Never call this for any other purpose — it skips RLS.
-    pub async fn acquire_raw(
-        &self,
-    ) -> Result<sqlx::pool::PooledConnection<'_, Postgres>, sqlx::Error> {
+    pub async fn acquire_raw(&self) -> Result<sqlx::pool::PoolConnection<Postgres>, sqlx::Error> {
         self.inner.acquire().await
     }
 
@@ -41,9 +39,11 @@ impl TenantPool {
         &self,
         ctx: &TenantContext,
         f: F,
-    ) -> Result<T, talents_authz::AuthError>
+    ) -> Result<T, talentos_authz::AuthError>
     where
-        F: for<'a> FnOnce(&mut Transaction<'a, Postgres>) -> BoxFuture<'a, Result<T, talents_authz::AuthError>>,
+        F: for<'a> FnOnce(
+            &mut Transaction<'a, Postgres>,
+        ) -> BoxFuture<'a, Result<T, talentos_authz::AuthError>>,
     {
         let mut tx = self.inner.begin().await.map_err(db_err)?;
         // Must be the first statement in the tx — see critical invariant, spec §1.2.
@@ -59,12 +59,15 @@ impl TenantPool {
 
     /// Health probe: SELECT 1 with caller-supplied timeout handled outside.
     pub async fn ping(&self) -> Result<(), sqlx::Error> {
-        sqlx::query("SELECT 1").execute(&self.inner).await.map(|_| ())
+        sqlx::query("SELECT 1")
+            .execute(&self.inner)
+            .await
+            .map(|_| ())
     }
 }
 
-fn db_err(e: sqlx::Error) -> talents_authz::AuthError {
+fn db_err(e: sqlx::Error) -> talentos_authz::AuthError {
     tracing::error!(error = %e, "database error");
     // B7/M8: DB failures are 500s, never 401s — outages must not masquerade as bad passwords.
-    talents_authz::AuthError::Internal(format!("db: {}", e))
+    talentos_authz::AuthError::Internal(format!("db: {}", e))
 }

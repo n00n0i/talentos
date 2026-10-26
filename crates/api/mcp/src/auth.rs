@@ -14,7 +14,7 @@
 //! - The function is the ONLY entry point; tools must not construct contexts themselves.
 
 use rmcp::model::Extensions;
-use talents_kernel::TenantContext;
+use talentos_kernel::TenantContext;
 
 /// Errors returned when the MCP request metadata cannot produce a valid TenantContext.
 #[derive(Debug, thiserror::Error)]

@@ -12,7 +12,7 @@ use rmcp::{
     ErrorData,
 };
 use std::sync::Arc;
-use talents_db::TenantPool;
+use talentos_db::TenantPool;
 
 pub struct McpServer {
     pub pool: Arc<TenantPool>,

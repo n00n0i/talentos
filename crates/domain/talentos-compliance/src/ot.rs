@@ -1,7 +1,7 @@
+use crate::error::ComplianceError;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
-use crate::error::ComplianceError;
 
 /// Overtime (OT) rules per Thai Labour Protection Act.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,8 +35,14 @@ pub fn calculate_ot(
     holiday_hours: Decimal,
     rules: &OtRules,
 ) -> Result<Decimal, ComplianceError> {
-    if hourly_rate.is_sign_negative() || weekday_hours.is_sign_negative() || weekend_hours.is_sign_negative() || holiday_hours.is_sign_negative() {
-        return Err(ComplianceError::NegativeAmount { field: "ot_inputs".into() });
+    if hourly_rate.is_sign_negative()
+        || weekday_hours.is_sign_negative()
+        || weekend_hours.is_sign_negative()
+        || holiday_hours.is_sign_negative()
+    {
+        return Err(ComplianceError::NegativeAmount {
+            field: "ot_inputs".into(),
+        });
     }
 
     let total_hours = weekday_hours + weekend_hours + holiday_hours;

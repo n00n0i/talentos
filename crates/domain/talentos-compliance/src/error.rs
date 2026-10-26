@@ -16,5 +16,9 @@ pub enum ComplianceError {
     PeriodMismatch { reason: String },
 
     #[error("statutory limit exceeded: {limit_name} limit of {max_allowed} reached, got {actual}")]
-    LimitExceeded { limit_name: String, max_allowed: String, actual: String },
+    LimitExceeded {
+        limit_name: String,
+        max_allowed: String,
+        actual: String,
+    },
 }

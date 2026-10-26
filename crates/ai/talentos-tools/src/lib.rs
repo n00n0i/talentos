@@ -3,5 +3,5 @@
 pub mod registry;
 pub mod tools;
 
-pub use registry::{ToolRegistry, AgentTool, ToolContext};
+pub use registry::{AgentTool, ToolContext, ToolRegistry};
 pub use tools::*;

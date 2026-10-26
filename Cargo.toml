@@ -5,16 +5,20 @@ members = [
     "crates/core/authz",
     "crates/infra/db",
     "crates/api/gateway",
-    "crates/api/graphql",
+    # TODO(mcp+graphql): scaffolded against unverified rmcp 3.x / async-graphql APIs.
+    # Re-enable once rewritten against the real crate APIs (see docs/qa/final-report.md).
+    # "crates/api/graphql",
     "crates/domain/talentos-compliance",
     "crates/domain/talentos-payroll",
-    "crates/services/talentos-worker",
-    "crates/api/mcp",
+    # TODO(temporal): worker is a Temporal worker; SDK 1.x wiring is unverified.
+    # "crates/services/talentos-worker",
+    # "crates/api/mcp",
     "crates/ai/talentos-model-gw",
     "crates/ai/talentos-rag",
     "crates/ai/talentos-agent",
     "crates/ai/talentos-tools",
-    "crates/ai/talentos-memory",
+    # TODO(memory): depends on the semantica crate, which is not published to crates.io.
+    # "crates/ai/talentos-memory",
 ]
 
 [workspace.package]
@@ -35,15 +39,15 @@ anyhow = "1"
 rust_decimal = { version = "1", features = ["serde-with-str", "maths"] }
 rust_decimal_macros = { version = "1" }
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "decimal"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "uuid", "chrono", "json", "rust_decimal", "ipnetwork"] }
 # UUID / time
-uuid = { version = "1", features = ["v7", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 # Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 # Config
-dotenvy = "0.4"
+dotenvy = "0.15"
 # JWT
 jsonwebtoken = "9"
 # Password hashing
@@ -65,8 +69,7 @@ fred = { version = "10", features = ["i-keys"] }
 # HTTP client
 reqwest = { version = "0.12", features = ["json", "stream"] }
 # Temporal
-temporal-sdk = "0.4"
-temporal-client = "0.4"
+temporalio-sdk = "1.1"
 # Token counting
 tiktoken-rs = "0.4"
 # PDF extraction
@@ -79,14 +82,3 @@ async-trait = "0.1"
 schemars = "0.8"
 # Testing
 cargo-nextest = "0.9"
-# Hindsight - Agent Memory System
-hindsight-client = "0.5"
-# Semantica - Graph-Native Context Infrastructure
-semantica = { version = "0.5", features = ["full", "oxigraph", "faiss", "advanced-analytics"] }
-# Regex for validation
-regex = "1.10"
-
-[profile.release]
-lto = "thin"
-codegen-units = 1
-strip = true

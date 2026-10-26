@@ -1,6 +1,4 @@
-// Re-export errors from other crates
-pub use talents_model_gw::error::ModelError;
-pub use talents_rag::error::RAGError;
-
-// Re-export shared error type
+// Re-export the shared agent error so downstream crates have one import path.
 pub use talentos_kernel::shared::AgentError;
+pub use talentos_model_gw::ModelError;
+pub use talentos_rag::RAGError;

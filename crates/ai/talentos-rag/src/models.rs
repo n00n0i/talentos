@@ -1,33 +1,33 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
-/// Document in the RAG store
+pub use talentos_kernel::shared::{Citation, DocReference};
+
+/// Document in the RAG store (`ai_documents`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub id: Uuid,
     pub tenant_id: Uuid,
     pub entity_id: Option<Uuid>,
     pub content_hash: String,
-    pub doc_type: DocType,
+    pub doc_type: String,
     pub source_path: String,
     pub metadata: serde_json::Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-/// Document type
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum DocType {
-    Policy,
-    Regulation,
-    Payslip,
-    ApiSpec,
-    Handbook,
+/// A text chunk ready for embedding (pre-persistence).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Chunk {
+    pub document_id: Uuid,
+    pub chunk_index: i32,
+    pub content: String,
+    pub word_count: i32,
 }
 
-/// Document chunk with embedding
+/// Persisted chunk with optional embedding (`ai_document_chunks`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChunk {
     pub id: i64,
@@ -37,9 +37,12 @@ pub struct DocumentChunk {
     pub embedding: Option<Vec<f32>>,
     pub word_count: i32,
     pub created_at: DateTime<Utc>,
+    pub source_path: Option<String>,
+    pub vector_score: Option<f32>,
+    pub keyword_score: Option<f32>,
 }
 
-/// Chunk with search scores
+/// Chunk with fused ranking scores.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RankedChunk {
     pub chunk: DocumentChunk,
@@ -48,16 +51,16 @@ pub struct RankedChunk {
     pub rrf_score: f32,
 }
 
-/// Search filters
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// Filters applied to both retrieval arms.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SearchFilters {
-    pub doc_type: Option<DocType>,
+    pub doc_type: Option<String>,
     pub entity_id: Option<Uuid>,
     pub date_from: Option<chrono::NaiveDate>,
     pub date_to: Option<chrono::NaiveDate>,
 }
 
-/// Hybrid search result
+/// Result of a hybrid search.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HybridSearchResult {
     pub chunks: Vec<RankedChunk>,
@@ -66,24 +69,7 @@ pub struct HybridSearchResult {
     pub total_hits: usize,
 }
 
-/// Citation for LLM context
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Citation {
-    pub chunk_text: String,
-    pub source_doc: DocReference,
-    pub similarity: f32,
-    pub chunk_index: usize,
-}
-
-/// Document reference for citations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocReference {
-    pub tenant_id: Uuid,
-    pub doc_id: Uuid,
-    pub source_path: String,
-}
-
-/// Chunking configuration
+/// Recursive-split chunking configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChunkingConfig {
     pub chunk_size: usize,

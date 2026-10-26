@@ -5,14 +5,17 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use talents_authz::jwt;
-use talents_kernel::TenantContext;
+use talentos_authz::jwt;
+use talentos_kernel::TenantContext;
 
 use crate::dto::responses::ErrorResponse;
 use crate::state::AppState;
 
 /// Extract Bearer token → verify → inject TenantContext into request extensions.
 /// Skipped for public routes by router nesting; if reached without a valid token, short-circuit 401.
+// axum's middleware signature fixes `Result<Response, Response>`; the Err arm is a
+// ready-to-send response, so boxing it would only add indirection.
+#[allow(clippy::result_large_err)]
 pub async fn auth_middleware(
     State(state): State<AppState>,
     mut req: Request,
@@ -32,42 +35,44 @@ pub async fn auth_middleware(
         jwt::verify_access_token(token, &state.jwt_secret).map_err(auth_error_response)?;
 
     req.extensions_mut().insert(ctx);
-    Ok(next.await)
+    Ok(next.run(req).await)
 }
 
 /// Typed extractor so handlers can't forget auth: if a handler takes `Authed`,
 /// the middleware must have populated TenantContext (spec §5).
 pub struct Authed(pub TenantContext);
 
+#[async_trait::async_trait]
 impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Authed {
     type Rejection = Response;
-    fn from_request_parts(
+    async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
         _state: &S,
-    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
-        async move {
-            parts
-                .extensions
-                .get::<TenantContext>()
-                .cloned()
-                .map(Authed)
-                .ok_or_else(|| unauthorized_response("token_malformed"))
-        }
+    ) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<TenantContext>()
+            .cloned()
+            .map(Authed)
+            .ok_or_else(|| unauthorized_response("token_malformed"))
     }
 }
 
 fn unauthorized_response(code: &str) -> Response {
-    ErrorResponse {
-        error: code.into(),
-        message: "Invalid or missing access token".into(),
-        details: vec![],
-        request_id: uuid::Uuid::new_v4().to_string(),
-        retry_after_seconds: None,
-    }
-    .into_response()
+    (
+        axum::http::StatusCode::UNAUTHORIZED,
+        axum::Json(ErrorResponse {
+            error: code.into(),
+            message: "Invalid or missing access token".into(),
+            details: vec![],
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
+        }),
+    )
+        .into_response()
 }
 
-fn auth_error_response(e: talents_authz::AuthError) -> Response {
+fn auth_error_response(e: talentos_authz::AuthError) -> Response {
     (
         axum::http::StatusCode::from_u16(e.http_status()).unwrap(),
         axum::Json(ErrorResponse {
@@ -82,8 +87,8 @@ fn auth_error_response(e: talents_authz::AuthError) -> Response {
 }
 
 /// Never leak internal detail to clients (spec §4.5).
-fn safe_message(e: &talents_authz::AuthError) -> String {
-    use talents_authz::AuthError::*;
+fn safe_message(e: &talentos_authz::AuthError) -> String {
+    use talentos_authz::AuthError::*;
     match e {
         InvalidCredentials | AccountDisabled => "Invalid email or password".into(),
         TokenExpired => "Access token expired".into(),

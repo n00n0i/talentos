@@ -26,7 +26,8 @@ CREATE TABLE ai_document_chunks (
     content TEXT NOT NULL,
     embedding vector(1536),
     word_count INT NOT NULL,
-    tsv tsvector GENERATED ALWAYS AS (to_tsvector('thai', content)) STORED,
+    -- shortcut: 'simple' config, not real Thai tokenization; swap in pg_search/zhparser when Thai keyword recall matters
+    tsv tsvector GENERATED ALWAYS AS (to_tsvector('simple', content)) STORED,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(document_id, chunk_index)
 );

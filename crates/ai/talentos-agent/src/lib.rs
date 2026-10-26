@@ -1,11 +1,11 @@
-//! Agent Framework - Temporal workflow for Observe→Plan→Act→Reflect agent loops.
+//! Agent Framework - Observe → Plan → Act → Reflect loop for HR/payroll tasks.
 
-pub mod workflow;
 pub mod activities;
-pub mod states;
 pub mod error;
+pub mod states;
+pub mod workflow;
 
-pub use workflow::AgentWorkflow;
-pub use activities::{ObserveActivity, PlanActivity, ActActivity, ReflectActivity};
-pub use states::{WorkflowState, WorkflowPhase, Observation, ActionPlan, ActResult, Reflection, AgentResult};
+pub use activities::{ActActivity, ObserveActivity, PlanActivity, ReflectActivity};
 pub use error::AgentError;
+pub use states::*;
+pub use workflow::{AgentInput, AgentRunner, CycleTrace, RunReport};

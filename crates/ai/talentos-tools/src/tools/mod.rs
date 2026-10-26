@@ -1,43 +1,43 @@
 //! Built-in agent tools wrapping MCP tools - REAL IMPLEMENTATIONS
 
-use std::sync::Arc;
-use serde_json::Value;
-use talents_mcp::McpServer;
-use talents_model_gw::{HuakatiClient, ChatRequest, Message};
-use talents_db::TenantPool;
-use talents_kernel::{TenantId, UserId, EntityId};
-use talents_compliance::{
-    calculate_pnd_tax, PersonalAllowances, calculate_sso, SsoRules,
-    calculate_severance, SeveranceTier,
-    calculate_ot, OtRules,
-    calculate_pf, PfRules,
-};
-use talents_db::TenantPool;
 use crate::registry::{AgentTool, ToolContext, ToolResult};
-use sqlx::PgPool;
-use uuid::Uuid;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use tracing::{info, warn, error};
-use chrono::{NaiveDate, Utc};
-use std::collections::HashMap;
+use serde_json::Value;
+use sqlx::Row;
+use std::sync::Arc;
+use talentos_compliance::PersonalAllowances;
+use talentos_db::TenantPool;
+use talentos_model_gw::{ChatRequest, HuakatiClient, Message};
+use tracing::{error, info};
+use uuid::Uuid;
 
 /// Run payroll tool - REAL implementation
-pub struct RunPayrollTool {
-    pool: Arc<TenantPool>,
-    model_gw: Arc<HuakatiClient>,
-}
+pub struct RunPayrollTool;
 
 impl RunPayrollTool {
-    pub fn new(pool: Arc<TenantPool>, model_gw: Arc<HuakatiClient>) -> Self {
-        Self { pool, model_gw }
+    pub fn new() -> Self {
+        Self
     }
 }
 
+impl Default for RunPayrollTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait]
 impl AgentTool for RunPayrollTool {
-    fn name(&self) -> &str { "run_payroll" }
-    fn description(&self) -> &str { "Create and start a new payroll run. Requires explicit confirmation." }
-    fn is_destructive(&self) -> bool { true }
+    fn name(&self) -> &str {
+        "run_payroll"
+    }
+    fn description(&self) -> &str {
+        "Create and start a new payroll run. Requires explicit confirmation."
+    }
+    fn is_destructive(&self) -> bool {
+        true
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -54,7 +54,10 @@ impl AgentTool for RunPayrollTool {
     }
 
     async fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
-        let confirm = input.get("confirm").and_then(|v| v.as_bool()).unwrap_or(false);
+        let confirm = input
+            .get("confirm")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         if !confirm {
             return ToolResult {
                 success: false,
@@ -63,10 +66,31 @@ impl AgentTool for RunPayrollTool {
             };
         }
 
-        let period_start = input.get("period_start").and_then(|v| v.as_str()).unwrap_or("");
-        let period_end = input.get("period_end").and_then(|v| v.as_str()).unwrap_or("");
-        let payment_date = input.get("payment_date").and_then(|v| v.as_str()).unwrap_or("");
-        let entity_id = input.get("entity_id").and_then(|v| v.as_str()).unwrap_or("");
+        // Dates arrive as ISO strings from the LLM; reject anything unparseable.
+        let parse_date = |key: &str| {
+            input
+                .get(key)
+                .and_then(|v| v.as_str())
+                .and_then(|s| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+        };
+        let (Some(period_start), Some(period_end), Some(payment_date)) = (
+            parse_date("period_start"),
+            parse_date("period_end"),
+            parse_date("payment_date"),
+        ) else {
+            return ToolResult {
+                success: false,
+                output: Value::Null,
+                error: Some(
+                    "period_start, period_end and payment_date must be ISO dates (YYYY-MM-DD)"
+                        .to_string(),
+                ),
+            };
+        };
+        let entity_id = input
+            .get("entity_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         let tenant_id = ctx.tenant_id.0;
         let user_id = ctx.user_id.0;
@@ -87,15 +111,18 @@ impl AgentTool for RunPayrollTool {
             user_id,
             now
         )
-        .execute(&*ctx.db.pool())
+        .fetch_optional(ctx.db.pool())
         .await;
 
         match result {
             Ok(_) => {
                 // Trigger Temporal workflow for payroll calculation
                 // This would start the CalculatePayrollWorkflow
-                info!("Payroll run {} created, starting calculation workflow", run_id);
-                
+                info!(
+                    "Payroll run {} created, starting calculation workflow",
+                    run_id
+                );
+
                 ToolResult {
                     success: true,
                     output: serde_json::json!({
@@ -129,10 +156,17 @@ impl QueryEmployeeTool {
     }
 }
 
+#[async_trait::async_trait]
 impl AgentTool for QueryEmployeeTool {
-    fn name(&self) -> &str { "query_employee" }
-    fn description(&self) -> &str { "Search employees with filters. Applies PII masking." }
-    fn is_destructive(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "query_employee"
+    }
+    fn description(&self) -> &str {
+        "Search employees with filters. Applies PII masking."
+    }
+    fn is_destructive(&self) -> bool {
+        false
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -153,7 +187,7 @@ impl AgentTool for QueryEmployeeTool {
         let offset = input.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as i64;
 
         let tenant_id = ctx.tenant_id.0;
-        let entity_id = ctx.entity_id.map(|e| e.0);
+        let _entity_id = ctx.entity_id.map(|e| e.0);
 
         let mut query = r#"
             SELECT id, employee_code, first_name_th, last_name_th, first_name_en, last_name_en,
@@ -161,24 +195,29 @@ impl AgentTool for QueryEmployeeTool {
                    national_id, bank_account_number, bank_name, sso_number, pf_member
             FROM employees
             WHERE tenant_id = $1
-        "#.to_string();
+        "#
+        .to_string();
 
-        let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Postgres> + Send + Sync>> = vec![Box::new(tenant_id)];
+        let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Postgres> + Send + Sync>> =
+            vec![Box::new(tenant_id)];
         let mut param_idx = 2;
 
         if let Some(dept) = department {
-            query.push_str(&format!(" AND department = ${}", param_idx));
+            query.push_str(&format!(" AND department = ${param_idx}"));
             params.push(Box::new(dept.to_string()));
             param_idx += 1;
         }
 
         if let Some(st) = status {
-            query.push_str(&format!(" AND status = ${}", param_idx));
+            query.push_str(&format!(" AND status = ${param_idx}"));
             params.push(Box::new(st.to_string()));
-            param_idx += 1;
         }
 
-        query.push_str(&format!(" ORDER BY created_at DESC LIMIT ${} OFFSET ${}", params.len() + 1, params.len() + 2));
+        query.push_str(&format!(
+            " ORDER BY created_at DESC LIMIT ${} OFFSET ${}",
+            params.len() + 1,
+            params.len() + 2
+        ));
         params.push(Box::new(limit));
         params.push(Box::new(offset));
 
@@ -188,7 +227,7 @@ impl AgentTool for QueryEmployeeTool {
             .bind(tenant_id)
             .bind(limit)
             .bind(offset)
-            .fetch_all(&*self.pool.pool())
+            .fetch_all(self.pool.pool())
             .await;
 
         match rows {
@@ -234,7 +273,10 @@ impl AgentTool for QueryEmployeeTool {
 
 // Search policy tool (RAG) - REAL implementation
 pub struct SearchPolicyTool {
+    // Wired when policy search moves from the Observe activity into this tool.
+    #[allow(dead_code)]
     model_gw: Arc<HuakatiClient>,
+    #[allow(dead_code)]
     pool: Arc<TenantPool>,
 }
 
@@ -244,10 +286,17 @@ impl SearchPolicyTool {
     }
 }
 
+#[async_trait::async_trait]
 impl AgentTool for SearchPolicyTool {
-    fn name(&self) -> &str { "search_policy" }
-    fn description(&self) -> &str { "Search policy documents via RAG with citations." }
-    fn is_destructive(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "search_policy"
+    }
+    fn description(&self) -> &str {
+        "Search policy documents via RAG with citations."
+    }
+    fn is_destructive(&self) -> bool {
+        false
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -263,8 +312,8 @@ impl AgentTool for SearchPolicyTool {
 
     async fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
         let query = input.get("query").and_then(|v| v.as_str()).unwrap_or("");
-        let top_k = input.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-        let tenant_id = ctx.tenant_id.0;
+        let _top_k = input.get("top_k").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+        let _tenant_id = ctx.tenant_id.0;
 
         // Use RAG hybrid search
         // This would use the HybridSearch from talentos-rag
@@ -282,17 +331,32 @@ impl AgentTool for SearchPolicyTool {
     }
 }
 
-/// Calculate tax tool - REAL implementation using talents_compliance
+/// Calculate tax tool - REAL implementation using talentos_compliance
 pub struct CalculateTaxTool;
 
 impl CalculateTaxTool {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
+impl Default for CalculateTaxTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait]
 impl AgentTool for CalculateTaxTool {
-    fn name(&self) -> &str { "calculate_tax" }
-    fn description(&self) -> &str { "Calculate Thai PND tax preview. Pure calculation, no DB write." }
-    fn is_destructive(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "calculate_tax"
+    }
+    fn description(&self) -> &str {
+        "Calculate Thai PND tax preview. Pure calculation, no DB write."
+    }
+    fn is_destructive(&self) -> bool {
+        false
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -310,16 +374,30 @@ impl AgentTool for CalculateTaxTool {
     }
 
     async fn execute(&self, input: Value, _ctx: &ToolContext) -> ToolResult {
-        use talents_compliance::{calculate_pnd_tax, PersonalAllowances};
         use rust_decimal::Decimal;
-        use rust_decimal_macros::dec;
+        use talentos_compliance::{calculate_pnd_tax, PersonalAllowances};
 
-        let taxable_annual = input.get("taxable_annual").and_then(|v| v.as_str()).unwrap_or("0");
-        let personal = input.get("personal").and_then(|v| v.as_str()).unwrap_or("30000");
+        let taxable_annual = input
+            .get("taxable_annual")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0");
+        let personal = input
+            .get("personal")
+            .and_then(|v| v.as_str())
+            .unwrap_or("30000");
         let spouse_str = input.get("spouse").and_then(|v| v.as_str()).unwrap_or("0");
-        let child_count = input.get("child_count").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-        let insurance_paid = input.get("insurance_paid").and_then(|v| v.as_str()).unwrap_or("0");
-        let pension_paid = input.get("pension_paid").and_then(|v| v.as_str()).unwrap_or("0");
+        let child_count = input
+            .get("child_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let insurance_paid = input
+            .get("insurance_paid")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0");
+        let pension_paid = input
+            .get("pension_paid")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0");
 
         let taxable = taxable_annual.parse::<Decimal>().unwrap_or(Decimal::ZERO);
         let personal = personal.parse::<Decimal>().unwrap_or(Decimal::ZERO);
@@ -364,10 +442,17 @@ impl DetectAnomaliesTool {
     }
 }
 
+#[async_trait::async_trait]
 impl AgentTool for DetectAnomaliesTool {
-    fn name(&self) -> &str { "detect_anomalies" }
-    fn description(&self) -> &str { "Run anomaly detection rules on payroll run data." }
-    fn is_destructive(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "detect_anomalies"
+    }
+    fn description(&self) -> &str {
+        "Run anomaly detection rules on payroll run data."
+    }
+    fn is_destructive(&self) -> bool {
+        false
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -380,9 +465,9 @@ impl AgentTool for DetectAnomaliesTool {
         })
     }
 
-    async fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
+    async fn execute(&self, input: Value, _ctx: &ToolContext) -> ToolResult {
         let run_id_str = input.get("run_id").and_then(|v| v.as_str()).unwrap_or("");
-        let run_id = match Uuid::parse_str(run_id_str) {
+        let _run_id = match Uuid::parse_str(run_id_str) {
             Ok(id) => id,
             Err(_) => {
                 return ToolResult {
@@ -400,7 +485,7 @@ impl AgentTool for DetectAnomaliesTool {
                FROM payslips WHERE payroll_run_id = $1"#,
             Uuid::parse_str(run_id_str).unwrap()
         )
-        .fetch_all(&*self.pool.pool())
+        .fetch_all(self.pool.pool())
         .await;
 
         match rows {
@@ -411,19 +496,20 @@ impl AgentTool for DetectAnomaliesTool {
 
                 for payslip in &payslips {
                     employee_count += 1;
-                    // Check OT hours (would need ot_hours field, using ot_amount as proxy)
-                    if let Some(ot_amount) = payslip.ot_amount {
-                        total_ot_hours += ot_amount;
-                    }
+                    total_ot_hours += payslip.ot_amount;
                 }
 
-                let avg_ot = if employee_count > 0 { total_ot_hours / Decimal::from(payslips.len() as i32) } else { Decimal::ZERO };
+                let _avg_ot = if employee_count > 0 {
+                    total_ot_hours / Decimal::from(payslips.len() as i32)
+                } else {
+                    Decimal::ZERO
+                };
 
                 // Detect anomalies
                 for payslip in &payslips {
                     // OT Excess (> 40 hours/month equivalent)
-                    if let Some(ot_amount) = payslip.ot_amount {
-                        let ot_hours_equiv = ot_amount / (Decimal::from(30) * dec!(1.5)); // rough conversion
+                    {
+                        let ot_hours_equiv = payslip.ot_amount / (Decimal::from(30) * dec!(1.5));
                         if ot_hours_equiv > dec!(40) {
                             anomalies.push(serde_json::json!({
                                 "code": "ot_excess",
@@ -445,8 +531,8 @@ impl AgentTool for DetectAnomaliesTool {
                     }
 
                     // SSO cap hit
-                    if let Some(base_salary) = payslip.base_salary {
-                        if base_salary >= dec!(15000) {
+                    {
+                        if payslip.base_salary >= dec!(15000) {
                             anomalies.push(serde_json::json!({
                                 "code": "sso_cap_hit",
                                 "severity": "warning",
@@ -493,10 +579,17 @@ impl DraftLeavePolicyTool {
     }
 }
 
+#[async_trait::async_trait]
 impl AgentTool for DraftLeavePolicyTool {
-    fn name(&self) -> &str { "draft_leave_policy" }
-    fn description(&self) -> &str { "Draft leave policy using LLM, then validate against Thai labor law." }
-    fn is_destructive(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "draft_leave_policy"
+    }
+    fn description(&self) -> &str {
+        "Draft leave policy using LLM, then validate against Thai labor law."
+    }
+    fn is_destructive(&self) -> bool {
+        false
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -510,8 +603,11 @@ impl AgentTool for DraftLeavePolicyTool {
     }
 
     async fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
-        let requirements = input.get("requirements").and_then(|v| v.as_str()).unwrap_or("");
-        let tenant_id = ctx.tenant_id.0;
+        let requirements = input
+            .get("requirements")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let _tenant_id = ctx.tenant_id.0;
 
         // Use LLM to draft policy
         let prompt = format!(
@@ -525,22 +621,40 @@ impl AgentTool for DraftLeavePolicyTool {
         let request = ChatRequest {
             model: "qwen2.5-72b-instruct".to_string(),
             messages: vec![
-                Message { role: "system".to_string(), content: "You are a Thai HR legal expert. Draft compliant leave policies.".to_string() },
-                Message { role: "user".to_string(), content: prompt },
+                Message {
+                    role: "system".to_string(),
+                    tool_calls: None,
+                    content: "You are a Thai HR legal expert. Draft compliant leave policies."
+                        .to_string(),
+                },
+                Message {
+                    role: "user".to_string(),
+                    tool_calls: None,
+                    content: prompt,
+                },
             ],
             tools: None,
             stream: Some(false),
+            temperature: Some(0.3),
+            max_tokens: Some(2048),
         };
 
-        let response = self.model_gw.chat(&ctx.tenant_id.to_string(), &request).await;
+        let response = self
+            .model_gw
+            .chat_with_request(&ctx.tenant_id.to_string(), request)
+            .await;
 
         match response {
             Ok(response) => {
-                let content = response.choices.first().map(|c| c.message.content.clone()).unwrap_or_default();
-                
+                let content = response
+                    .choices
+                    .first()
+                    .map(|c| c.message.content.clone())
+                    .unwrap_or_default();
+
                 // Validate against Thai labor law using ontology
                 let validation = validate_leave_policy(&content);
-                
+
                 ToolResult {
                     success: true,
                     output: serde_json::json!({
@@ -554,7 +668,7 @@ impl AgentTool for DraftLeavePolicyTool {
                 success: false,
                 output: Value::Null,
                 error: Some(format!("Failed to draft policy: {}", e)),
-            }
+            },
         }
     }
 }
@@ -571,10 +685,17 @@ impl SummarizePayrollRunTool {
     }
 }
 
+#[async_trait::async_trait]
 impl AgentTool for SummarizePayrollRunTool {
-    fn name(&self) -> &str { "summarize_payroll_run" }
-    fn description(&self) -> &str { "Aggregate payroll totals, top anomalies, and narrative summary." }
-    fn is_destructive(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "summarize_payroll_run"
+    }
+    fn description(&self) -> &str {
+        "Aggregate payroll totals, top anomalies, and narrative summary."
+    }
+    fn is_destructive(&self) -> bool {
+        false
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -600,12 +721,9 @@ impl AgentTool for SummarizePayrollRunTool {
         };
 
         // Get payroll run
-        let run = sqlx::query!(
-            "SELECT * FROM payroll_runs WHERE id = $1",
-            run_id
-        )
-        .fetch_optional(&*self.pool.pool())
-        .await;
+        let run = sqlx::query!("SELECT * FROM payroll_runs WHERE id = $1", run_id)
+            .fetch_optional(self.pool.pool())
+            .await;
 
         let run = match run {
             Ok(Some(r)) => r,
@@ -626,12 +744,10 @@ impl AgentTool for SummarizePayrollRunTool {
         };
 
         // Get payslips
-        let payslips = sqlx::query!(
-            "SELECT * FROM payslips WHERE payroll_run_id = $1",
-            run_id
-        )
-        .fetch_all(&*self.pool.pool())
-        .await.unwrap_or_default();
+        let payslips = sqlx::query!("SELECT * FROM payslips WHERE payroll_run_id = $1", run_id)
+            .fetch_all(self.pool.pool())
+            .await
+            .unwrap_or_default();
 
         // Aggregate totals
         let total_gross = payslips.iter().map(|p| p.gross_earnings).sum::<Decimal>();
@@ -642,7 +758,10 @@ impl AgentTool for SummarizePayrollRunTool {
         let total_employees = payslips.len();
 
         // Get anomalies
-        let anomalies: Vec<_> = payslips.iter().flat_map(|p| p.anomalies.as_array().unwrap_or(&vec![]).clone()).collect();
+        let anomalies: Vec<_> = payslips
+            .iter()
+            .flat_map(|p| p.anomalies.as_array().unwrap_or(&vec![]).clone())
+            .collect();
 
         // Generate narrative using LLM
         let prompt = format!(
@@ -656,24 +775,48 @@ impl AgentTool for SummarizePayrollRunTool {
             Total PF: {} THB
             Anomalies: {}
             Write a professional Thai summary."#,
-            run.period_start, run.period_end, total_employees,
-            total_gross, total_net, total_tax, total_sso, total_pf,
+            run.period_start,
+            run.period_end,
+            total_employees,
+            total_gross,
+            total_net,
+            total_tax,
+            total_sso,
+            total_pf,
             serde_json::to_string(&anomalies).unwrap_or_default()
         );
 
         let request = ChatRequest {
             model: "qwen2.5-72b-instruct".to_string(),
             messages: vec![
-                Message { role: "system".to_string(), content: "You are a Thai payroll expert. Write concise executive summaries.".to_string() },
-                Message { role: "user".to_string(), content: prompt },
+                Message {
+                    role: "system".to_string(),
+                    tool_calls: None,
+                    content: "You are a Thai payroll expert. Write concise executive summaries."
+                        .to_string(),
+                },
+                Message {
+                    role: "user".to_string(),
+                    tool_calls: None,
+                    content: prompt,
+                },
             ],
             tools: None,
             stream: Some(false),
+            temperature: Some(0.3),
+            max_tokens: Some(1024),
         };
 
-        let narrative = self.model_gw.chat(&ctx.tenant_id.to_string(), &request)
+        let narrative = self
+            .model_gw
+            .chat_with_request(&ctx.tenant_id.to_string(), request)
             .await
-            .map(|r| r.choices.first().map(|c| c.message.content.clone()).unwrap_or_default())
+            .map(|r| {
+                r.choices
+                    .first()
+                    .map(|c| c.message.content.clone())
+                    .unwrap_or_default()
+            })
             .unwrap_or_else(|_| "Summary generation failed".to_string());
 
         ToolResult {
@@ -707,10 +850,17 @@ impl CheckComplianceTool {
     }
 }
 
+#[async_trait::async_trait]
 impl AgentTool for CheckComplianceTool {
-    fn name(&self) -> &str { "check_compliance" }
-    fn description(&self) -> &str { "Cross-check tax and SSO rules; return compliance report." }
-    fn is_destructive(&self) -> bool { false }
+    fn name(&self) -> &str {
+        "check_compliance"
+    }
+    fn description(&self) -> &str {
+        "Cross-check tax and SSO rules; return compliance report."
+    }
+    fn is_destructive(&self) -> bool {
+        false
+    }
 
     fn input_schema(&self) -> Value {
         serde_json::json!({
@@ -724,8 +874,21 @@ impl AgentTool for CheckComplianceTool {
     }
 
     async fn execute(&self, input: Value, ctx: &ToolContext) -> ToolResult {
-        let employee_id_str = input.get("employee_id").and_then(|v| v.as_str()).unwrap_or("");
+        let employee_id_str = input
+            .get("employee_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         let period_str = input.get("period").and_then(|v| v.as_str()).unwrap_or("");
+        let period_date = match chrono::NaiveDate::parse_from_str(period_str, "%Y-%m-%d") {
+            Ok(d) => d,
+            Err(_) => {
+                return ToolResult {
+                    success: false,
+                    output: Value::Null,
+                    error: Some("period must be an ISO date (YYYY-MM-DD)".to_string()),
+                };
+            }
+        };
 
         let employee_id = match Uuid::parse_str(employee_id_str) {
             Ok(id) => id,
@@ -741,9 +904,10 @@ impl AgentTool for CheckComplianceTool {
         // Get employee
         let emp = sqlx::query!(
             "SELECT * FROM employees WHERE id = $1 AND tenant_id = $2",
-            employee_id, ctx.tenant_id.0
+            employee_id,
+            ctx.tenant_id.0
         )
-        .fetch_optional(&*self.pool.pool())
+        .fetch_optional(self.pool.pool())
         .await;
 
         let employee = match emp {
@@ -767,9 +931,9 @@ impl AgentTool for CheckComplianceTool {
         // Get payslip for period
         let payslip = sqlx::query!(
             "SELECT * FROM payslips WHERE employee_id = $1 AND payroll_run_id IN (SELECT id FROM payroll_runs WHERE period_start <= $2 AND period_end >= $2)",
-            employee_id, period_str
+            employee_id, period_date
         )
-        .fetch_optional(&*self.pool.pool())
+        .fetch_optional(self.pool.pool())
         .await;
 
         let payslip = match payslip {
@@ -794,9 +958,10 @@ impl AgentTool for CheckComplianceTool {
         let mut issues = Vec::new();
 
         // Tax compliance
-        let base_salary = employee.base_salary.unwrap_or(Decimal::ZERO);
+        let base_salary = employee.base_salary;
         let annual_income = base_salary * dec!(12);
-        let tax_calc = talents_compliance::calculate_pnd_tax(annual_income, &PersonalAllowances::default());
+        let tax_calc =
+            talentos_compliance::calculate_pnd_tax(annual_income, &PersonalAllowances::default());
         let expected_tax = tax_calc.unwrap_or(Decimal::ZERO) * dec!(12);
         let actual_tax = payslip.tax_withheld * dec!(12);
         if (expected_tax - actual_tax).abs() > dec!(100) {
@@ -808,20 +973,19 @@ impl AgentTool for CheckComplianceTool {
         }
 
         // SSO compliance
-        if let Some(base_salary) = employee.base_salary {
-            if base_salary > dec!(15000) {
-                issues.push(serde_json::json!({
-                    "type": "sso_cap",
-                    "severity": "info",
-                    "message": "Base salary exceeds SSO wage base cap (฿15,000)"
-                }));
-            }
+        if employee.base_salary > dec!(15000) {
+            issues.push(serde_json::json!({
+                "type": "sso_cap",
+                "severity": "info",
+                "message": "Base salary exceeds SSO wage base cap (฿15,000)"
+            }));
         }
 
         // PF compliance
         if employee.pf_member {
-            if let Some(pf_emp) = payslip.pf_employee {
-                let expected = employee.base_salary.unwrap_or(Decimal::ZERO) * dec!(0.05);
+            {
+                let pf_emp = payslip.pf_employee;
+                let expected = employee.base_salary * dec!(0.05);
                 if (pf_emp - expected).abs() > dec!(10) {
                     issues.push(serde_json::json!({
                         "type": "pf_discrepancy",
@@ -848,7 +1012,7 @@ impl AgentTool for CheckComplianceTool {
 /// PII masking functions
 fn mask_national_id(nid: &str) -> String {
     if nid.len() >= 13 {
-        format!("{}********{}", &nid[..1], &nid[nid.len()-1..])
+        format!("{}********{}", &nid[..1], &nid[nid.len() - 1..])
     } else {
         "**********".to_string()
     }
@@ -856,7 +1020,7 @@ fn mask_national_id(nid: &str) -> String {
 
 fn mask_bank_account(ba: &str) -> String {
     if ba.len() >= 4 {
-        format!("****{}", &ba[ba.len()-4..])
+        format!("****{}", &ba[ba.len() - 4..])
     } else {
         "****".to_string()
     }
@@ -864,7 +1028,7 @@ fn mask_bank_account(ba: &str) -> String {
 
 fn mask_sso(sso: &str) -> String {
     if sso.len() >= 4 {
-        format!("****{}", &sso[sso.len()-4..])
+        format!("****{}", &sso[sso.len() - 4..])
     } else {
         "****".to_string()
     }
@@ -872,8 +1036,8 @@ fn mask_sso(sso: &str) -> String {
 
 /// Validate leave policy against Thai labor law
 fn validate_leave_policy(policy: &str) -> Value {
-    let mut issues = Vec::new();
-    let mut warnings = Vec::new();
+    let issues: Vec<Value> = Vec::new();
+    let mut warnings: Vec<Value> = Vec::new();
 
     // Check for required leave types
     let required_leaves = ["annual", "sick", "maternity", "paternity", "personal"];
@@ -934,8 +1098,20 @@ fn validate_leave_policy(policy: &str) -> Value {
     })
 }
 
-/// Validate leave policy function for GraphQL resolver
-fn validate_leave_policy_str(policy: &str) -> Value {
-    validate_leave_policy(policy)
-}
+/// Registry with every built-in tool, ready for `AgentRunner`.
+/// Tools that need shared state get the same handles the agent already holds.
+pub fn default_registry(
+    model_gw: Arc<HuakatiClient>,
+    pool: Arc<TenantPool>,
+) -> crate::registry::ToolRegistry {
+    let mut registry = crate::registry::ToolRegistry::new();
+    registry.register(RunPayrollTool::new());
+    registry.register(QueryEmployeeTool::new(pool.clone()));
+    registry.register(SearchPolicyTool::new(model_gw.clone(), pool.clone()));
+    registry.register(CalculateTaxTool::new());
+    registry.register(DetectAnomaliesTool::new(pool.clone()));
+    registry.register(DraftLeavePolicyTool::new(model_gw.clone()));
+    registry.register(SummarizePayrollRunTool::new(pool.clone(), model_gw.clone()));
+    registry.register(CheckComplianceTool::new(pool));
+    registry
 }

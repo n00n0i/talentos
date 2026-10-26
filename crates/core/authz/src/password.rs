@@ -1,6 +1,4 @@
-use argon2::{
-    Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
-};
+use argon2::{Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version};
 
 use crate::error::AuthError;
 
@@ -11,7 +9,7 @@ fn algorithm() -> Argon2<'static> {
 }
 
 pub fn hash_password(plain: &str) -> Result<String, AuthError> {
-    use rand_core::OsRng;
+    use argon2::password_hash::rand_core::OsRng;
     let salt = argon2::password_hash::SaltString::generate(&mut OsRng);
     algorithm()
         .hash_password(plain.as_bytes(), &salt)
@@ -55,7 +53,7 @@ mod tests {
     #[test]
     fn wrong_password_returns_false_not_error() {
         let h = hash_password("right-pass-123").unwrap();
-        assert_eq!(verify_password("wrong-pass-456", &h).unwrap(), false);
+        assert!(!verify_password("wrong-pass-456", &h).unwrap());
     }
 
     #[test]

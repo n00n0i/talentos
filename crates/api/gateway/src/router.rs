@@ -28,6 +28,11 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/payroll/runs/:id/payslips",
             get(payroll::list_payslips),
         )
+        .route(
+            "/api/v1/leave/requests",
+            get(leave::list).post(leave::create),
+        )
+        .route("/api/v1/leave/balances", get(leave::balances))
         .route("/api/v1/leave/requests/:id/decision", post(leave::decide))
         .route("/api/v1/ai/tools", get(ai::list_tools))
         .route("/api/v1/ai/agents/run", post(ai::run_agent))
@@ -37,7 +42,7 @@ pub fn build(state: AppState) -> Router {
         )
         .route(
             "/api/v1/payroll/payslips/:id/pdf",
-            get(payroll::render_payslip),
+            get(payroll::get_payslip_pdf),
         )
         .route(
             "/api/v1/payslip/template",

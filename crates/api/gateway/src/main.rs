@@ -83,7 +83,7 @@ async fn main() {
 
     let state = AppState {
         pool: pool.clone(),
-        auth_pool,
+        auth_pool: auth_pool.clone(),
         jwt_secret: Arc::from(jwt_secret.as_bytes()),
         redis,
         access_ttl_secs: access_ttl,
@@ -91,6 +91,34 @@ async fn main() {
         allowed_origins,
         started_at: std::time::Instant::now(),
     };
+
+    // Crash recovery: re-run payroll runs abandoned mid-calculation.
+    // shortcut: 60s poll in-process; move to a Temporal schedule when the worker lands.
+    {
+        let recovery_auth = auth_pool.clone();
+        let recovery_pool = pool.clone();
+        let stale_after: i64 = std::env::var("PAYROLL_STUCK_AFTER_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(600);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                ticker.tick().await;
+                match talentos_payroll_runner::recover_stuck_runs(
+                    &recovery_auth,
+                    &recovery_pool,
+                    stale_after,
+                )
+                .await
+                {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(count = n, "recovered stuck payroll runs"),
+                    Err(e) => tracing::warn!(error = %e, "payroll recovery sweep failed"),
+                }
+            }
+        });
+    }
 
     let app = router::build(state);
 

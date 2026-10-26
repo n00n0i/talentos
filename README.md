@@ -38,6 +38,10 @@ cargo run -p talentos-gateway
 
 Optional, for the AI surface: `HUAKATI_API_KEY`, `HUAKATI_API_BASE`.
 
+Payslip PDFs need headless Chromium and a Thai font: set `CHROME_BIN`
+(default `chromium-browser`) and `PAYSLIP_STORE_DIR`. Without a renderer the
+`/pdf` endpoint returns 503 instead of producing a broken file.
+
 ## Payroll flow
 
 ```
@@ -47,10 +51,25 @@ GET  /api/v1/payroll/runs/:id      → status: pending_approval + totals
 GET  /api/v1/payroll/runs/:id/payslips
 POST /api/v1/payroll/runs/:id/approve
 GET  /api/v1/payroll/payslips/:id/render   → printable HTML (tenant template applied)
+GET  /api/v1/payroll/payslips/:id/pdf      → PDF via headless Chromium (Thai shaping)
 ```
 
 `entity_id` is required when the caller's JWT is tenant-wide rather than
 entity-scoped.
+
+## Leave
+
+```
+POST /api/v1/leave/requests              {leave_type, start_date, end_date, reason?, employee_id?}
+GET  /api/v1/leave/balances?employee_id= &year=
+GET  /api/v1/leave/requests?employee_id= &status=
+POST /api/v1/leave/requests/:id/decision {approve: bool, reason?}
+```
+
+Days are always computed server-side (calendar days inclusive). A request that
+overlaps an existing pending/approved leave is rejected with 409; exceeding the
+provisioned balance returns 422. `employee_id` defaults to the caller's own
+employee record.
 
 ## Custom payslip
 

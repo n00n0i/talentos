@@ -2568,6 +2568,7 @@ dependencies = [
  "talentos-agent",
  "talentos-authz",
  "talentos-db",
+ "talentos-hr-runner",
  "talentos-kernel",
  "talentos-model-gw",
  "talentos-payroll",
@@ -2579,6 +2580,23 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "talentos-hr-runner"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "sqlx",
+ "talentos-db",
+ "talentos-kernel",
+ "thiserror",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 

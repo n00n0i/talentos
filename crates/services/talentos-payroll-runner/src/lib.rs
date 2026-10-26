@@ -18,6 +18,8 @@ use talentos_payroll::dag::PayrollDag;
 use talentos_payroll::result::EmployeePayrollOutput;
 use uuid::Uuid;
 
+pub mod pdf;
+
 #[derive(Debug, thiserror::Error)]
 pub enum RunError {
     #[error("payroll run {0} not found")]
@@ -34,6 +36,10 @@ pub enum RunError {
     Serde(#[from] serde_json::Error),
     #[error("invalid payslip template: {0}")]
     InvalidTemplate(String),
+    #[error("pdf renderer unavailable: {0}")]
+    PdfUnavailable(String),
+    #[error("pdf rendering failed: {0}")]
+    PdfFailed(String),
 }
 
 /// Result of a completed run.
@@ -499,4 +505,56 @@ fn mask_account(acc: &str) -> String {
         return "****".to_string();
     }
     format!("****{}", &digits[digits.len() - 4..])
+}
+
+// ---------------------------------------------------------------------------
+// Crash recovery
+// ---------------------------------------------------------------------------
+
+/// Re-run payroll runs left in `calculating` after a process crash.
+///
+/// Uses the BYPASSRLS pool to *find* stale runs across tenants (the tenant is
+/// not known yet), then re-executes each inside its own tenant transaction.
+/// Re-execution is safe: payslips are upserted per (run, employee).
+///
+/// Returns how many runs were recovered.
+pub async fn recover_stuck_runs(
+    auth_pool: &PgPool,
+    tenant_pool: &TenantPool,
+    older_than_secs: i64,
+) -> Result<usize, RunError> {
+    let stale = sqlx::query(
+        r#"SELECT id, tenant_id FROM payroll_runs
+           WHERE status = 'calculating'
+             AND updated_at < now() - make_interval(secs => $1)
+           ORDER BY updated_at
+           LIMIT 50"#,
+    )
+    .bind(older_than_secs as f64)
+    .fetch_all(auth_pool)
+    .await?;
+
+    let mut recovered = 0usize;
+    for row in stale {
+        let run_id: Uuid = row.try_get("id")?;
+        let tenant_id = TenantId(row.try_get("tenant_id")?);
+        match execute_run(tenant_pool, tenant_id, run_id).await {
+            Ok(summary) => {
+                recovered += 1;
+                tracing::info!(
+                    run_id = %run_id,
+                    tenant = %tenant_id,
+                    employees = summary.employees,
+                    "recovered stuck payroll run"
+                );
+            }
+            Err(e) => tracing::error!(
+                run_id = %run_id,
+                tenant = %tenant_id,
+                error = %e,
+                "could not recover stuck payroll run"
+            ),
+        }
+    }
+    Ok(recovered)
 }

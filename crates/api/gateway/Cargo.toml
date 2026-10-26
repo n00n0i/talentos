@@ -12,6 +12,7 @@ talentos-kernel = { path = "../../core/kernel" }
 talentos-authz = { path = "../../core/authz" }
 talentos-db = { path = "../../infra/db" }
 talentos-payroll-runner = { path = "../../services/talentos-payroll-runner" }
+talentos-hr-runner = { path = "../../services/talentos-hr-runner" }
 talentos-payroll = { path = "../../domain/talentos-payroll" }
 talentos-agent = { path = "../../ai/talentos-agent" }
 talentos-tools = { path = "../../ai/talentos-tools" }

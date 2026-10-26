@@ -286,3 +286,107 @@ async fn tenant_template_round_trips_and_renders_payslip() {
 
     cleanup(&raw, tenant_id).await;
 }
+
+#[tokio::test]
+async fn payslip_pdf_is_real_pdf_with_thai_text() {
+    // Rendering needs headless Chromium; skip cleanly when it is absent.
+    let cfg = talentos_payroll_runner::pdf::PdfConfig::default();
+    if tokio::process::Command::new(&cfg.chrome_bin)
+        .arg("--version")
+        .output()
+        .await
+        .is_err()
+    {
+        eprintln!("SKIP: {} not installed", cfg.chrome_bin);
+        return;
+    }
+
+    let html = "<html><body><h1>สลิปเงินเดือน</h1><p>เงินได้สุทธิ 72,083.33 บาท</p></body></html>";
+    let bytes = talentos_payroll_runner::pdf::render_pdf(&cfg, html)
+        .await
+        .expect("render pdf");
+
+    assert!(bytes.starts_with(b"%PDF-"), "must be a real PDF header");
+    assert!(bytes.len() > 1024);
+}
+
+#[tokio::test]
+async fn missing_renderer_reports_unavailable_not_a_broken_file() {
+    let cfg = talentos_payroll_runner::pdf::PdfConfig {
+        chrome_bin: "definitely-not-chromium".to_string(),
+        store_dir: std::env::temp_dir().join("talentos-pdf-test"),
+    };
+    let err = talentos_payroll_runner::pdf::render_pdf(&cfg, "<html></html>").await;
+    assert!(
+        matches!(
+            err,
+            Err(talentos_payroll_runner::RunError::PdfUnavailable(_))
+        ),
+        "must fail loudly, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn stuck_run_is_recovered_and_completed() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, _ids) =
+        seed(&raw, &[("EMP030", Decimal::new(40_000, 0))]).await;
+
+    // Simulate a crash: the run is mid-calculation and has not moved for an hour.
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("tenant");
+    sqlx::query(
+        "UPDATE payroll_runs SET status='calculating', updated_at = now() - interval '1 hour' WHERE id=$1",
+    )
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await
+    .expect("mark stale");
+    let _ = tx.commit().await;
+
+    let recovered = talentos_payroll_runner::recover_stuck_runs(&raw, &tenant_pool, 600)
+        .await
+        .expect("recover");
+    assert_eq!(recovered, 1);
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("tenant");
+    let status: String = sqlx::query_scalar("SELECT status FROM payroll_runs WHERE id=$1")
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("status");
+    let payslips: i64 = sqlx::query_scalar("SELECT count(*) FROM payslips WHERE payroll_run_id=$1")
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("payslips");
+    let _ = tx.rollback().await;
+
+    assert_eq!(status, "pending_approval");
+    assert_eq!(payslips, 1);
+
+    // A fresh run must not be touched.
+    assert_eq!(
+        talentos_payroll_runner::recover_stuck_runs(&raw, &tenant_pool, 600)
+            .await
+            .expect("recover again"),
+        0
+    );
+
+    cleanup(&raw, tenant_id).await;
+}

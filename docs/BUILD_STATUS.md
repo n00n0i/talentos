@@ -8,15 +8,18 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **61 passed**, 0 failed (3 DB-backed + 6 render) |
+| Tests | `cargo test --workspace` | **69 passed**, 0 failed (7 DB-backed, 6 render, 5 lease-pure) |
 | Migrations | `psql -f migrations/*.sql` on a fresh DB | 9 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 11, rag 7, agent 7,
-payroll-runner 3 (real PostgreSQL: payslips, totals, state machine, template round-trip).
+payroll-runner 6 (real PostgreSQL + Chromium: payslips, totals, state machine,
+template round-trip, PDF, stuck-run recovery), hr-runner 5 (leave day maths).
 
-Manual HTTP smoke test (local, real Postgres + Redis): health → login → `/auth/me`
-→ `/ai/tools` → create payroll run → run reaches `pending_approval` with
+Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
+`/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
 2 payslips, total gross ฿99,000, SSO ฿1,450, PND ฿9,416.67 (hand-verified).
+Payslip PDF: 77 KB, `%PDF-1.4`, Thai text round-trips through `pdftotext`.
+Leave: create (3 days computed server-side) → overlap 409 → bad type 422 → balances → list.
 
 ## Compiling workspace members
 
@@ -53,7 +56,10 @@ phase boundary is already isolated, so the Temporal swap is a wiring change, not
 - Payroll runs execute in-process (`tokio::spawn`) instead of on Temporal, so a process
   restart during a run leaves it in `calculating`.
 - `POST /payroll/runs` requires `entity_id` in the body when the JWT is tenant-wide.
-- Payslip output is printable HTML, not PDF yet; a PDF pipeline is still pending.
+- Payslip PDF needs headless Chromium plus a Thai font at runtime (`CHROME_BIN`,
+  installed in the Docker image). Without it the endpoint returns 503 rather than
+  emitting a PDF with broken Thai glyphs.
+- PDFs are cached on local disk (`PAYSLIP_STORE_DIR`), not MinIO yet.
 - Only one default template per tenant is editable through the API (no per-entity or multiple named templates in the UI).
 - In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
 - Single static HS256 signing key (no JWKS rotation yet).

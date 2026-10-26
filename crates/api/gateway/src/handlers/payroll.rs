@@ -277,6 +277,57 @@ pub async fn list_payslips(
         .into_response()
 }
 
+/// GET /api/v1/payroll/payslips/:id/pdf — real PDF (Chromium, Thai shaping).
+pub async fn get_payslip_pdf(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(payslip_id): Path<Uuid>,
+) -> Response {
+    let html = match talentos_payroll_runner::render_payslip(&state.pool, ctx.tenant_id, payslip_id)
+        .await
+    {
+        Ok(html) => html,
+        Err(talentos_payroll_runner::RunError::NotFound(_)) => return not_found(),
+        Err(e) => {
+            tracing::error!(error = %e, "payslip html render failed");
+            return internal_err_msg("payslip could not be rendered");
+        }
+    };
+
+    let cfg = talentos_payroll_runner::pdf::PdfConfig::default();
+    match talentos_payroll_runner::pdf::get_or_render_pdf(&cfg, ctx.tenant_id.0, payslip_id, &html)
+        .await
+    {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                (axum::http::header::CONTENT_TYPE, "application/pdf"),
+                (
+                    axum::http::header::CONTENT_DISPOSITION,
+                    "inline; filename=\"payslip.pdf\"",
+                ),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(talentos_payroll_runner::RunError::PdfUnavailable(msg)) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: "pdf_unavailable".into(),
+                message: msg,
+                details: vec![],
+                request_id: Uuid::new_v4().to_string(),
+                retry_after_seconds: None,
+            }),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "payslip pdf failed");
+            internal_err_msg("payslip pdf could not be generated")
+        }
+    }
+}
+
 /// GET /api/v1/payroll/payslips/:id/render — printable payslip (text/html).
 /// Uses the tenant's payslip template; `/pdf` is kept as an alias so existing
 /// clients keep working until a real PDF pipeline lands.

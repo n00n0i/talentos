@@ -11,6 +11,7 @@ members = [
     "crates/domain/talentos-compliance",
     "crates/domain/talentos-payroll",
     "crates/services/talentos-payroll-runner",
+    "crates/services/talentos-hr-runner",
     # TODO(temporal): worker is a Temporal worker; SDK 1.x wiring is unverified.
     # "crates/services/talentos-worker",
     # "crates/api/mcp",

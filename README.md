@@ -85,6 +85,28 @@ GET  /api/v1/payroll/payslips/:id/render → the payslip as text/html
 
 The editor UI lives in `demo/index.html` under **แบบฟอร์มสลิป**.
 
+## Web app
+
+`web/` is a Next.js 14 app (Thai-first, Stripe-style light dashboard). It never
+talks to the gateway from the browser: a route handler proxies `/api/gw/*` and
+keeps both tokens in `HttpOnly` cookies, rotating the refresh token single-flight
+so concurrent requests cannot trigger family revocation.
+
+Pages: login, dashboard (headcount + latest run), employees, payroll runs
+(create / poll / payslips / approve / PDF), payslip template editor with a live
+preview of a real payslip.
+
+```bash
+cd web
+cp .env.example .env.local        # TALENTOS_API_URL=http://127.0.0.1:8080
+npm install
+npm run dev                       # http://localhost:3000
+```
+
+Production image: `docker build -f web/Dockerfile -t talentos/web .` (Next
+standalone). Set `TALENTOS_COOKIE_SECURE=false` only when serving plain HTTP on a
+trusted network.
+
 ## MCP
 
 `POST /api/v1/mcp` speaks JSON-RPC 2.0 (Model Context Protocol) over streamable
@@ -140,6 +162,7 @@ crates/services/payroll-runner  run executor (DB + DAG)
 crates/ai/*               model gateway, RAG, agent loop, tools
 crates/ext/wasm-host      sandboxed plugin host (Extism, capability grants)
 crates/api/gateway        Axum HTTP surface
+web/                      Next.js 14 dashboard (Thai UI)
 migrations/               schema + RLS
 ```
 

@@ -40,6 +40,15 @@ crates/api/gateway          Axum: /health, /auth/*, /payroll/*, /mcp, /graphql
 crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT per request)
 ```
 
+## Web app
+
+`web/` — Next.js 14.2.35, TypeScript strict, no UI dependency beyond React.
+`npm run build` passes (10 routes). Browser never holds a token: `/api/session/login`
+sets `HttpOnly` cookies and `/api/gw/*` proxies with a bearer header, refreshing
+single-flight. Verified against the real gateway: login → `/auth/me` → GraphQL →
+payslip template → HTML render → 77 KB PDF, and an expired access token rotates
+on the next request (old refresh token then 401, as designed).
+
 ## Deferred — excluded from the workspace, not yet buildable
 
 Each is commented out in the root `Cargo.toml` with a TODO:

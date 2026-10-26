@@ -19,7 +19,7 @@ use talentos_model_gw::HuakatiClient;
 use talentos_rag::HybridSearch;
 
 use crate::dto::responses::ErrorResponse;
-use crate::middleware::auth::Authed;
+use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +53,9 @@ pub async fn run_agent(
     Authed(ctx): Authed,
     Json(body): Json<RunAgentRequest>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
     let model_gw = match HuakatiClient::new() {
         Ok(c) => c,
         Err(e) => return unavailable(&format!("model gateway not configured: {e}")),

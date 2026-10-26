@@ -58,6 +58,29 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Authed {
     }
 }
 
+/// RBAC gate for a handler. A valid token only proves *who* the caller is; each
+/// handler still has to prove the role may do this. Missing permission is 403,
+/// never 401 (the caller is authenticated, just not allowed).
+// axum responses are the error value so handlers can `return forbidden`; boxing
+// would only add indirection, same trade-off as `auth_middleware` above.
+#[allow(clippy::result_large_err)]
+pub fn require(ctx: &TenantContext, resource: &str, action: &str) -> Result<(), Response> {
+    if talentos_authz::has_permission(&ctx.roles, resource, action) {
+        return Ok(());
+    }
+    Err((
+        axum::http::StatusCode::FORBIDDEN,
+        axum::Json(ErrorResponse {
+            error: "forbidden".into(),
+            message: "Insufficient permission".into(),
+            details: vec![],
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
+        }),
+    )
+        .into_response())
+}
+
 fn unauthorized_response(code: &str) -> Response {
     (
         axum::http::StatusCode::UNAUTHORIZED,
@@ -97,5 +120,39 @@ fn safe_message(e: &talentos_authz::AuthError) -> String {
         InsufficientPermission { .. } => "Insufficient permission".into(),
         RateLimited => "Too many attempts".into(),
         Internal(_) => "An unexpected error occurred".into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use talentos_kernel::{TenantId, UserId};
+
+    fn ctx(roles: &[&str]) -> TenantContext {
+        TenantContext {
+            tenant_id: TenantId(uuid::Uuid::nil()),
+            entity_id: None,
+            user_id: UserId(uuid::Uuid::nil()),
+            roles: roles.iter().map(|r| r.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn hr_admin_passes_payroll_and_payslip_gates() {
+        assert!(require(&ctx(&["hr_admin"]), "payroll_run", "approve").is_ok());
+        assert!(require(&ctx(&["hr_admin"]), "payslip", "view_all").is_ok());
+    }
+
+    #[test]
+    fn employee_is_refused_all_payslips_and_payroll_runs() {
+        assert!(require(&ctx(&["employee"]), "payslip", "view_all").is_err());
+        assert!(require(&ctx(&["employee"]), "payroll_run", "calculate").is_err());
+        assert!(require(&ctx(&["employee"]), "payslip", "view_self").is_ok());
+    }
+
+    #[test]
+    fn manager_cannot_approve_payroll_but_can_view_team() {
+        assert!(require(&ctx(&["manager"]), "payroll_run", "approve").is_err());
+        assert!(require(&ctx(&["manager"]), "leave_request", "view_team").is_ok());
     }
 }

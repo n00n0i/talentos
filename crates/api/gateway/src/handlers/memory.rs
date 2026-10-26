@@ -13,7 +13,7 @@ use uuid::Uuid;
 use talentos_memory::{Layer, MemoryError, NewMemory};
 
 use crate::dto::responses::ErrorResponse;
-use crate::middleware::auth::Authed;
+use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -41,6 +41,9 @@ pub async fn remember(
     Authed(ctx): Authed,
     Json(body): Json<RememberBody>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
     let Some(layer) = Layer::parse(&body.layer) else {
         return invalid(&format!(
             "layer must be one of working, episodic, semantic, procedural (got '{}')",
@@ -76,6 +79,9 @@ pub async fn recall(
     Authed(ctx): Authed,
     Query(query): Query<RecallQuery>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
     let layers = match query.layers.as_deref() {
         None | Some("") => Layer::ALL.to_vec(),
         Some(raw) => {
@@ -106,6 +112,9 @@ pub async fn recall(
 
 /// GET /api/v1/ai/memory/stats
 pub async fn stats(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
     match state.memory.stats(ctx.tenant_id).await {
         Ok(stats) => (StatusCode::OK, Json(json!({ "layers": stats }))).into_response(),
         Err(e) => memory_error(e),
@@ -114,6 +123,9 @@ pub async fn stats(State(state): State<AppState>, Authed(ctx): Authed) -> Respon
 
 /// DELETE /api/v1/ai/memory/expired
 pub async fn purge(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
     match state.memory.forget_expired(ctx.tenant_id).await {
         Ok(purged) => (StatusCode::OK, Json(json!({ "purged": purged }))).into_response(),
         Err(e) => memory_error(e),

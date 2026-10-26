@@ -8,16 +8,17 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **88 passed**, 0 failed (7 DB-backed, 6 render, 5 leave, 6 wasm, 2 schema, 5 mcp, 3 memory DB) |
+| Tests | `cargo test --workspace` | **92 passed**, 0 failed (7 DB-backed, 6 render, 5 leave, 6 wasm, 3 schema, 5 mcp, 3 memory DB, 6 RBAC) |
 | Migrations | `psql -f migrations/*.sql` on a fresh DB | 9 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 11, rag 7, agent 7,
 payroll-runner 6 (real PostgreSQL + Chromium: payslips, totals, state machine,
 template round-trip, PDF, stuck-run recovery), hr-runner 5 (leave day maths),
 wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
-graphql 2 (schema shape, money-as-string), mcp 5 (version negotiation, tool list,
+graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
 destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
-RLS isolation, layer filter, expiry purge, stats).
+RLS isolation, layer filter, expiry purge, stats), gateway 3 (RBAC gate:
+hr_admin allowed, employee refused, manager cannot approve payroll).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -35,7 +36,7 @@ crates/domain/compliance    Thai PND tax, SSO, PF, LPA severance, OT
 crates/domain/payroll       deterministic payroll DAG + anomaly rules
 crates/ai/model-gw          huakati.online client, in-process limiter, circuit breaker
 crates/ai/rag               chunker, embedder, hybrid search (RRF)
-crates/ai/tools             the 8 agent tools
+crates/ai/tools             agent tools (payroll/query/tax/anomaly/compliance + memory)
 crates/ai/agent             Observe → Plan → Act → Reflect loop
 crates/api/gateway          Axum: /health, /auth/*, /payroll/*, /mcp, /graphql
 crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT per request)
@@ -50,13 +51,11 @@ single-flight. Verified against the real gateway: login → `/auth/me` → Graph
 payslip template → HTML render → 77 KB PDF, and an expired access token rotates
 on the next request (old refresh token then 401, as designed).
 
-## Deferred — excluded from the workspace, not yet buildable
-
-Each is commented out in the root `Cargo.toml` with a TODO:
+## Deferred — not wired
 
 | Crate | Blocker |
 |---|---|
-| `crates/services/talentos-worker` | Temporal Rust SDK 1.x (`temporalio-sdk`) needs protoc-generated protos and a different macro surface than the scaffold assumed. Payroll and the agent loop already run in-process, so this is about durability, not features. |
+| `crates/services/talentos-worker` | The scaffold targeted an API that does not exist in `temporalio-sdk`. SDK 1.1 has a clean `#[workflow]`/`#[activities]` surface (verified in the crate docs), but wiring it means the gateway must depend on the workflow definitions and a Temporal cluster must run in every deployment. Payroll already recovers abandoned runs (`recover_stuck_runs`), so this buys durability/visibility, not a feature. Rewrite the scaffold against 1.1, then decide the deployment default. |
 
 
 Memory is **done** on pgvector: `crates/ai/talentos-memory` with four layers
@@ -64,6 +63,13 @@ Memory is **done** on pgvector: `crates/ai/talentos-memory` with four layers
 recall (vector + keyword + importance + recency), tenant RLS, and
 `remember_memory`/`recall_memory` tools exposed to the agent and MCP. Graph
 edges/ontology concepts live in `metadata`; a real graph store is not built.
+
+RBAC is **enforced per handler** (not just per token): payroll, payslips, employee
+lists, leave, plugins, AI and memory each check `crates/core/authz`. Strix's
+2026-10-26 "GraphQL order-by SQL injection" finding was inspected and is a false
+positive — there is no user-controlled `ORDER BY`; the real gap it pointed at
+(any authenticated user could read all payroll data) is now fixed and tested.
+An `employee` token receives 403 on team-wide endpoints.
 
 MCP is **done** at `POST /api/v1/mcp` (streamable HTTP, stateless). No session id,
 because the JWT on each request is the only identity — one client can never resume

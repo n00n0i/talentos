@@ -24,6 +24,12 @@ impl GraphqlContext {
     }
 }
 
+/// RBAC check shared by the resolvers. Tenant isolation comes from RLS; this
+/// decides whether the caller's *role* may read the resource at all.
+fn permitted(roles: &[String], resource: &str, action: &str) -> bool {
+    talentos_authz::has_permission(roles, resource, action)
+}
+
 fn ctx<'a>(c: &'a Context<'_>) -> async_graphql::Result<&'a GraphqlContext> {
     c.data::<GraphqlContext>()
         .map_err(|_| async_graphql::Error::new("missing tenant context"))
@@ -116,6 +122,9 @@ impl QueryRoot {
         offset: Option<i32>,
     ) -> async_graphql::Result<Vec<Employee>> {
         let gql = ctx(c)?;
+        if !permitted(&gql.tenant.roles, "employee", "read_all") {
+            return Err(async_graphql::Error::new("forbidden: employee.read_all"));
+        }
         let limit = limit.unwrap_or(50).clamp(1, 200);
         let offset = offset.unwrap_or(0).max(0);
 
@@ -157,6 +166,11 @@ impl QueryRoot {
         limit: Option<i32>,
     ) -> async_graphql::Result<Vec<PayrollRun>> {
         let gql = ctx(c)?;
+        if !permitted(&gql.tenant.roles, "payroll_run", "calculate") {
+            return Err(async_graphql::Error::new(
+                "forbidden: payroll_run.calculate",
+            ));
+        }
         let limit = limit.unwrap_or(20).clamp(1, 100);
 
         let mut tx = gql.pool.begin_tenant(gql.tenant.tenant_id).await?;
@@ -195,6 +209,9 @@ impl QueryRoot {
 
     async fn payslips(&self, c: &Context<'_>, run_id: Uuid) -> async_graphql::Result<Vec<Payslip>> {
         let gql = ctx(c)?;
+        if !permitted(&gql.tenant.roles, "payslip", "view_all") {
+            return Err(async_graphql::Error::new("forbidden: payslip.view_all"));
+        }
         let mut tx = gql.pool.begin_tenant(gql.tenant.tenant_id).await?;
         let rows = sqlx::query(
             r#"SELECT id, employee_id, base_salary, gross_earnings, total_deductions,
@@ -260,6 +277,18 @@ mod tests {
         ] {
             assert!(sdl.contains(expected), "schema missing {expected}:\n{sdl}");
         }
+    }
+
+    #[test]
+    fn rbac_gates_payroll_and_payslip_reads() {
+        let employee = vec!["employee".to_string()];
+        assert!(!permitted(&employee, "payslip", "view_all"));
+        assert!(!permitted(&employee, "payroll_run", "calculate"));
+        assert!(!permitted(&employee, "employee", "read_all"));
+        let hr = vec!["hr_admin".to_string()];
+        assert!(permitted(&hr, "payslip", "view_all"));
+        assert!(permitted(&hr, "payroll_run", "calculate"));
+        assert!(permitted(&hr, "employee", "read_all"));
     }
 
     #[test]

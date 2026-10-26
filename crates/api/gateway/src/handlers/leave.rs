@@ -11,7 +11,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
-use crate::middleware::auth::Authed;
+use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +44,9 @@ pub async fn create(
     Authed(ctx): Authed,
     Json(body): Json<CreateLeaveBody>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_request", "submit_self") {
+        return forbidden;
+    }
     let input = talentos_hr_runner::LeaveInput {
         leave_type: body.leave_type,
         start_date: body.start_date,
@@ -85,6 +88,9 @@ pub async fn balances(
     Authed(ctx): Authed,
     Query(q): Query<EmployeeQuery>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_request", "view_team") {
+        return forbidden;
+    }
     let employee_id =
         match resolve_employee(&state, ctx.tenant_id, ctx.user_id.0, q.employee_id).await {
             Ok(Some(id)) => id,
@@ -105,6 +111,9 @@ pub async fn list(
     Authed(ctx): Authed,
     Query(q): Query<EmployeeQuery>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_request", "view_team") {
+        return forbidden;
+    }
     let employee_id =
         match resolve_employee(&state, ctx.tenant_id, ctx.user_id.0, q.employee_id).await {
             Ok(Some(id)) => id,
@@ -146,6 +155,9 @@ pub async fn decide(
     Path(id): Path<Uuid>,
     Json(body): Json<ApproveLeaveRequest>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_request", "approve_team") {
+        return forbidden;
+    }
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(&e.to_string()),

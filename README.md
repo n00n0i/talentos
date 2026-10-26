@@ -107,6 +107,14 @@ Production image: `docker build -f web/Dockerfile -t talentos/web .` (Next
 standalone). Set `TALENTOS_COOKIE_SECURE=false` only when serving plain HTTP on a
 trusted network.
 
+## Authorization
+
+Tenant isolation is enforced by Postgres RLS; authorization is enforced per
+handler against the RBAC matrix (`crates/core/authz`). A valid token alone is not
+enough: payroll/payslip/employee reads require the matching role, and an
+`employee` token gets `403` on team-wide endpoints (verified over HTTP). GraphQL
+resolvers apply the same checks.
+
 ## Memory
 
 Agents remember across runs without an external service. One pgvector table,

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use talentos_wasm_host::{Capability, CapabilitySet, PluginHost, PluginLimits, PluginSpec};
 
 use crate::dto::responses::ErrorResponse;
-use crate::middleware::auth::Authed;
+use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -24,6 +24,9 @@ pub struct InvokeBody {
 
 /// GET /api/v1/plugins — plugins enabled for this tenant (never returns bytes).
 pub async fn list(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "settings", "view_company") {
+        return forbidden;
+    }
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(&e.to_string()),
@@ -68,6 +71,9 @@ pub async fn invoke(
     Path(name): Path<String>,
     Json(body): Json<InvokeBody>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "settings", "manage_company") {
+        return forbidden;
+    }
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(&e.to_string()),

@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
-use crate::middleware::auth::Authed;
+use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 
 /// POST /api/v1/payroll/runs
@@ -21,6 +21,9 @@ pub async fn start_payroll_run(
     Authed(ctx): Authed,
     Json(body): Json<StartPayrollRunRequest>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "calculate") {
+        return forbidden;
+    }
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(e),
@@ -138,6 +141,9 @@ pub async fn get_payroll_run(
     Authed(ctx): Authed,
     Path(id): Path<Uuid>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "calculate") {
+        return forbidden;
+    }
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(e),
@@ -190,6 +196,9 @@ pub async fn approve_payroll_run(
     Path(id): Path<Uuid>,
     Json(_body): Json<ApprovePayrollRequest>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "approve") {
+        return forbidden;
+    }
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(e),
@@ -227,6 +236,9 @@ pub async fn list_payslips(
     Path(run_id): Path<Uuid>,
     Query(query): Query<ListPayslipsQuery>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "payslip", "view_all") {
+        return forbidden;
+    }
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(e),
@@ -283,6 +295,9 @@ pub async fn get_payslip_pdf(
     Authed(ctx): Authed,
     Path(payslip_id): Path<Uuid>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "payslip", "view_all") {
+        return forbidden;
+    }
     let html = match talentos_payroll_runner::render_payslip(&state.pool, ctx.tenant_id, payslip_id)
         .await
     {
@@ -336,6 +351,9 @@ pub async fn render_payslip(
     Authed(ctx): Authed,
     Path(payslip_id): Path<Uuid>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "payslip", "view_all") {
+        return forbidden;
+    }
     match talentos_payroll_runner::render_payslip(&state.pool, ctx.tenant_id, payslip_id).await {
         Ok(html) => (
             StatusCode::OK,
@@ -353,6 +371,9 @@ pub async fn render_payslip(
 
 /// GET /api/v1/payslip/template — current tenant template (defaults when unset).
 pub async fn get_template(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "settings", "view_company") {
+        return forbidden;
+    }
     match talentos_payroll_runner::load_template(&state.pool, ctx.tenant_id).await {
         Ok(t) => (StatusCode::OK, Json(t)).into_response(),
         Err(e) => {
@@ -369,6 +390,9 @@ pub async fn put_template(
     Authed(ctx): Authed,
     Json(template): Json<talentos_payroll::render::PayslipTemplate>,
 ) -> Response {
+    if let Err(forbidden) = require(&ctx, "settings", "manage_company") {
+        return forbidden;
+    }
     match talentos_payroll_runner::save_template(&state.pool, ctx.tenant_id, &template).await {
         Ok(()) => (StatusCode::OK, Json(template)).into_response(),
         Err(talentos_payroll_runner::RunError::InvalidTemplate(msg)) => (

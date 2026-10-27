@@ -1,7 +1,7 @@
 //! OT (overtime) endpoints: self-service requests and approval decisions.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -25,6 +25,14 @@ pub struct CreateOtBody {
     pub work_date: NaiveDate,
     pub minutes: i32,
     pub reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ApprovalsQuery {
+    pub status: Option<String>,
+    pub from: Option<NaiveDate>,
+    pub to: Option<NaiveDate>,
+    pub limit: Option<i64>,
 }
 
 /// GET /api/v1/me/ot
@@ -104,11 +112,26 @@ pub async fn me_cancel(
 }
 
 /// GET /api/v1/ot/approvals
-pub async fn approvals(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+pub async fn approvals(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Query(q): Query<ApprovalsQuery>,
+) -> Response {
     if let Err(forbidden) = require(&ctx, "ot_request", "view_team") {
         return forbidden;
     }
-    match talentos_hr_runner::pending_ot_approvals(&state.pool, ctx.tenant_id).await {
+    let status = q.status.as_deref();
+    let limit = q.limit.unwrap_or(100);
+    match talentos_hr_runner::ot_tenant_requests(
+        &state.pool,
+        ctx.tenant_id,
+        status,
+        q.from,
+        q.to,
+        limit,
+    )
+    .await
+    {
         Ok(requests) => (StatusCode::OK, Json(json!({ "requests": requests }))).into_response(),
         Err(e) => map_ot_error(e),
     }
@@ -177,7 +200,9 @@ fn map_ot_error(e: talentos_hr_runner::OtError) -> Response {
         talentos_hr_runner::OtError::DuplicateDate => {
             conflict("a request already exists for this work date")
         }
-        talentos_hr_runner::OtError::InvalidMinutes => unprocessable(&e.to_string()),
+        talentos_hr_runner::OtError::InvalidMinutes
+        | talentos_hr_runner::OtError::InvalidReason
+        | talentos_hr_runner::OtError::InvalidStatus => unprocessable(&e.to_string()),
         talentos_hr_runner::OtError::EmployeeNotFound => (
             StatusCode::FORBIDDEN,
             Json(envelope(

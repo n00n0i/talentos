@@ -6,7 +6,7 @@ CREATE TABLE ot_requests (
     employee_id  UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
     work_date    DATE NOT NULL,
     minutes      INT NOT NULL CHECK (minutes BETWEEN 1 AND 720),
-    reason       TEXT,
+    reason       TEXT CHECK (reason IS NULL OR char_length(reason) <= 500),
     status       TEXT NOT NULL DEFAULT 'pending'
                  CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled')),
     requested_by UUID REFERENCES users(id) ON DELETE SET NULL,

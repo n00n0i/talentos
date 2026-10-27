@@ -7,7 +7,7 @@ use sqlx::PgPool;
 use talentos_db::TenantPool;
 use talentos_hr_runner::ot::{
     cancel_request, create_request, decide_request, employee_of_user, list_requests,
-    pending_approvals, OtInput,
+    pending_approvals, tenant_requests, OtInput,
 };
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -452,6 +452,158 @@ async fn minutes_out_of_bounds_are_rejected() {
     assert!(matches!(
         err,
         talentos_hr_runner::ot::OtError::InvalidMinutes
+    ));
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn reason_length_is_validated() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let too_long = "x".repeat(501);
+
+    let err = create_request(
+        &pool,
+        tenant,
+        user_id,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 60,
+            reason: Some(too_long),
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(
+        err,
+        talentos_hr_runner::ot::OtError::InvalidReason
+    ));
+
+    let exactly_500 = "x".repeat(500);
+    create_request(
+        &pool,
+        tenant,
+        user_id,
+        OtInput {
+            work_date: d(2026, 10, 6),
+            minutes: 60,
+            reason: Some(exactly_500),
+        },
+    )
+    .await
+    .expect("500 char reason accepted");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn tenant_requests_can_filter_by_status() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+
+    let requester = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 60,
+            reason: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    let pending = tenant_requests(&pool, tenant, Some("pending"), None, None, 100)
+        .await
+        .expect("list pending");
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].id, req.id);
+    assert_eq!(pending[0].status, "pending");
+    assert!(pending[0].decided_at.is_none());
+
+    let approved_status = decide_request(&pool, tenant, approver, req.id, true)
+        .await
+        .expect("approve");
+    assert_eq!(approved_status, "approved");
+
+    let approved = tenant_requests(&pool, tenant, Some("approved"), None, None, 100)
+        .await
+        .expect("list approved");
+    assert_eq!(approved.len(), 1);
+    assert_eq!(approved[0].id, req.id);
+    assert_eq!(approved[0].employee_code, "EMP000");
+    assert_eq!(approved[0].status, "approved");
+    assert!(approved[0].decided_at.is_some());
+
+    let pending_after = tenant_requests(&pool, tenant, Some("pending"), None, None, 100)
+        .await
+        .expect("list pending after");
+    assert!(pending_after.is_empty());
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn tenant_requests_clamps_limit_and_rejects_bad_status() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    create_request(
+        &pool,
+        tenant,
+        user_id,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 60,
+            reason: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    // Limit clamped to 1..=500; 0 should still return at most one row.
+    let one = tenant_requests(&pool, tenant, None, None, None, 0)
+        .await
+        .expect("clamped low");
+    assert_eq!(one.len(), 1);
+
+    let many = tenant_requests(&pool, tenant, None, None, None, 1000)
+        .await
+        .expect("clamped high");
+    assert_eq!(many.len(), 1);
+
+    let err = tenant_requests(&pool, tenant, Some("invalid"), None, None, 100)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        talentos_hr_runner::ot::OtError::InvalidStatus
     ));
 
     cleanup(&raw, tenant_id).await;

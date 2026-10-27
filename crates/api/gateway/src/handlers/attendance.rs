@@ -56,6 +56,8 @@ pub struct ShiftCreateBody {
     pub end: String,
     pub break_minutes: i32,
     pub grace_minutes: i32,
+    /// Required when the caller's token is not entity-scoped.
+    pub entity_id: Option<Uuid>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -397,18 +399,23 @@ pub async fn list_shifts(State(state): State<AppState>, Authed(ctx): Authed) -> 
     match rows {
         Ok(rows) => {
             use sqlx::Row;
-            let shifts: Vec<talentos_hr_runner::attendance::ShiftView> = rows
+            let shifts: Result<Vec<talentos_hr_runner::attendance::ShiftView>, sqlx::Error> = rows
                 .into_iter()
-                .map(|row| talentos_hr_runner::attendance::ShiftView {
-                    id: row.get("id"),
-                    name: row.get("name"),
-                    start: row.get("start_time"),
-                    end: row.get("end_time"),
-                    break_minutes: row.get("break_minutes"),
-                    grace_minutes: row.get("grace_minutes"),
+                .map(|row| {
+                    Ok(talentos_hr_runner::attendance::ShiftView {
+                        id: row.try_get("id")?,
+                        name: row.try_get("name")?,
+                        start: row.try_get("start_time")?,
+                        end: row.try_get("end_time")?,
+                        break_minutes: row.try_get("break_minutes")?,
+                        grace_minutes: row.try_get("grace_minutes")?,
+                    })
                 })
                 .collect();
-            (StatusCode::OK, Json(json!({ "shifts": shifts }))).into_response()
+            match shifts {
+                Ok(shifts) => (StatusCode::OK, Json(json!({ "shifts": shifts }))).into_response(),
+                Err(e) => internal_err(&e.to_string()),
+            }
         }
         Err(e) => internal_err(&e.to_string()),
     }
@@ -432,6 +439,11 @@ pub async fn create_shift(
         Err(resp) => return resp,
     };
 
+    let entity_id = match resolve_entity_id(&ctx, body.entity_id) {
+        Ok(id) => id,
+        Err(resp) => return resp,
+    };
+
     let input = ShiftInput {
         name: body.name,
         start,
@@ -440,12 +452,17 @@ pub async fn create_shift(
         grace_minutes: body.grace_minutes,
     };
 
-    let shift =
-        match talentos_hr_runner::attendance::create_shift(&state.pool, ctx.tenant_id, input).await
-        {
-            Ok(shift) => shift,
-            Err(e) => return map_attendance_error(e),
-        };
+    let shift = match talentos_hr_runner::attendance::create_shift(
+        &state.pool,
+        ctx.tenant_id,
+        entity_id,
+        input,
+    )
+    .await
+    {
+        Ok(shift) => shift,
+        Err(e) => return map_attendance_error(e),
+    };
 
     let audit = async {
         let mut tx = state.pool.begin_tenant(ctx.tenant_id).await.ok()?;
@@ -511,10 +528,11 @@ pub async fn assign_shift(
     StatusCode::NO_CONTENT.into_response()
 }
 
-/// PUT /api/v1/settings/geofence
+/// PUT /api/v1/settings/entities/:id/geofence
 pub async fn set_geofence(
     State(state): State<AppState>,
     Authed(ctx): Authed,
+    Path(entity_id): Path<Uuid>,
     Json(body): Json<GeofenceBody>,
 ) -> Response {
     if let Err(forbidden) = require(&ctx, "attendance", "shifts") {
@@ -523,6 +541,7 @@ pub async fn set_geofence(
     if let Err(e) = talentos_hr_runner::attendance::set_geofence(
         &state.pool,
         ctx.tenant_id,
+        entity_id,
         body.lat,
         body.lng,
         body.radius_m,
@@ -541,7 +560,7 @@ pub async fn set_geofence(
         )
         .bind(ctx.tenant_id.0)
         .bind(ctx.user_id.0.to_string())
-        .bind(ctx.tenant_id.0.to_string())
+        .bind(entity_id.to_string())
         .bind(json!({"lat": body.lat, "lng": body.lng, "radius_m": body.radius_m}))
         .execute(&mut *tx)
         .await
@@ -564,6 +583,22 @@ fn map_attendance_error(e: AttendanceError) -> Response {
         AttendanceError::OutsideGeofence => bad_request(&e.to_string()),
         AttendanceError::Rule(_) | AttendanceError::Db(_) => internal_err(&e.to_string()),
     }
+}
+
+#[allow(clippy::result_large_err)]
+fn resolve_entity_id(
+    ctx: &talentos_kernel::TenantContext,
+    body_id: Option<Uuid>,
+) -> Result<Uuid, Response> {
+    if let Some(id) = body_id {
+        return Ok(id);
+    }
+    if let Some(entity_id) = ctx.entity_id {
+        return Ok(entity_id.0);
+    }
+    Err(unprocessable(
+        "entity_id is required when token spans entities",
+    ))
 }
 
 #[allow(clippy::result_large_err)]

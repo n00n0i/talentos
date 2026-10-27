@@ -12,10 +12,16 @@ pub fn database_url() -> Option<String> {
 
 /// Seed a tenant + entity + one employee using the tenant GUC.
 pub async fn seed_tenant_employee(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
+    let (tenant_id, entities) = seed_tenant_entities(pool, 1).await;
+    let (entity_id, employee_id) = entities.into_iter().next().expect("one entity");
+    (tenant_id, entity_id, employee_id)
+}
+
+/// Seed a tenant with `n` entities and one employee per entity.
+/// Returns (tenant_id, Vec<(entity_id, employee_id)>).
+pub async fn seed_tenant_entities(pool: &PgPool, n: usize) -> (Uuid, Vec<(Uuid, Uuid)>) {
+    assert!(n > 0, "seed at least one entity");
     let tenant_id = Uuid::new_v4();
-    let entity_id = Uuid::new_v4();
-    let user_id = Uuid::new_v4();
-    let employee_id = Uuid::new_v4();
 
     let mut tx = pool.begin().await.expect("begin");
     sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
@@ -31,40 +37,51 @@ pub async fn seed_tenant_employee(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
         .await
         .expect("tenant");
 
-    sqlx::query("INSERT INTO entities (id, tenant_id, name) VALUES ($1, $2, 'Main')")
-        .bind(entity_id)
+    let mut entities = Vec::with_capacity(n);
+    for idx in 0..n {
+        let entity_id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let employee_id = Uuid::new_v4();
+
+        sqlx::query("INSERT INTO entities (id, tenant_id, name) VALUES ($1, $2, $3)")
+            .bind(entity_id)
+            .bind(tenant_id)
+            .bind(format!("Entity {idx}"))
+            .execute(&mut *tx)
+            .await
+            .expect("entity");
+
+        sqlx::query(
+            "INSERT INTO users (id, tenant_id, email, password_hash, is_active)
+             VALUES ($1, $2, $3, 'x', true)",
+        )
+        .bind(user_id)
         .bind(tenant_id)
+        .bind(format!("t-{idx}-{}@example.com", &user_id.to_string()[..8]))
         .execute(&mut *tx)
         .await
-        .expect("entity");
+        .expect("user");
 
-    sqlx::query(
-        "INSERT INTO users (id, tenant_id, email, password_hash, is_active)
-         VALUES ($1, $2, $3, 'x', true)",
-    )
-    .bind(user_id)
-    .bind(tenant_id)
-    .bind(format!("t-{}@example.com", &user_id.to_string()[..8]))
-    .execute(&mut *tx)
-    .await
-    .expect("user");
+        sqlx::query(
+            "INSERT INTO employees
+               (id, tenant_id, entity_id, employee_code, first_name_th, last_name_th,
+                hire_date, position_title, base_salary, tax_filing_status, pf_member, status)
+             VALUES ($1,$2,$3,$4,'ทดสอบ','พนักงาน','2024-01-01','Engineer',$5,1,false,'active')",
+        )
+        .bind(employee_id)
+        .bind(tenant_id)
+        .bind(entity_id)
+        .bind(format!("EMP{idx:03}"))
+        .bind(Decimal::new(30_000, 0))
+        .execute(&mut *tx)
+        .await
+        .expect("employee");
 
-    sqlx::query(
-        "INSERT INTO employees
-           (id, tenant_id, entity_id, employee_code, first_name_th, last_name_th,
-            hire_date, position_title, base_salary, tax_filing_status, pf_member, status)
-         VALUES ($1,$2,$3,'EMP001','ทดสอบ','พนักงาน','2024-01-01','Engineer',$4,1,false,'active')",
-    )
-    .bind(employee_id)
-    .bind(tenant_id)
-    .bind(entity_id)
-    .bind(Decimal::new(30_000, 0))
-    .execute(&mut *tx)
-    .await
-    .expect("employee");
+        entities.push((entity_id, employee_id));
+    }
 
     tx.commit().await.expect("commit seed");
-    (tenant_id, entity_id, employee_id)
+    (tenant_id, entities)
 }
 
 pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {

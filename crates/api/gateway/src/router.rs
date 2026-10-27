@@ -109,7 +109,7 @@ pub fn build(state: AppState) -> Router {
         )
         .route("/api/v1/shifts/:id/assign", post(attendance::assign_shift))
         .route(
-            "/api/v1/settings/geofence",
+            "/api/v1/settings/entities/:id/geofence",
             axum::routing::put(attendance::set_geofence),
         )
         .route("/api/v1/leave/balances", get(leave::balances))

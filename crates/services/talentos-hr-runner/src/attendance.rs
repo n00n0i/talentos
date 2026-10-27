@@ -62,24 +62,27 @@ impl ShiftInput {
     }
 }
 
-/// Create a work shift under the tenant's default entity.
+/// Create a work shift under the given entity, verifying it belongs to the tenant.
 pub async fn create_shift(
     pool: &TenantPool,
     tenant_id: TenantId,
+    entity_id: Uuid,
     input: ShiftInput,
 ) -> Result<ShiftView, AttendanceError> {
     input.validate()?;
 
     let mut tx = pool.begin_tenant(tenant_id).await?;
 
-    // Resolve the tenant's single/default entity; shifts are entity-scoped in
-    // the schema, but the attendance API exposes one geofence per tenant today.
-    let entity_id: Uuid = sqlx::query_scalar(
-        "SELECT id FROM entities WHERE tenant_id = $1 ORDER BY created_at LIMIT 1",
+    let entity_belongs: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM entities WHERE id = $1 AND tenant_id = $2)",
     )
+    .bind(entity_id)
     .bind(tenant_id.0)
     .fetch_one(&mut *tx)
     .await?;
+    if !entity_belongs {
+        return Err(AttendanceError::EmployeeNotLinked);
+    }
 
     let row = sqlx::query(
         r#"INSERT INTO work_shifts
@@ -103,6 +106,7 @@ pub async fn create_shift(
 }
 
 /// Assign a shift to an employee, effective from `effective_from`.
+/// The shift and employee must belong to the same entity.
 pub async fn assign_shift(
     pool: &TenantPool,
     tenant_id: TenantId,
@@ -112,28 +116,25 @@ pub async fn assign_shift(
 ) -> Result<(), AttendanceError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
 
-    // Verify both employee and shift belong to this tenant (RLS filters, but an
-    // explicit existence check gives a clear error instead of a constraint trap).
-    let employee_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM employees WHERE id = $1 AND tenant_id = $2)",
-    )
-    .bind(employee_id)
-    .bind(tenant_id.0)
-    .fetch_one(&mut *tx)
-    .await?;
-    if !employee_exists {
-        return Err(AttendanceError::EmployeeNotLinked);
-    }
+    // Verify both employee and shift belong to this tenant and share an entity.
+    let employee_entity: Option<Uuid> =
+        sqlx::query_scalar("SELECT entity_id FROM employees WHERE id = $1 AND tenant_id = $2")
+            .bind(employee_id)
+            .bind(tenant_id.0)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let employee_entity = employee_entity.ok_or(AttendanceError::EmployeeNotLinked)?;
 
-    let shift_exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM work_shifts WHERE id = $1 AND tenant_id = $2)",
-    )
-    .bind(shift_id)
-    .bind(tenant_id.0)
-    .fetch_one(&mut *tx)
-    .await?;
-    if !shift_exists {
-        return Err(AttendanceError::NotFound);
+    let shift_entity: Option<Uuid> =
+        sqlx::query_scalar("SELECT entity_id FROM work_shifts WHERE id = $1 AND tenant_id = $2")
+            .bind(shift_id)
+            .bind(tenant_id.0)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let shift_entity = shift_entity.ok_or(AttendanceError::NotFound)?;
+
+    if employee_entity != shift_entity {
+        return Err(AttendanceError::EmployeeNotLinked);
     }
 
     sqlx::query(
@@ -155,10 +156,11 @@ pub async fn assign_shift(
     Ok(())
 }
 
-/// Set the tenant's geofence on all of its entities.
+/// Set the geofence for exactly one entity, verifying it belongs to the tenant.
 pub async fn set_geofence(
     pool: &TenantPool,
     tenant_id: TenantId,
+    entity_id: Uuid,
     lat: f64,
     lng: f64,
     radius_m: i32,
@@ -171,17 +173,22 @@ pub async fn set_geofence(
     }
 
     let mut tx = pool.begin_tenant(tenant_id).await?;
-    sqlx::query(
+    let updated = sqlx::query(
         "UPDATE entities
             SET geofence_lat = $1, geofence_lng = $2, geofence_radius_m = $3, updated_at = now()
-          WHERE tenant_id = $4",
+          WHERE id = $4 AND tenant_id = $5",
     )
     .bind(lat)
     .bind(lng)
     .bind(radius_m)
+    .bind(entity_id)
     .bind(tenant_id.0)
     .execute(&mut *tx)
     .await?;
+
+    if updated.rows_affected() == 0 {
+        return Err(AttendanceError::NotFound);
+    }
 
     tx.commit().await?;
     Ok(())

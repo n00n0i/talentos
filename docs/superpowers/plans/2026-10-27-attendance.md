@@ -45,7 +45,6 @@
 - `crates/services/talentos-hr-runner/src/attendance.rs` — persistence/recompute/approve/import.
 - `web/app/(app)/clock/page.tsx` — employee clock PWA.
 - `web/app/(app)/attendance/shifts/page.tsx` — HR shift management.
-- `web/e2e/attendance.spec.ts` — geolocation + payroll integration (serial, shared seed).
 
 **Modify**
 - `Cargo.toml` (workspace members + dependency).
@@ -56,7 +55,8 @@
 - `crates/api/gateway/src/handlers/attendance.rs` — shifts, HR days, approve, import.
 - `crates/api/gateway/src/router.rs` — routes.
 - `web/components/Shell.tsx` — clock nav for employee roles.
-- `web/e2e/app.spec.ts` — keep existing 7 scenarios; new file is separate but shares the seed tenant.
+- `web/e2e/app.spec.ts` — append attendance/clock scenarios after the existing 7
+  (same serial file and shared tenant; a separate file would race the seed).
 - `scripts/seed-e2e.sql` — geofence coordinates for the E2E entity.
 - `README.md`, `docs/BUILD_STATUS.md` — feature + shortcuts.
 
@@ -144,6 +144,8 @@ pub fn derive_day(
     is_weekend: bool,
 ) -> Result<DaySummary, AttendanceError>;
 pub fn bangkok_offset() -> chrono::FixedOffset; // UTC+7
+
+// AttendanceError is defined in the domain crate (Task 2) and re-used here.
 ```
 - Pairs consecutive in/out; ignores a duplicate `In` before an `Out`; odd tail sets `incomplete = true` and contributes no duration.
 - Shift window: `work_date start` to `end`, or next day when `end <= start`; subtract `break_minutes` once.
@@ -342,17 +344,18 @@ pub async fn seed_attendance_day(pool: &sqlx::PgPool, tenant_id: Uuid, employee_
 - Create: `web/app/(app)/clock/page.tsx`
 - Modify: `web/components/Shell.tsx` (nav: clock for all employee-linked roles; hide HR pages for non-HR)
 - Modify: `web/app/(app)/attendance/page.tsx` (link to shifts)
-- Test: `web/e2e/attendance.spec.ts`
+- Test: `web/e2e/app.spec.ts` (serial)
 
 **Interfaces:** consumes `POST /api/v1/me/attendance/punch`, `GET /api/v1/me/attendance?month=`.
 
 UI states: permission denied, outside geofence (show distance), inside (show In/Out buttons), today summary, this month's days. Use `navigator.geolocation.getCurrentPosition` with `enableHighAccuracy: true`; show `accuracy` metres. No client timestamp sent. Add `web/app/manifest.ts` (name, theme colour, standalone) and link it from the root layout.
 
-- [ ] **Step 1: Write the E2E failing test** with `test.use({ geolocation: { latitude: 13.7563, longitude: 100.5018 }, permissions: ["geolocation"] })`: punch in, advance? (Playwright cannot move time; punch out immediately yields 0 minutes) — assert the day row appears with `incomplete` or 0 worked; then use HR correction to add times and approve; payroll E2E in Task 6 covers arithmetic.
-- [ ] **Step 2: Run, expect failure** (route 404).
-- [ ] **Step 3: Implement the page + nav.**
-- [ ] **Step 4: Run E2E, expect pass.**
-- [ ] **Step 5: Commit.**
+- [ ] **Step 1: Add geofence coordinates to `scripts/seed-e2e.sql` for the fixed entity id (`eeee…0002`: 13.7563/100.5018, radius 200).**
+- [ ] **Step 2: Write the E2E failing test** appended to `web/e2e/app.spec.ts` (after the self-service test): login as HR, create a 09:00–18:00 shift via the UI-free route (`page.request.post('/api/gw/api/v1/shifts')` with the browser cookie), assign it to E2E001, then logout and login as the invited employee. Grant geolocation in the context, set the seed coordinates, punch in/out, and assert today's row appears (0 or incomplete is acceptable; arithmetic is covered by Task 6). HR correction/approval is Task 9.
+- [ ] **Step 3: Run, expect failure** (route 404).
+- [ ] **Step 4: Implement the page + nav.**
+- [ ] **Step 5: Run E2E, expect pass.**
+- [ ] **Step 6: Commit.**
 
 ---
 
@@ -361,7 +364,7 @@ UI states: permission denied, outside geofence (show distance), inside (show In/
 **Files:**
 - Create: `web/app/(app)/attendance/shifts/page.tsx`
 - Modify: `web/app/(app)/attendance/page.tsx` (tabs: days / calendar / shifts)
-- Modify: `web/e2e/attendance.spec.ts`
+- Modify: `web/e2e/app.spec.ts`
 
 **Interfaces:** consumes Task 3/5 endpoints.
 
@@ -379,7 +382,7 @@ UI states: permission denied, outside geofence (show distance), inside (show In/
 - Modify: `scripts/seed-e2e.sql` (geofence for the E2E entity), `README.md`, `docs/BUILD_STATUS.md`.
 - Test: full suite.
 
-- [ ] **Step 1: Add geofence coordinates to the seed, a short README section, and a 30-employee acceptance fixture (two shifts, mixed inside/outside punches) run against payroll.**
+- [ ] **Step 1: Add a short README section and a 30-employee acceptance fixture (two shifts, mixed inside/outside punches) run against payroll.**
 - [ ] **Step 2: Document v1 limits:** GPS deters but does not prove location; no face recognition; no offline queue; OT policy = all holiday/weekend hours are OT; corrections require approval.
 - [ ] **Step 3: Run `cargo fmt`, `clippy -D warnings`, `cargo test --workspace`, `npm run build`, Playwright, and the 30-employee attendance→payroll fixture.**
 - [ ] **Step 4: Commit.**

@@ -134,17 +134,22 @@ async function proxy(req: NextRequest, path: string[]) {
   return res;
 }
 
-type Ctx = { params: { path: string[] } };
+// Next 15: route params are async.
+type Ctx = { params: Promise<{ path: string[] }> };
 
 export async function GET(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }
 export async function POST(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }
 export async function PUT(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }
 export async function DELETE(req: NextRequest, ctx: Ctx) {
-  return proxy(req, ctx.params.path);
+  const { path } = await ctx.params;
+  return proxy(req, path);
 }

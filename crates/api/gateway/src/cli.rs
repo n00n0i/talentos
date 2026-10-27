@@ -233,18 +233,20 @@ async fn ensure_roles(pool: &PgPool) -> CliResult<()> {
                 .bind(role)
                 .fetch_one(pool)
                 .await?;
-        if !exists {
-            // Utility statements cannot take bind parameters; quote_literal makes
-            // the one interpolated value safe.
-            let literal: String = sqlx::query_scalar("SELECT quote_literal($1)")
-                .bind(password)
-                .fetch_one(pool)
-                .await?;
-            let bypass_clause = if bypass { "BYPASSRLS" } else { "NOBYPASSRLS" };
-            let sql =
-                format!("CREATE ROLE {role} LOGIN PASSWORD {literal} NOSUPERUSER {bypass_clause}");
-            sqlx::raw_sql(&sql).execute(pool).await?;
-        }
+        // Utility statements cannot take bind parameters; quote_literal makes the
+        // one interpolated value safe. Existing roles are synced to the env
+        // password so a changed .env never drifts away from the database.
+        let literal: String = sqlx::query_scalar("SELECT quote_literal($1)")
+            .bind(password)
+            .fetch_one(pool)
+            .await?;
+        let bypass_clause = if bypass { "BYPASSRLS" } else { "NOBYPASSRLS" };
+        let sql = if exists {
+            format!("ALTER ROLE {role} WITH LOGIN PASSWORD {literal} {bypass_clause}")
+        } else {
+            format!("CREATE ROLE {role} LOGIN PASSWORD {literal} NOSUPERUSER {bypass_clause}")
+        };
+        sqlx::raw_sql(&sql).execute(pool).await?;
     }
 
     sqlx::raw_sql(

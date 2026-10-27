@@ -159,8 +159,9 @@ make up                 # migrate + roles, then gateway + web + nginx
 open http://localhost   # nginx -> web:3000, /api/* and /health -> gateway:8080
 ```
 
-- `make migrate` runs the embedded migrations as the owner and (re)creates the
-  runtime roles with `APP_DB_PASSWORD` / `AUTH_DB_PASSWORD`. Safe to re-run.
+- `make migrate` runs the embedded migrations as the owner and (re)creates or
+  updates the runtime roles from `APP_DB_PASSWORD` / `AUTH_DB_PASSWORD`. Safe to
+  re-run; changing the env password rotates the DB role password.
 - The gateway and web ports bind to `127.0.0.1` only; nginx is the public entry.
   Terminate TLS in front of nginx (or add certs to `nginx.conf`).
 - `make backup` writes a gzip dump to `./backups` (14-day retention);
@@ -178,7 +179,7 @@ open http://localhost   # nginx -> web:3000, /api/* and /health -> gateway:8080
 
 ## Web app
 
-`web/` is a Next.js 14 app (Thai-first, sage/teal dashboard). It never
+`web/` is a Next.js 15 app (React 19, Thai-first, sage/teal dashboard). It never
 talks to the gateway from the browser: a route handler proxies `/api/gw/*` and
 keeps both tokens in `HttpOnly` cookies, rotating the refresh token single-flight
 so concurrent requests cannot trigger family revocation.

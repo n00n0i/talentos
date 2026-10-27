@@ -61,7 +61,9 @@ crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT pe
 
 ## Web app
 
-`web/` — Next.js 14.2.35, TypeScript strict, no UI dependency beyond React.
+`web/` — Next.js 15.5.28 + React 19, TypeScript strict, no UI dependency beyond
+React. `npm audit` reports 0 vulnerabilities; CI fails on high/critical in
+production deps.
 `npm run build` passes (10 routes). Browser never holds a token: `/api/session/login`
 sets `HttpOnly` cookies and `/api/gw/*` proxies with a bearer header, refreshing
 single-flight. Verified against the real gateway: login → `/auth/me` → GraphQL →
@@ -69,6 +71,12 @@ payslip template → HTML render → 77 KB PDF, and an expired access token rota
 on the next request (old refresh token then 401, as designed). The standalone
 image (`web/Dockerfile`) was built and served `login` → session login → `/me`
 against a live gateway.
+
+Full compose stack verified separately (isolated project + volume): migrate →
+gateway → web → nginx with the TLS overlay. HTTPS `/health` 200, HTTP→HTTPS 301,
+web session login and `/api/gw/auth/me` 200, RLS enforced (`talentos_app`),
+PII configured, 20 migrations tracked, and `talentos-gateway provision` created
+the first tenant through the compose service.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings) and `/users` (invite, roles, deactivate, HR-issued password reset).

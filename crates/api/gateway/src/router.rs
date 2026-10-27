@@ -104,6 +104,7 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/attendance/:id",
             axum::routing::delete(attendance::delete),
         )
+        .route("/api/v1/attendance/import", post(attendance::import))
         .route("/api/v1/attendance/days", get(attendance::list_days))
         .route(
             "/api/v1/attendance/days/:id/approve",

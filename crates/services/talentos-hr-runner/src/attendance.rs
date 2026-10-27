@@ -1,8 +1,8 @@
 //! Attendance service: shifts, assignments, geofence settings, and mobile punch.
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde::Serialize;
 use serde_json::json;
 use sqlx::Row;
@@ -41,6 +41,30 @@ pub struct PunchInput {
     pub lat: f64,
     pub lng: f64,
     pub accuracy_m: Option<f64>,
+}
+
+/// One row of a device import batch.
+#[derive(Debug, Clone)]
+pub struct ImportRow {
+    pub employee_code: String,
+    pub date: String,
+    pub in_time: String,
+    pub out_time: String,
+}
+
+/// One failed or skipped row report.
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportErrorRow {
+    pub row: usize,
+    pub message: String,
+}
+
+/// Result of a device import batch.
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub errors: Vec<ImportErrorRow>,
 }
 
 /// Derived attendance state for a work date.
@@ -828,6 +852,215 @@ pub async fn correct_day(
 
     tx.commit().await?;
     Ok(())
+}
+
+/// Import a batch of device rows. Each row is validated independently; good rows
+/// are committed together with a single batch audit log entry. Business errors
+/// are collected per row and never abort the batch. Unexpected database errors
+/// roll back the whole batch.
+pub async fn import_device_rows(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    actor: Uuid,
+    rows: Vec<ImportRow>,
+) -> Result<ImportResult, AttendanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let mut result = ImportResult {
+        imported: 0,
+        skipped: 0,
+        errors: Vec::new(),
+    };
+
+    for (idx, row) in rows.iter().enumerate() {
+        let row_num = idx + 1;
+        match process_import_row(&mut tx, row).await {
+            Ok(ImportRowOutcome::Imported) => {
+                result.imported += 1;
+            }
+            Ok(ImportRowOutcome::Skipped { reason }) => {
+                result.skipped += 1;
+                tracing::debug!(row = row_num, reason, "import row skipped");
+            }
+            Err(ImportRowError::Business(message)) => {
+                result.errors.push(ImportErrorRow {
+                    row: row_num,
+                    message,
+                });
+            }
+            Err(ImportRowError::Db(e)) => {
+                let _ = tx.rollback().await;
+                return Err(e.into());
+            }
+        }
+    }
+
+    if !rows.is_empty() {
+        let batch_id = Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"INSERT INTO audit_log
+                 (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+               VALUES (current_tenant_id(), 'user', $1, 'attendance.import', 'attendance_import', $2, $3)"#,
+        )
+        .bind(actor.to_string())
+        .bind(&batch_id)
+        .bind(json!({
+            "imported": result.imported,
+            "skipped": result.skipped,
+            "errors": result.errors,
+        }))
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(result)
+}
+
+enum ImportRowOutcome {
+    Imported,
+    Skipped { reason: String },
+}
+
+enum ImportRowError {
+    Business(String),
+    Db(sqlx::Error),
+}
+
+impl From<sqlx::Error> for ImportRowError {
+    fn from(e: sqlx::Error) -> Self {
+        ImportRowError::Db(e)
+    }
+}
+
+async fn process_import_row(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    row: &ImportRow,
+) -> Result<ImportRowOutcome, ImportRowError> {
+    let work_date = NaiveDate::parse_from_str(&row.date, "%Y-%m-%d")
+        .map_err(|e| ImportRowError::Business(format!("invalid date '{}': {}", row.date, e)))?;
+    let in_time = NaiveTime::parse_from_str(&row.in_time, "%H:%M").map_err(|e| {
+        ImportRowError::Business(format!("invalid in time '{}': {}", row.in_time, e))
+    })?;
+    let out_time = NaiveTime::parse_from_str(&row.out_time, "%H:%M").map_err(|e| {
+        ImportRowError::Business(format!("invalid out time '{}': {}", row.out_time, e))
+    })?;
+
+    if out_time <= in_time {
+        return Err(ImportRowError::Business(
+            "out must be after in on the same day".into(),
+        ));
+    }
+
+    let employee_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM employees
+          WHERE tenant_id = current_tenant_id()
+            AND employee_code = $1
+            AND status <> 'terminated'",
+    )
+    .bind(&row.employee_code)
+    .fetch_optional(&mut **tx)
+    .await?;
+    let employee_id = match employee_id {
+        Some(id) => id,
+        None => {
+            return Err(ImportRowError::Business(format!(
+                "employee not found: {}",
+                row.employee_code
+            )))
+        }
+    };
+
+    let shift = active_shift_in_tx(tx, employee_id, work_date).await?;
+    let shift = match shift {
+        Some(s) => s,
+        None => {
+            return Err(ImportRowError::Business(
+                "no shift assigned for date".into(),
+            ))
+        }
+    };
+
+    let (day_start, day_end) = import_day_bounds(work_date)?;
+
+    let has_mobile: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM attendance_events
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $1
+              AND occurred_at >= $2 AND occurred_at < $3
+              AND source = 'mobile')",
+    )
+    .bind(employee_id)
+    .bind(day_start)
+    .bind(day_end)
+    .fetch_one(&mut **tx)
+    .await?;
+    if has_mobile {
+        return Ok(ImportRowOutcome::Skipped {
+            reason: "mobile punches are authoritative".into(),
+        });
+    }
+
+    sqlx::query(
+        "DELETE FROM attendance_events
+          WHERE tenant_id = current_tenant_id()
+            AND employee_id = $1
+            AND occurred_at >= $2 AND occurred_at < $3
+            AND source IN ('manual', 'import')",
+    )
+    .bind(employee_id)
+    .bind(day_start)
+    .bind(day_end)
+    .execute(&mut **tx)
+    .await?;
+
+    let bkk = bangkok_offset();
+    let in_at = bkk
+        .from_local_datetime(&work_date.and_time(in_time))
+        .single()
+        .ok_or_else(|| ImportRowError::Business("invalid in timestamp".into()))?
+        .with_timezone(&Utc);
+    let out_at = bkk
+        .from_local_datetime(&work_date.and_time(out_time))
+        .single()
+        .ok_or_else(|| ImportRowError::Business("invalid out timestamp".into()))?
+        .with_timezone(&Utc);
+
+    for (kind, at) in [("in", in_at), ("out", out_at)] {
+        sqlx::query(
+            "INSERT INTO attendance_events
+               (tenant_id, employee_id, kind, source, occurred_at)
+             VALUES (current_tenant_id(), $1, $2, 'import', $3)",
+        )
+        .bind(employee_id)
+        .bind(kind)
+        .bind(at)
+        .execute(&mut **tx)
+        .await?;
+    }
+
+    recompute_day(tx, employee_id, &shift, work_date)
+        .await
+        .map_err(|e| match e {
+            AttendanceError::Db(sqlx_err) => ImportRowError::Db(sqlx_err),
+            other => ImportRowError::Business(format!("failed to recompute day: {}", other)),
+        })?;
+
+    Ok(ImportRowOutcome::Imported)
+}
+
+fn import_day_bounds(
+    work_date: NaiveDate,
+) -> Result<(DateTime<Utc>, DateTime<Utc>), ImportRowError> {
+    let bkk = bangkok_offset();
+    let start = bkk
+        .from_local_datetime(&work_date.and_time(NaiveTime::MIN))
+        .single()
+        .ok_or_else(|| ImportRowError::Business("invalid work date".into()))?;
+    let end = bkk
+        .from_local_datetime(&(work_date + Duration::days(1)).and_time(NaiveTime::MIN))
+        .single()
+        .ok_or_else(|| ImportRowError::Business("invalid work date".into()))?;
+    Ok((start.with_timezone(&Utc), end.with_timezone(&Utc)))
 }
 
 async fn shift_by_id_in_tx(

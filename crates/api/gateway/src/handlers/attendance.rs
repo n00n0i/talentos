@@ -88,6 +88,21 @@ pub struct CorrectBody {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ImportRowBody {
+    pub employee_code: String,
+    pub date: String,
+    #[serde(rename = "in")]
+    pub in_time: String,
+    #[serde(rename = "out")]
+    pub out_time: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportBody {
+    pub rows: Vec<ImportRowBody>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct HolidayDto {
     pub id: Uuid,
@@ -702,13 +717,8 @@ pub async fn approve_day(
     if let Err(forbidden) = require(&ctx, "attendance", "approve") {
         return forbidden;
     }
-    match talentos_hr_runner::attendance::approve_day(
-        &state.pool,
-        ctx.tenant_id,
-        ctx.user_id.0,
-        id,
-    )
-    .await
+    match talentos_hr_runner::attendance::approve_day(&state.pool, ctx.tenant_id, ctx.user_id.0, id)
+        .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => map_attendance_error(e),
@@ -738,6 +748,38 @@ pub async fn correct_day(
     .await
     {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => map_attendance_error(e),
+    }
+}
+
+/// POST /api/v1/attendance/import
+pub async fn import(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<ImportBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "manage") {
+        return forbidden;
+    }
+    let rows: Vec<talentos_hr_runner::attendance::ImportRow> = body
+        .rows
+        .into_iter()
+        .map(|r| talentos_hr_runner::attendance::ImportRow {
+            employee_code: r.employee_code,
+            date: r.date,
+            in_time: r.in_time,
+            out_time: r.out_time,
+        })
+        .collect();
+    match talentos_hr_runner::attendance::import_device_rows(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        rows,
+    )
+    .await
+    {
+        Ok(result) => (StatusCode::OK, Json(result)).into_response(),
         Err(e) => map_attendance_error(e),
     }
 }

@@ -60,7 +60,7 @@ const EMPTY: FormState = {
   user_id: "",
 };
 
-type ImportRow = Record<string, string | boolean>;
+type ImportRow = Record<string, string>;
 type ImportResult = {
   dry_run: boolean;
   total: number;
@@ -86,7 +86,8 @@ const IMPORT_OPTIONAL = [
   "pf_member",
   "sso_enrolled",
 ];
-const IMPORT_BOOLS = ["pf_member", "sso_enrolled"];
+const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+const IMPORT_MAX_ROWS = 1000;
 
 function parseCsv(text: string): string[][] {
   const out: string[][] = [];
@@ -128,18 +129,14 @@ function csvToImportRows(text: string): ImportRow[] {
   const missing = IMPORT_REQUIRED.filter((h) => !cols.includes(h));
   if (missing.length) throw new Error(`ไม่พบคอลัมน์ที่จำเป็น: ${missing.join(", ")}`);
   if (body.length === 0) throw new Error("ไม่มีข้อมูลพนักงานในไฟล์");
-  return body.map((cells, i) => {
+  if (body.length > IMPORT_MAX_ROWS) throw new Error(`นำเข้าได้ไม่เกิน ${IMPORT_MAX_ROWS} แถวต่อไฟล์`);
+  return body.map((cells) => {
     const r: ImportRow = {};
     for (const key of [...IMPORT_REQUIRED, ...IMPORT_OPTIONAL]) {
       const idx = cols.indexOf(key);
       const v = idx < 0 ? "" : (cells[idx] ?? "").trim();
       if (v === "") continue;
-      if (IMPORT_BOOLS.includes(key)) {
-        const b = v.toLowerCase();
-        if (!["true", "1", "yes", "false", "0", "no"].includes(b))
-          throw new Error(`แถว ${i + 1}: ค่า ${key} ต้องเป็น true หรือ false`);
-        r[key] = ["true", "1", "yes"].includes(b);
-      } else r[key] = v;
+      r[key] = v;
     }
     return r;
   });
@@ -244,6 +241,10 @@ export default function EmployeesPage() {
     setImportRows([]);
     setError("");
     if (!file) return;
+    if (file.size > IMPORT_MAX_BYTES) {
+      setError("ไฟล์ใหญ่เกิน 2 MB");
+      return;
+    }
     try {
       setImportRows(csvToImportRows(await file.text()));
     } catch (err) {
@@ -262,6 +263,9 @@ export default function EmployeesPage() {
       });
       if (dryRun) {
         setImportResult(r);
+      } else if (r.invalid > 0 || r.created !== r.valid) {
+        setImportResult(r);
+        setError("ไม่มีการนำเข้าพนักงาน เนื่องจากข้อมูลบางแถวไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วลองใหม่");
       } else {
         setNotice(`นำเข้าพนักงาน ${r.created} รายการแล้ว`);
         setImportRows([]);
@@ -462,7 +466,8 @@ export default function EmployeesPage() {
       <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
         <h2>นำเข้าพนักงานจากไฟล์ CSV</h2>
         <p className="hint">
-          คอลัมน์ที่จำเป็น: {IMPORT_REQUIRED.join(", ")} · ไม่บังคับ: {IMPORT_OPTIONAL.join(", ")}
+          คอลัมน์ที่จำเป็น: {IMPORT_REQUIRED.join(", ")} · ไม่บังคับ: {IMPORT_OPTIONAL.join(", ")} (ไฟล์ไม่เกิน 2 MB
+          และ {IMPORT_MAX_ROWS} แถว)
         </p>
         <input key={importKey} type="file" accept=".csv" data-testid="import-csv" onChange={onImportFile} />
         {importRows.length > 0 && (

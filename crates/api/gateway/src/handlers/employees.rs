@@ -869,13 +869,15 @@ fn validate(body: &EmployeeBody) -> Option<String> {
     )
 }
 
-fn parse_bool(value: Option<&str>, default: bool) -> Result<bool, String> {
+fn parse_bool(value: Option<&str>, default: bool, name: &str) -> Result<bool, String> {
     match value.map(str::trim).filter(|v| !v.is_empty()) {
         None => Ok(default),
         Some(v) => match v.to_ascii_lowercase().as_str() {
             "true" | "1" | "yes" => Ok(true),
             "false" | "0" | "no" => Ok(false),
-            _ => Err(format!("invalid boolean value: {v}")),
+            _ => Err(format!(
+                "{name} must be true/false, 1/0, or yes/no (got {v})"
+            )),
         },
     }
 }
@@ -973,7 +975,7 @@ fn parse_import_row(row: &ImportEmployeeRow) -> Result<ParsedImportRow, Vec<Stri
         None => Some(1),
     };
 
-    let pf_member = match parse_bool(row.pf_member.as_deref(), false) {
+    let pf_member = match parse_bool(row.pf_member.as_deref(), false, "pf_member") {
         Ok(v) => Some(v),
         Err(e) => {
             errors.push(e);
@@ -981,7 +983,7 @@ fn parse_import_row(row: &ImportEmployeeRow) -> Result<ParsedImportRow, Vec<Stri
         }
     };
 
-    let sso_enrolled = match parse_bool(row.sso_enrolled.as_deref(), true) {
+    let sso_enrolled = match parse_bool(row.sso_enrolled.as_deref(), true, "sso_enrolled") {
         Ok(v) => Some(v),
         Err(e) => {
             errors.push(e);
@@ -1005,20 +1007,45 @@ fn parse_import_row(row: &ImportEmployeeRow) -> Result<ParsedImportRow, Vec<Stri
         return Err(errors);
     }
 
+    let (
+        Some(employee_code),
+        Some(first_name_th),
+        Some(last_name_th),
+        Some(position_title),
+        Some(base_salary),
+        Some(hire_date),
+        Some(tax_filing_status),
+        Some(pf_member),
+        Some(sso_enrolled),
+    ) = (
+        employee_code,
+        first_name_th,
+        last_name_th,
+        position_title,
+        base_salary,
+        hire_date,
+        tax_filing_status,
+        pf_member,
+        sso_enrolled,
+    )
+    else {
+        return Err(errors);
+    };
+
     Ok(ParsedImportRow {
-        employee_code: employee_code.unwrap(),
-        first_name_th: first_name_th.unwrap(),
-        last_name_th: last_name_th.unwrap(),
-        position_title: position_title.unwrap(),
-        base_salary: base_salary.unwrap(),
-        hire_date: hire_date.unwrap(),
+        employee_code,
+        first_name_th,
+        last_name_th,
+        position_title,
+        base_salary,
+        hire_date,
         first_name_en,
         last_name_en,
         department,
         entity_id: row.entity_id,
-        tax_filing_status: tax_filing_status.unwrap(),
-        pf_member: pf_member.unwrap(),
-        sso_enrolled: sso_enrolled.unwrap(),
+        tax_filing_status,
+        pf_member,
+        sso_enrolled,
     })
 }
 

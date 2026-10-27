@@ -25,8 +25,8 @@ fn bkk_time(h: u32, m: u32) -> NaiveTime {
     NaiveTime::from_hms_opt(h, m, 0).unwrap()
 }
 
-/// Convert a Bangkok wall-clock time to UTC.
-fn utc(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
+/// Convert a Bangkok wall-clock time to the UTC instant.
+fn bkk_at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
     let bkk = chrono::FixedOffset::east_opt(7 * 60 * 60).unwrap();
     bkk.with_ymd_and_hms(y, mo, d, h, mi, 0)
         .unwrap()
@@ -178,7 +178,7 @@ async fn punch_inside_geofence_is_accepted() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("inside punch should succeed");
@@ -230,7 +230,7 @@ async fn punch_outside_geofence_is_rejected() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await;
     assert!(
@@ -288,7 +288,7 @@ async fn punch_within_accuracy_tolerance_is_accepted() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await;
     assert!(result.is_ok(), "expected acceptance, got {result:?}");
@@ -330,7 +330,7 @@ async fn punch_without_geofence_is_rejected() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await;
     assert!(
@@ -384,7 +384,7 @@ async fn unlinked_user_is_rejected() {
         TenantId(tenant_id),
         unlinked_user,
         input,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await;
     assert!(
@@ -427,7 +427,7 @@ async fn overnight_punch_lands_on_previous_work_date() {
     )
     .await;
 
-    // 01:00 Bangkok on 2026-10-28 is 18:00 UTC on 2026-10-27.
+    // 01:00 Bangkok on 2026-10-28 falls inside the 27th's 22:00-06:00 shift.
     let input = PunchInput {
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -439,11 +439,145 @@ async fn overnight_punch_lands_on_previous_work_date() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 18, 0),
+        bkk_at(2026, 10, 28, 1, 0),
     )
     .await
     .expect("overnight punch should succeed");
     assert_eq!(day.work_date, bkk_date(2026, 10, 27));
+
+    cleanup(&raw, tenant_id).await;
+}
+
+async fn punch_pair(
+    pool: &TenantPool,
+    tenant_id: Uuid,
+    user_id: Uuid,
+    in_at: DateTime<Utc>,
+    out_at: DateTime<Utc>,
+) -> talentos_hr_runner::attendance::DayView {
+    let mk = |kind| PunchInput {
+        kind,
+        lat: OFFICE_LAT,
+        lng: OFFICE_LNG,
+        accuracy_m: Some(10.0),
+    };
+    punch_at(
+        pool,
+        TenantId(tenant_id),
+        user_id,
+        mk(talentos_attendance::PunchKind::In),
+        in_at,
+    )
+    .await
+    .expect("punch in");
+    punch_at(
+        pool,
+        TenantId(tenant_id),
+        user_id,
+        mk(talentos_attendance::PunchKind::Out),
+        out_at,
+    )
+    .await
+    .expect("punch out")
+}
+
+#[tokio::test]
+async fn early_arrival_and_late_leave_count_with_ot_after_shift_end() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(9, 0),
+        bkk_time(18, 0),
+    )
+    .await;
+
+    let day = punch_pair(
+        &pool,
+        tenant_id,
+        user_id,
+        bkk_at(2026, 10, 27, 8, 50),
+        bkk_at(2026, 10, 27, 19, 30),
+    )
+    .await;
+    assert_eq!(day.work_date, bkk_date(2026, 10, 27));
+    assert_eq!(day.worked_minutes, 580);
+    assert_eq!(day.ot_minutes, 90);
+    assert_eq!(day.ot_kind, "weekday");
+    assert!(!day.incomplete);
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn overnight_shift_out_after_shift_end_counts_ot_on_start_date() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(22, 0),
+        bkk_time(6, 0),
+    )
+    .await;
+
+    // 22:00 Bangkok on the 27th is 15:00 UTC; 06:05 on the 28th is 23:05 UTC the 27th.
+    let day = punch_pair(
+        &pool,
+        tenant_id,
+        user_id,
+        bkk_at(2026, 10, 27, 22, 0),
+        bkk_at(2026, 10, 28, 6, 5),
+    )
+    .await;
+    assert_eq!(day.work_date, bkk_date(2026, 10, 27));
+    assert_eq!(day.worked_minutes, 425);
+    assert_eq!(day.ot_minutes, 5);
+    assert!(!day.incomplete);
+
+    let orphan = day_status(&raw, tenant_id, employee_id, bkk_date(2026, 10, 28)).await;
+    assert_eq!(orphan, None, "out punch must not open a day on the 28th");
 
     cleanup(&raw, tenant_id).await;
 }
@@ -492,7 +626,7 @@ async fn holiday_punch_marks_day_holiday() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("holiday punch should succeed");
@@ -534,7 +668,7 @@ async fn two_punches_same_second_stay_consistent() {
     )
     .await;
 
-    let same_time = utc(2026, 10, 27, 2, 0);
+    let same_time = bkk_at(2026, 10, 27, 9, 0);
     let input_in = PunchInput {
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -610,7 +744,7 @@ async fn negative_accuracy_is_rejected() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await;
     assert!(
@@ -671,7 +805,7 @@ async fn new_punch_resets_approved_day_to_pending() {
         TenantId(tenant_id),
         user_id,
         input_in,
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("first punch");
@@ -680,7 +814,7 @@ async fn new_punch_resets_approved_day_to_pending() {
         TenantId(tenant_id),
         user_id,
         input_out,
-        utc(2026, 10, 27, 11, 0),
+        bkk_at(2026, 10, 27, 18, 0),
     )
     .await
     .expect("second punch");
@@ -697,7 +831,7 @@ async fn new_punch_resets_approved_day_to_pending() {
         TenantId(tenant_id),
         user_id,
         input_out,
-        utc(2026, 10, 27, 11, 1),
+        bkk_at(2026, 10, 27, 18, 1),
     )
     .await
     .expect("post-approval punch");

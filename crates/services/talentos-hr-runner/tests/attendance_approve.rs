@@ -27,7 +27,8 @@ fn bkk_time(h: u32, m: u32) -> NaiveTime {
     NaiveTime::from_hms_opt(h, m, 0).unwrap()
 }
 
-fn utc(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
+/// Bangkok wall-clock time to the real UTC instant.
+fn bkk_at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
     let bkk = chrono::FixedOffset::east_opt(7 * 60 * 60).unwrap();
     bkk.with_ymd_and_hms(y, mo, d, h, mi, 0)
         .unwrap()
@@ -240,7 +241,7 @@ async fn pending_day_is_not_paid() {
         TenantId(tenant_id),
         user_id,
         input_in,
-        utc(2026, 10, 27, 9, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("punch in");
@@ -249,7 +250,7 @@ async fn pending_day_is_not_paid() {
         TenantId(tenant_id),
         user_id,
         input_out,
-        utc(2026, 10, 27, 18, 0),
+        bkk_at(2026, 10, 27, 18, 0),
     )
     .await
     .expect("punch out");
@@ -317,7 +318,7 @@ async fn approve_writes_payroll_row_with_hours_and_ot_kind() {
         TenantId(tenant_id),
         user_id,
         input_in,
-        utc(2026, 10, 27, 9, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("punch in");
@@ -326,7 +327,7 @@ async fn approve_writes_payroll_row_with_hours_and_ot_kind() {
         TenantId(tenant_id),
         user_id,
         input_out,
-        utc(2026, 10, 27, 18, 0),
+        bkk_at(2026, 10, 27, 18, 0),
     )
     .await
     .expect("punch out");
@@ -363,7 +364,7 @@ async fn approve_writes_payroll_row_with_hours_and_ot_kind() {
 }
 
 #[tokio::test]
-async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapproval() {
+async fn correction_resets_approved_day_and_withdraws_payroll_row_until_reapproval() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
@@ -411,7 +412,7 @@ async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapp
         TenantId(tenant_id),
         user_id,
         input_in,
-        utc(2026, 10, 27, 9, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("punch in");
@@ -420,7 +421,7 @@ async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapp
         TenantId(tenant_id),
         user_id,
         input_out,
-        utc(2026, 10, 27, 18, 0),
+        bkk_at(2026, 10, 27, 18, 0),
     )
     .await
     .expect("punch out");
@@ -443,8 +444,8 @@ async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapp
         TenantId(tenant_id),
         user_id,
         day_id,
-        utc(2026, 10, 27, 9, 0),
-        utc(2026, 10, 27, 12, 0),
+        bkk_at(2026, 10, 27, 9, 0),
+        bkk_at(2026, 10, 27, 12, 0),
         "forgot to clock out",
     )
     .await
@@ -457,8 +458,12 @@ async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapp
     );
     assert_eq!(
         attendance_record(&raw, tenant_id, employee_id, work_date).await,
-        Some(first_record.clone()),
-        "payroll row must stay unchanged until re-approval"
+        None,
+        "payroll row must be withdrawn while the day is pending"
+    );
+    assert_eq!(
+        approval_fields_set(&raw, tenant_id, day_id).await,
+        (false, false)
     );
     assert_eq!(
         audit_count(&raw, tenant_id, "attendance.correct", day_id).await,
@@ -474,7 +479,90 @@ async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapp
         .await
         .expect("updated payroll row");
     assert_ne!(first_record, second_record);
-    assert_eq!(second_record.0, Decimal::from(2)); // 120 minutes / 60 = 2.00
+    assert_eq!(second_record.0, Decimal::from(3)); // 3h stint: no break deducted
+
+    cleanup(&raw, tenant_id).await;
+}
+
+async fn approval_fields_set(pool: &PgPool, tenant_id: Uuid, day_id: Uuid) -> (bool, bool) {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query(
+        "SELECT approved_by IS NOT NULL AS by, approved_at IS NOT NULL AS at
+           FROM attendance_days WHERE id = $1",
+    )
+    .bind(day_id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("approval fields");
+    let _ = tx.rollback().await;
+    (row.get("by"), row.get("at"))
+}
+
+#[tokio::test]
+async fn incomplete_day_cannot_be_approved() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(9, 0),
+        bkk_time(18, 0),
+    )
+    .await;
+
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        PunchInput {
+            kind: talentos_attendance::PunchKind::In,
+            lat: OFFICE_LAT,
+            lng: OFFICE_LNG,
+            accuracy_m: Some(10.0),
+        },
+        bkk_at(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("punch in");
+
+    let work_date = bkk_date(2026, 10, 27);
+    let day_id = day_id_of(&raw, tenant_id, employee_id, work_date)
+        .await
+        .expect("day row");
+    let result = approve_day(&pool, TenantId(tenant_id), user_id, day_id).await;
+    assert!(
+        matches!(result, Err(AttendanceError::IncompleteDay)),
+        "incomplete day must be rejected, got {result:?}"
+    );
+    assert_eq!(
+        attendance_record(&raw, tenant_id, employee_id, work_date).await,
+        None
+    );
 
     cleanup(&raw, tenant_id).await;
 }
@@ -522,7 +610,7 @@ async fn tenant_b_cannot_approve_tenant_a_day() {
         TenantId(tenant_a),
         user_a,
         input,
-        utc(2026, 10, 27, 9, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("punch");
@@ -587,7 +675,7 @@ async fn list_days_filters_by_date_range_employee_and_status() {
         TenantId(tenant_id),
         user_id,
         input,
-        utc(2026, 10, 27, 9, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("punch");

@@ -101,6 +101,8 @@ pub enum AttendanceError {
     Rule(#[from] AttendanceRuleError),
     #[error("attendance values exceed allowed range")]
     OutOfRange,
+    #[error("day is incomplete: correct the punches before approving")]
+    IncompleteDay,
     #[error("invalid correction: {0}")]
     InvalidCorrection(&'static str),
     #[error("database error: {0}")]
@@ -325,7 +327,8 @@ pub async fn punch_at(
         return Err(AttendanceError::InvalidImport);
     }
 
-    let (work_date, shift) = resolve_work_date(&mut tx, employee_id, occurred_at).await?;
+    let (work_date, shift) =
+        resolve_work_date(&mut tx, employee_id, input.kind, occurred_at).await?;
     let shift = shift.ok_or(AttendanceError::NoShift)?;
 
     let (distance, allowed) = check_geofence(&mut tx, entity_id, &input).await?;
@@ -335,14 +338,15 @@ pub async fn punch_at(
 
     let event_id = sqlx::query_scalar::<_, Uuid>(
         r#"INSERT INTO attendance_events
-             (tenant_id, employee_id, kind, source, occurred_at, distance_m, accuracy_m)
-           VALUES ($1,$2,$3,'mobile',$4,$5,$6)
+             (tenant_id, employee_id, kind, source, occurred_at, work_date, distance_m, accuracy_m)
+           VALUES ($1,$2,$3,'mobile',$4,$5,$6,$7)
            RETURNING id"#,
     )
     .bind(tenant_id.0)
     .bind(employee_id)
     .bind(kind_to_str(input.kind))
     .bind(occurred_at)
+    .bind(work_date)
     .bind(distance)
     .bind(input.accuracy_m)
     .fetch_one(&mut *tx)
@@ -372,16 +376,40 @@ pub async fn punch_at(
     Ok(day)
 }
 
-/// Resolve the work date for a punch, preferring an enclosing overnight window.
+/// Resolve the work date for a punch. An out punch closes the employee's open
+/// in from the last 16 hours (late leave / overnight); otherwise the shift
+/// window decides, defaulting to the Bangkok calendar day.
 async fn resolve_work_date(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     employee_id: Uuid,
+    kind: PunchKind,
     occurred_at: DateTime<Utc>,
 ) -> Result<(NaiveDate, Option<ShiftView>), AttendanceError> {
     let bkk = bangkok_offset();
     let local = occurred_at.with_timezone(&bkk).naive_local();
     let today = local.date();
     let yesterday = today - Duration::days(1);
+
+    if kind == PunchKind::Out {
+        let last = sqlx::query(
+            "SELECT kind, work_date FROM attendance_events
+              WHERE tenant_id = current_tenant_id() AND employee_id = $1
+                AND occurred_at <= $2 AND occurred_at >= $2 - interval '16 hours'
+              ORDER BY occurred_at DESC LIMIT 1",
+        )
+        .bind(employee_id)
+        .bind(occurred_at)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if let Some(row) = last {
+            let kind: String = row.try_get("kind")?;
+            if kind == "in" {
+                let open_date: NaiveDate = row.try_get("work_date")?;
+                let shift = active_shift_in_tx(tx, employee_id, open_date).await?;
+                return Ok((open_date, shift));
+            }
+        }
+    }
 
     let today_shift = active_shift_in_tx(tx, employee_id, today).await?;
     let yesterday_shift = active_shift_in_tx(tx, employee_id, yesterday).await?;
@@ -490,29 +518,15 @@ async fn recompute_day(
     shift: &ShiftView,
     work_date: NaiveDate,
 ) -> Result<DayView, AttendanceError> {
-    let bkk = bangkok_offset();
-    let shift_start_bkk = bkk
-        .from_local_datetime(&work_date.and_time(shift.start))
-        .single()
-        .ok_or_else(|| sqlx::Error::RowNotFound)?;
-    let shift_end_bkk = if shift.end > shift.start {
-        bkk.from_local_datetime(&work_date.and_time(shift.end))
-    } else {
-        bkk.from_local_datetime(&(work_date + Duration::days(1)).and_time(shift.end))
-    }
-    .single()
-    .ok_or_else(|| sqlx::Error::RowNotFound)?;
-
     let rows = sqlx::query(
         "SELECT kind, occurred_at FROM attendance_events
           WHERE tenant_id = current_tenant_id()
             AND employee_id = $1
-            AND occurred_at BETWEEN $2 AND $3
+            AND work_date = $2
           ORDER BY occurred_at",
     )
     .bind(employee_id)
-    .bind(shift_start_bkk.with_timezone(&Utc))
-    .bind(shift_end_bkk.with_timezone(&Utc))
+    .bind(work_date)
     .fetch_all(&mut **tx)
     .await?;
 
@@ -557,6 +571,19 @@ async fn recompute_day(
         OtKind::Holiday => "holiday",
     };
 
+    // Re-opening an approved day withdraws its payroll row until re-approved.
+    sqlx::query(
+        r#"DELETE FROM attendance_records
+            WHERE tenant_id = current_tenant_id() AND employee_id = $1 AND work_date = $2
+              AND EXISTS (SELECT 1 FROM attendance_days
+                           WHERE tenant_id = current_tenant_id() AND employee_id = $1
+                             AND work_date = $2 AND status = 'approved')"#,
+    )
+    .bind(employee_id)
+    .bind(work_date)
+    .execute(&mut **tx)
+    .await?;
+
     let id: Uuid = sqlx::query_scalar(
         r#"INSERT INTO attendance_days
              (tenant_id, employee_id, work_date, shift_id,
@@ -572,6 +599,8 @@ async fn recompute_day(
                ot_kind = EXCLUDED.ot_kind,
                incomplete = EXCLUDED.incomplete,
                status = 'pending',
+               approved_by = NULL,
+               approved_at = NULL,
                computed_at = now(),
                updated_at = now()
            RETURNING id"#,
@@ -686,7 +715,7 @@ pub async fn approve_day(
     let mut tx = pool.begin_tenant(tenant_id).await?;
 
     let day = sqlx::query(
-        r#"SELECT employee_id, work_date, shift_id, worked_minutes, ot_minutes, ot_kind
+        r#"SELECT employee_id, work_date, shift_id, worked_minutes, ot_minutes, ot_kind, incomplete
              FROM attendance_days
             WHERE id = $1 AND tenant_id = current_tenant_id()"#,
     )
@@ -702,6 +731,9 @@ pub async fn approve_day(
     let shift_id: Option<Uuid> = day.try_get("shift_id")?;
     if shift_id.is_none() {
         return Err(AttendanceError::NoShift);
+    }
+    if day.try_get::<bool, _>("incomplete")? {
+        return Err(AttendanceError::IncompleteDay);
     }
 
     let employee_id: Uuid = day.try_get("employee_id")?;
@@ -811,29 +843,15 @@ pub async fn correct_day(
     let shift = shift_by_id_in_tx(&mut tx, shift_id).await?;
     let shift = shift.ok_or(AttendanceError::NoShift)?;
 
-    let bkk = bangkok_offset();
-    let shift_start_bkk = bkk
-        .from_local_datetime(&work_date.and_time(shift.start))
-        .single()
-        .ok_or_else(|| sqlx::Error::RowNotFound)?;
-    let shift_end_bkk = if shift.end > shift.start {
-        bkk.from_local_datetime(&work_date.and_time(shift.end))
-    } else {
-        bkk.from_local_datetime(&(work_date + Duration::days(1)).and_time(shift.end))
-    }
-    .single()
-    .ok_or_else(|| sqlx::Error::RowNotFound)?;
-
     let events = sqlx::query(
         r#"SELECT id, kind, occurred_at FROM attendance_events
             WHERE tenant_id = current_tenant_id()
               AND employee_id = $1
-              AND occurred_at BETWEEN $2 AND $3
+              AND work_date = $2
             ORDER BY occurred_at"#,
     )
     .bind(employee_id)
-    .bind(shift_start_bkk.with_timezone(&Utc))
-    .bind(shift_end_bkk.with_timezone(&Utc))
+    .bind(work_date)
     .fetch_all(&mut *tx)
     .await?;
 
@@ -861,12 +879,13 @@ pub async fn correct_day(
     for (kind, at) in [("in", in_at), ("out", out_at)] {
         sqlx::query(
             r#"INSERT INTO attendance_events
-                 (tenant_id, employee_id, kind, source, occurred_at)
-               VALUES (current_tenant_id(), $1, $2, 'manual', $3)"#,
+                 (tenant_id, employee_id, kind, source, occurred_at, work_date)
+               VALUES (current_tenant_id(), $1, $2, 'manual', $3, $4)"#,
         )
         .bind(employee_id)
         .bind(kind)
         .bind(at)
+        .bind(work_date)
         .execute(&mut *tx)
         .await?;
     }
@@ -991,12 +1010,6 @@ async fn process_import_row(
         ImportRowError::Business(format!("invalid out time '{}': {}", row.out_time, e))
     })?;
 
-    if out_time <= in_time {
-        return Err(ImportRowError::Business(
-            "out must be after in on the same day".into(),
-        ));
-    }
-
     let employee_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT id FROM employees
           WHERE tenant_id = current_tenant_id()
@@ -1026,18 +1039,25 @@ async fn process_import_row(
         }
     };
 
-    let (day_start, day_end) = import_day_bounds(work_date)?;
+    let out_date = if out_time > in_time {
+        work_date
+    } else if shift.end <= shift.start {
+        work_date + Duration::days(1)
+    } else {
+        return Err(ImportRowError::Business(
+            "out must be after in on the same day".into(),
+        ));
+    };
 
     let has_mobile: bool = sqlx::query_scalar(
         "SELECT EXISTS (SELECT 1 FROM attendance_events
             WHERE tenant_id = current_tenant_id()
               AND employee_id = $1
-              AND occurred_at >= $2 AND occurred_at < $3
+              AND work_date = $2
               AND source = 'mobile')",
     )
     .bind(employee_id)
-    .bind(day_start)
-    .bind(day_end)
+    .bind(work_date)
     .fetch_one(&mut **tx)
     .await?;
     if has_mobile {
@@ -1050,12 +1070,11 @@ async fn process_import_row(
         "DELETE FROM attendance_events
           WHERE tenant_id = current_tenant_id()
             AND employee_id = $1
-            AND occurred_at >= $2 AND occurred_at < $3
+            AND work_date = $2
             AND source IN ('manual', 'import')",
     )
     .bind(employee_id)
-    .bind(day_start)
-    .bind(day_end)
+    .bind(work_date)
     .execute(&mut **tx)
     .await?;
 
@@ -1066,7 +1085,7 @@ async fn process_import_row(
         .ok_or_else(|| ImportRowError::Business("invalid in timestamp".into()))?
         .with_timezone(&Utc);
     let out_at = bkk
-        .from_local_datetime(&work_date.and_time(out_time))
+        .from_local_datetime(&out_date.and_time(out_time))
         .single()
         .ok_or_else(|| ImportRowError::Business("invalid out timestamp".into()))?
         .with_timezone(&Utc);
@@ -1074,12 +1093,13 @@ async fn process_import_row(
     for (kind, at) in [("in", in_at), ("out", out_at)] {
         sqlx::query(
             "INSERT INTO attendance_events
-               (tenant_id, employee_id, kind, source, occurred_at)
-             VALUES (current_tenant_id(), $1, $2, 'import', $3)",
+               (tenant_id, employee_id, kind, source, occurred_at, work_date)
+             VALUES (current_tenant_id(), $1, $2, 'import', $3, $4)",
         )
         .bind(employee_id)
         .bind(kind)
         .bind(at)
+        .bind(work_date)
         .execute(&mut **tx)
         .await?;
     }
@@ -1092,21 +1112,6 @@ async fn process_import_row(
         })?;
 
     Ok(ImportRowOutcome::Imported)
-}
-
-fn import_day_bounds(
-    work_date: NaiveDate,
-) -> Result<(DateTime<Utc>, DateTime<Utc>), ImportRowError> {
-    let bkk = bangkok_offset();
-    let start = bkk
-        .from_local_datetime(&work_date.and_time(NaiveTime::MIN))
-        .single()
-        .ok_or_else(|| ImportRowError::Business("invalid work date".into()))?;
-    let end = bkk
-        .from_local_datetime(&(work_date + Duration::days(1)).and_time(NaiveTime::MIN))
-        .single()
-        .ok_or_else(|| ImportRowError::Business("invalid work date".into()))?;
-    Ok((start.with_timezone(&Utc), end.with_timezone(&Utc)))
 }
 
 async fn shift_by_id_in_tx(

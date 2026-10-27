@@ -101,10 +101,11 @@ pub fn derive_day(
         .iter()
         .map(|(a, b)| (*b - *a).num_minutes() as i32)
         .sum();
-    let worked_minutes = if pairs.is_empty() {
-        0
-    } else {
+    // LPA §27: the rest break is only deducted from stints longer than 5 hours.
+    let worked_minutes = if raw_worked > 300 {
         (raw_worked - shift.break_minutes).max(0)
+    } else {
+        raw_worked
     };
 
     let shift_start = work_date.and_time(shift.start);
@@ -125,9 +126,6 @@ pub fn derive_day(
         .map(|(_, out_dt)| ((shift_end - *out_dt).num_minutes()).max(0) as i32)
         .unwrap_or(0);
 
-    let window_minutes = (shift_end - shift_start).num_minutes() as i32;
-    let shift_duration_minutes = (window_minutes - shift.break_minutes).max(0);
-
     let ot_kind = if is_holiday {
         OtKind::Holiday
     } else if is_weekend {
@@ -138,7 +136,12 @@ pub fn derive_day(
 
     let ot_minutes = match ot_kind {
         OtKind::Holiday | OtKind::Weekend => worked_minutes,
-        OtKind::Weekday => (worked_minutes - shift_duration_minutes).max(0),
+        // Weekday OT is time worked after the shift ends; early arrival is not OT.
+        OtKind::Weekday => pairs
+            .iter()
+            .map(|(a, b)| (*b - (*a).max(shift_end)).num_minutes().max(0) as i32)
+            .sum::<i32>()
+            .min(worked_minutes),
     };
 
     Ok(DaySummary {
@@ -254,11 +257,11 @@ mod tests {
     }
 
     #[test]
-    fn holiday_all_worked_is_ot() {
+    fn holiday_short_stint_is_all_ot_without_break() {
         let shift = Shift {
             start: time(9, 0),
             end: time(18, 0),
-            break_minutes: 0,
+            break_minutes: 60,
             grace_minutes: 0,
         };
         let punches = vec![
@@ -269,6 +272,42 @@ mod tests {
         assert_eq!(summary.worked_minutes, 180);
         assert_eq!(summary.ot_minutes, 180);
         assert_eq!(summary.ot_kind, OtKind::Holiday);
+    }
+
+    #[test]
+    fn early_arrival_and_late_leave_weekday_ot_is_after_shift_end() {
+        let shift = Shift {
+            start: time(9, 0),
+            end: time(18, 0),
+            break_minutes: 60,
+            grace_minutes: 0,
+        };
+        let punches = vec![
+            punch_in(utc(2026, 10, 27, 1, 50)),   // 08:50 Bangkok
+            punch_out(utc(2026, 10, 27, 12, 30)), // 19:30 Bangkok
+        ];
+        let summary = derive_day(&shift, &punches, date(2026, 10, 27), false, false).unwrap();
+        assert_eq!(summary.worked_minutes, 580);
+        assert_eq!(summary.ot_minutes, 90);
+        assert_eq!(summary.late_minutes, 0);
+        assert_eq!(summary.early_leave_minutes, 0);
+    }
+
+    #[test]
+    fn early_arrival_alone_is_not_ot() {
+        let shift = Shift {
+            start: time(9, 0),
+            end: time(18, 0),
+            break_minutes: 60,
+            grace_minutes: 0,
+        };
+        let punches = vec![
+            punch_in(utc(2026, 10, 27, 1, 50)),  // 08:50 Bangkok
+            punch_out(utc(2026, 10, 27, 11, 0)), // 18:00 Bangkok
+        ];
+        let summary = derive_day(&shift, &punches, date(2026, 10, 27), false, false).unwrap();
+        assert_eq!(summary.worked_minutes, 490);
+        assert_eq!(summary.ot_minutes, 0);
     }
 
     #[test]

@@ -606,6 +606,7 @@ pub(crate) fn map_attendance_error(e: AttendanceError) -> Response {
     match e {
         AttendanceError::InvalidImport
         | AttendanceError::OutOfRange
+        | AttendanceError::IncompleteDay
         | AttendanceError::InvalidCorrection(_) => unprocessable(&e.to_string()),
         AttendanceError::NotFound
         | AttendanceError::NoShift

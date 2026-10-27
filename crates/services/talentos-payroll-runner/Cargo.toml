@@ -20,3 +20,5 @@ rust_decimal = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+talentos-hr-runner = { path = "../talentos-hr-runner" }
+talentos-attendance = { path = "../../domain/talentos-attendance" }

@@ -6,7 +6,8 @@ use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, TimeZone, Utc};
 use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
 use talentos_hr_runner::attendance::{
-    assign_shift, create_shift, import_device_rows, set_geofence, ImportRow, PunchInput, ShiftInput,
+    assign_shift, create_shift, import_device_rows, list_days, set_geofence, ImportRow, PunchInput,
+    ShiftInput,
 };
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -25,7 +26,8 @@ fn bkk_time(h: u32, m: u32) -> NaiveTime {
     NaiveTime::from_hms_opt(h, m, 0).unwrap()
 }
 
-fn utc(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
+/// Bangkok wall-clock time to the real UTC instant.
+fn bkk_at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> DateTime<Utc> {
     let bkk = chrono::FixedOffset::east_opt(7 * 60 * 60).unwrap();
     bkk.with_ymd_and_hms(y, mo, d, h, mi, 0)
         .unwrap()
@@ -164,6 +166,88 @@ async fn reimport_does_not_duplicate_events() {
 }
 
 #[tokio::test]
+async fn overnight_row_puts_out_on_next_day_and_keeps_start_work_date() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let shift = create_shift(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        ShiftInput {
+            name: "night".into(),
+            start: bkk_time(22, 0),
+            end: bkk_time(6, 0),
+            break_minutes: 60,
+            grace_minutes: 0,
+        },
+    )
+    .await
+    .expect("create shift");
+    assign_shift(
+        &pool,
+        TenantId(tenant_id),
+        employee_id,
+        shift.id,
+        bkk_date(2026, 1, 1),
+    )
+    .await
+    .expect("assign shift");
+
+    let result = import_device_rows(
+        &pool,
+        TenantId(tenant_id),
+        Uuid::new_v4(),
+        vec![
+            ImportRow {
+                employee_code: "EMP000".into(),
+                date: "2026-10-27".into(),
+                in_time: "22:00".into(),
+                out_time: "06:05".into(),
+            },
+            // The same instants can be re-imported without duplicates.
+            ImportRow {
+                employee_code: "EMP000".into(),
+                date: "2026-10-27".into(),
+                in_time: "22:00".into(),
+                out_time: "06:05".into(),
+            },
+        ],
+    )
+    .await
+    .expect("import");
+    assert_eq!(result.imported, 2, "errors: {:?}", result.errors);
+
+    let days = list_days(
+        &pool,
+        TenantId(tenant_id),
+        bkk_date(2026, 10, 26),
+        bkk_date(2026, 10, 29),
+        None,
+        None,
+    )
+    .await
+    .expect("list days");
+    assert_eq!(days.len(), 1, "no orphan day on the 28th: {days:?}");
+    assert_eq!(days[0].work_date, bkk_date(2026, 10, 27));
+    assert_eq!(days[0].worked_minutes, 425);
+    assert_eq!(days[0].ot_minutes, 5);
+    assert!(!days[0].incomplete);
+    assert_eq!(
+        event_count(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await
+            + event_count(&raw, tenant_id, employee_id, bkk_date(2026, 10, 28)).await,
+        2
+    );
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
 async fn mobile_punched_day_is_skipped() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
@@ -198,7 +282,7 @@ async fn mobile_punched_day_is_skipped() {
             lng: OFFICE_LNG,
             accuracy_m: Some(10.0),
         },
-        utc(2026, 10, 27, 2, 0),
+        bkk_at(2026, 10, 27, 9, 0),
     )
     .await
     .expect("mobile punch");

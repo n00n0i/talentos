@@ -10,6 +10,10 @@ pub fn database_url() -> Option<String> {
     std::env::var("DATABASE_URL").ok()
 }
 
+pub fn admin_database_url() -> Option<String> {
+    std::env::var("DATABASE_ADMIN_URL").ok()
+}
+
 /// Seed a tenant + entity + one employee using the tenant GUC.
 pub async fn seed_tenant_employee(pool: &PgPool) -> (Uuid, Uuid, Uuid) {
     let (tenant_id, entities) = seed_tenant_entities(pool, 1).await;
@@ -85,6 +89,52 @@ pub async fn seed_tenant_entities(pool: &PgPool, n: usize) -> (Uuid, Vec<(Uuid, 
     (tenant_id, entities)
 }
 
+/// Ensure the tenant has the named role and assign it to a user.
+pub async fn ensure_role(pool: &PgPool, tenant_id: Uuid, name: &str, user_id: Uuid) {
+    let mut tx = pool.begin().await.expect("begin role");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let role_id: i32 = sqlx::query_scalar(
+        "INSERT INTO roles (tenant_id, name, permissions) VALUES ($1, $2, '[]')
+         ON CONFLICT (tenant_id, name) DO UPDATE SET name = $2
+         RETURNING id",
+    )
+    .bind(tenant_id)
+    .bind(name)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("upsert role");
+    sqlx::query(
+        "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2)
+         ON CONFLICT (user_id, role_id) DO NOTHING",
+    )
+    .bind(user_id)
+    .bind(role_id)
+    .execute(&mut *tx)
+    .await
+    .expect("assign role");
+    tx.commit().await.expect("commit role");
+}
+
+pub async fn set_line_user_id(pool: &PgPool, tenant_id: Uuid, user_id: Uuid, line_id: &str) {
+    let mut tx = pool.begin().await.expect("begin line id");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("UPDATE users SET line_user_id = $1 WHERE id = $2")
+        .bind(line_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .expect("set line id");
+    tx.commit().await.expect("commit line id");
+}
+
 pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
     let mut tx = pool.begin().await.expect("begin cleanup");
     sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
@@ -93,6 +143,7 @@ pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
         .await
         .expect("set tenant");
     for stmt in [
+        "DELETE FROM notifications WHERE tenant_id = $1",
         "DELETE FROM attendance_days WHERE tenant_id = $1",
         "DELETE FROM attendance_events WHERE tenant_id = $1",
         "DELETE FROM tenant_holidays WHERE tenant_id = $1",

@@ -7,12 +7,14 @@ use axum::{
 };
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
+use talentos_hr_runner::notify::enqueue_payslip_ready;
 
 /// POST /api/v1/payroll/runs
 pub async fn start_payroll_run(
@@ -203,6 +205,31 @@ pub async fn approve_payroll_run(
         Ok(tx) => tx,
         Err(e) => return internal_err(e),
     };
+
+    let run = sqlx::query(
+        "SELECT period_start, period_end FROM payroll_runs WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await;
+
+    let (period_start, period_end) = match run {
+        Ok(Some(row)) => {
+            let s: NaiveDate = row.get("period_start");
+            let e: NaiveDate = row.get("period_end");
+            (s, e)
+        }
+        Ok(None) => {
+            let _ = tx.rollback().await;
+            return not_found();
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(e);
+        }
+    };
+
     // Signal Temporal workflow: ApprovePayroll { approver_user_id }
     // For Phase 2: update status to 'approved' in DB
     let _ = sqlx::query!(
@@ -212,6 +239,13 @@ pub async fn approve_payroll_run(
     )
     .execute(&mut *tx)
     .await;
+
+    if let Err(e) =
+        enqueue_payslip_ready(&mut tx, ctx.tenant_id.0, id, period_start, period_end).await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(e);
+    }
 
     if let Err(e) = tx.commit().await {
         return internal_err(e);

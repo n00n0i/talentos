@@ -73,6 +73,10 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/users/:id/roles", post(users::assign_role))
         .route("/api/v1/users/:id/2fa/reset", post(users::reset_2fa))
         .route(
+            "/api/v1/users/:id/line",
+            axum::routing::put(users::set_line_id),
+        )
+        .route(
             "/api/v1/users/:id",
             axum::routing::delete(users::deactivate),
         )

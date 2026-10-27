@@ -7,12 +7,14 @@ use axum::{
 };
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
+use talentos_hr_runner::notify::enqueue_payslip_ready;
 
 /// POST /api/v1/payroll/runs
 pub async fn start_payroll_run(
@@ -203,15 +205,75 @@ pub async fn approve_payroll_run(
         Ok(tx) => tx,
         Err(e) => return internal_err(e),
     };
-    // Signal Temporal workflow: ApprovePayroll { approver_user_id }
-    // For Phase 2: update status to 'approved' in DB
-    let _ = sqlx::query!(
-        "UPDATE payroll_runs SET status = 'approved', updated_at = now() WHERE id = $1 AND tenant_id = $2",
-        id,
-        ctx.tenant_id.0
+
+    let run = sqlx::query(
+        "SELECT period_start, period_end, status FROM payroll_runs WHERE id = $1 AND tenant_id = $2",
     )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await;
+
+    let (period_start, period_end) = match run {
+        Ok(Some(row)) => {
+            let status: String = row.get("status");
+            if status == "approved" {
+                let _ = tx.rollback().await;
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "run_id": id.to_string(),
+                        "status": "approved",
+                        "approved_by": ctx.user_id.to_string(),
+                        "approved_at": chrono::Utc::now().to_rfc3339(),
+                    })),
+                )
+                    .into_response();
+            }
+            if status != "pending_approval" {
+                let _ = tx.rollback().await;
+                return conflict("payroll run is not ready to approve");
+            }
+            let s: NaiveDate = row.get("period_start");
+            let e: NaiveDate = row.get("period_end");
+            (s, e)
+        }
+        Ok(None) => {
+            let _ = tx.rollback().await;
+            return not_found();
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(e);
+        }
+    };
+
+    let updated = sqlx::query(
+        "UPDATE payroll_runs SET status = 'approved', updated_at = now() WHERE id = $1 AND tenant_id = $2 AND status = 'pending_approval'",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
     .execute(&mut *tx)
     .await;
+
+    match updated {
+        Ok(r) if r.rows_affected() == 0 => {
+            let _ = tx.rollback().await;
+            return conflict("payroll run is not ready to approve");
+        }
+        Ok(_) => {}
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(e);
+        }
+    }
+
+    if let Err(e) =
+        enqueue_payslip_ready(&mut tx, ctx.tenant_id.0, id, period_start, period_end).await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(e);
+    }
 
     if let Err(e) = tx.commit().await {
         return internal_err(e);
@@ -689,6 +751,20 @@ pub struct PayslipSummary {
     pub pf_employee: String,
     pub status: String,
     pub anomalies: serde_json::Value,
+}
+
+fn conflict(message: &str) -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: "conflict".into(),
+            message: message.to_string(),
+            details: vec![],
+            request_id: Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
+        }),
+    )
+        .into_response()
 }
 
 fn bad_request(message: &str) -> Response {

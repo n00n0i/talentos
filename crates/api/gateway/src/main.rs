@@ -2,12 +2,14 @@ mod cli;
 mod dto;
 mod handlers;
 mod middleware;
+mod notify_worker;
 mod ratelimit;
 mod router;
 mod state;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use fred::prelude::*;
 
@@ -147,6 +149,34 @@ async fn main() {
         )),
         started_at: std::time::Instant::now(),
     };
+
+    // Notification delivery worker: 30s interval, first sweep 5s after startup.
+    {
+        let notify_pool = pool.clone();
+        let notify_auth_pool = auth_pool.clone();
+        let notify_http = reqwest::Client::new();
+        let notify_config = notify_worker::NotifyConfig::from_env();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            let mut ticker = tokio::time::interval(Duration::from_secs(30));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                ticker.tick().await;
+                match notify_worker::deliver_pending(
+                    &notify_pool,
+                    &notify_auth_pool,
+                    &notify_http,
+                    &notify_config,
+                )
+                .await
+                {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(count = n, "notifications processed"),
+                    Err(e) => tracing::warn!(error = %e, "notification delivery sweep failed"),
+                }
+            }
+        });
+    }
 
     // Crash recovery: re-run payroll runs abandoned mid-calculation.
     // shortcut: 60s poll in-process; move to a Temporal schedule when the worker lands.

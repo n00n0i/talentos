@@ -18,6 +18,7 @@ type System = {
   payslip_renderer: { available: boolean };
   model_gateway: { configured: boolean };
   pii_encryption: { configured: boolean };
+  notifications: { email: boolean; line: boolean };
 };
 
 const DEFAULTS: PayrollSettings = {
@@ -282,6 +283,12 @@ export default function SettingsPage() {
               />
             </tbody>
           </table>
+          {system && (
+            <p className="hint" data-testid="notify-status" style={{ padding: "0 16px 12px" }}>
+              การแจ้งเตือน: อีเมล {system.notifications.email ? "พร้อม" : "ยังไม่ตั้งค่า"} · LINE{" "}
+              {system.notifications.line ? "พร้อม" : "ยังไม่ตั้งค่า"}
+            </p>
+          )}
         </div>
       </div>
 

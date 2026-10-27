@@ -86,6 +86,7 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
             (("user_management", "invite"), &["hr_admin"][..]),
             (("user_management", "assign_role"), &["hr_admin"][..]),
             (("user_management", "reset_2fa"), &["hr_admin"][..]),
+            (("user_management", "update"), &["hr_admin"][..]),
             (("audit_log", "read"), &["hr_admin"][..]),
         ])
     });

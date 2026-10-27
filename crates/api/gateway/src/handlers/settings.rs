@@ -313,6 +313,10 @@ pub async fn system(State(state): State<AppState>, Authed(ctx): Authed) -> Respo
         .map(|k| !k.trim().is_empty())
         .unwrap_or(false);
 
+    let set = |k: &str| std::env::var(k).is_ok_and(|v| !v.trim().is_empty());
+    let email = set("EMAIL_API_KEY") && set("EMAIL_FROM");
+    let line = set("LINE_CHANNEL_TOKEN");
+
     (
         StatusCode::OK,
         Json(json!({
@@ -326,6 +330,7 @@ pub async fn system(State(state): State<AppState>, Authed(ctx): Authed) -> Respo
             "payslip_renderer": { "available": chrome },
             "pii_encryption": { "configured": pii_encryption },
             "model_gateway": { "configured": model_gateway },
+            "notifications": { "email": email, "line": line },
             "tenant_id": ctx.tenant_id.0,
         })),
     )

@@ -15,26 +15,12 @@ use talentos_kernel::TenantId;
 use uuid::Uuid;
 
 mod common;
-use common::{cleanup, database_url, seed_tenant_entities};
+use common::{
+    cleanup, database_url, ensure_role, seed_tenant_entities, set_line_user_id, user_id_of,
+};
 
 fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
-}
-
-async fn user_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
-    let mut tx = pool.begin().await.expect("begin");
-    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
-        .bind(tenant_id.to_string())
-        .execute(&mut *tx)
-        .await
-        .expect("set tenant");
-    let row = sqlx::query("SELECT user_id FROM employees WHERE id = $1")
-        .bind(employee_id)
-        .fetch_one(&mut *tx)
-        .await
-        .expect("fetch user_id");
-    let _ = tx.rollback().await;
-    row.get("user_id")
 }
 
 async fn leave_type_id(pool: &PgPool, tenant_id: Uuid, name: &str) -> i32 {
@@ -80,6 +66,33 @@ async fn seed_balance(
     .await
     .expect("seed balance");
     tx.commit().await.expect("commit seed");
+}
+
+async fn pending_notifications(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    channel: &str,
+) -> Vec<(String, String, String)> {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let rows = sqlx::query(
+        "SELECT recipient, subject, body FROM notifications
+         WHERE tenant_id = $1 AND status = 'pending' AND channel = $2
+         ORDER BY created_at",
+    )
+    .bind(tenant_id)
+    .bind(channel)
+    .fetch_all(&mut *tx)
+    .await
+    .expect("fetch notifications");
+    let _ = tx.rollback().await;
+    rows.into_iter()
+        .map(|r| (r.get("recipient"), r.get("subject"), r.get("body")))
+        .collect()
 }
 
 async fn used_days(
@@ -648,6 +661,188 @@ async fn hr_inbox_lists_pending_with_code_and_name() {
     assert_eq!(inbox[0].label_th, "ลาพักร้อน");
     assert_eq!(inbox[0].days, dec!(2));
     assert_eq!(inbox[0].reason.as_deref(), Some("vacation"));
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn submitted_request_creates_email_rows_for_hr_and_line_only_when_line_id_exists() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 3).await;
+    let tenant = TenantId(tenant_id);
+
+    let hr_user = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let manager_user = user_id_of(&raw, tenant_id, entities[1].1).await;
+    let employee_user = user_id_of(&raw, tenant_id, entities[2].1).await;
+
+    ensure_role(&raw, tenant_id, "hr_admin", hr_user).await;
+    ensure_role(&raw, tenant_id, "manager", manager_user).await;
+    set_line_user_id(&raw, tenant_id, hr_user, "U_HR").await;
+    // manager has no line_user_id
+
+    create_request(
+        &pool,
+        tenant,
+        employee_user,
+        LeaveInput {
+            leave_type: "annual".into(),
+            start_date: d(2026, 10, 5),
+            end_date: d(2026, 10, 6),
+            reason: Some("vacation".into()),
+            employee_id: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    let emails = pending_notifications(&raw, tenant_id, "email").await;
+    assert_eq!(emails.len(), 2, "HR admin and manager should receive email");
+    let recipients: Vec<_> = emails.iter().map(|(r, _, _)| r.clone()).collect();
+    let hr_email = format!("t-0-{}@example.com", &hr_user.to_string()[..8]);
+    let mgr_email = format!("t-1-{}@example.com", &manager_user.to_string()[..8]);
+    assert!(recipients.contains(&hr_email));
+    assert!(recipients.contains(&mgr_email));
+    for (_, subject, body) in &emails {
+        assert!(
+            subject.contains("ลาพักร้อน"),
+            "subject contains label_th: {subject}"
+        );
+        assert!(
+            body.contains("ทดสอบ พนักงาน"),
+            "body contains employee name: {body}"
+        );
+        assert!(
+            body.contains("2026-10-05"),
+            "body contains start date: {body}"
+        );
+        assert!(
+            body.contains("2026-10-06"),
+            "body contains end date: {body}"
+        );
+    }
+
+    let lines = pending_notifications(&raw, tenant_id, "line").await;
+    assert_eq!(lines.len(), 1, "only HR admin with line_user_id gets LINE");
+    assert_eq!(lines[0].0, "U_HR");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn decided_request_creates_notification_for_employee() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+
+    let approver = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let requester = user_id_of(&raw, tenant_id, entities[1].1).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
+    set_line_user_id(&raw, tenant_id, requester, "U_EMP").await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester,
+        LeaveInput {
+            leave_type: "sick".into(),
+            start_date: d(2026, 11, 1),
+            end_date: d(2026, 11, 2),
+            reason: None,
+            employee_id: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    // clear submit notifications so only the decision notification remains
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("DELETE FROM notifications WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .expect("clear notifications");
+    tx.commit().await.expect("commit clear");
+
+    let status = decide_request(&pool, tenant, approver, req.id, true)
+        .await
+        .expect("approve");
+    assert_eq!(status, "approved");
+
+    let emails = pending_notifications(&raw, tenant_id, "email").await;
+    assert_eq!(emails.len(), 1, "employee should receive decision email");
+    assert!(emails[0].1.contains("ลาป่วย"));
+    assert!(emails[0].1.contains("อนุมัติ"));
+
+    let lines = pending_notifications(&raw, tenant_id, "line").await;
+    assert_eq!(lines.len(), 1, "employee with line id should receive LINE");
+    assert_eq!(lines[0].0, "U_EMP");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn cancelled_request_creates_no_decision_notification() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let req = create_request(
+        &pool,
+        tenant,
+        user_id,
+        LeaveInput {
+            leave_type: "personal".into(),
+            start_date: d(2026, 12, 1),
+            end_date: d(2026, 12, 1),
+            reason: None,
+            employee_id: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    // clear submit notifications
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("DELETE FROM notifications WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .expect("clear notifications");
+    tx.commit().await.expect("commit clear");
+
+    let status = cancel_request(&pool, tenant, user_id, req.id)
+        .await
+        .expect("cancel");
+    assert_eq!(status, "cancelled");
+
+    let emails = pending_notifications(&raw, tenant_id, "email").await;
+    assert!(emails.is_empty(), "cancelled request should not notify");
 
     cleanup(&raw, tenant_id).await;
 }

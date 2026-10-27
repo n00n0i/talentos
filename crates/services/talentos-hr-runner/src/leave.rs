@@ -6,6 +6,8 @@ use talentos_db::TenantPool;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
 
+use crate::notify::{enqueue_leave_decided, enqueue_leave_submitted};
+
 /// Leave types the platform recognises (global defaults live in `leave_types`).
 pub const LEAVE_TYPES: &[&str] = &[
     "annual",
@@ -225,6 +227,26 @@ pub async fn create_request(
     .fetch_one(&mut *tx)
     .await?;
 
+    let label_th: String = sqlx::query_scalar(
+        "SELECT label_th FROM leave_types WHERE name = $1 AND (tenant_id IS NULL OR tenant_id = $2) ORDER BY (tenant_id IS NOT NULL) DESC, label_th LIMIT 1"
+    )
+    .bind(&input.leave_type)
+    .bind(tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or_else(|| input.leave_type.clone());
+
+    enqueue_leave_submitted(
+        &mut tx,
+        tenant_id.0,
+        employee_id,
+        &label_th,
+        input.start_date,
+        input.end_date,
+        days,
+    )
+    .await?;
+
     tx.commit().await?;
 
     Ok(LeaveRequestView {
@@ -435,7 +457,7 @@ pub async fn decide_request(
         r#"UPDATE leave_requests
            SET status = $3, approver_id = $4, approved_at = now(), updated_at = now()
            WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
-           RETURNING status, employee_id, leave_type, start_date, days, balance_debited"#,
+           RETURNING status, employee_id, leave_type, start_date, end_date, days, balance_debited"#,
     )
     .bind(request_id)
     .bind(tenant_id.0)
@@ -450,6 +472,9 @@ pub async fn decide_request(
     };
 
     let status: String = row.try_get("status")?;
+    let leave_type: String = row.try_get("leave_type")?;
+    let start_date: NaiveDate = row.try_get("start_date")?;
+    let end_date: NaiveDate = row.try_get("end_date")?;
 
     if !approve {
         let was_debited: bool = row.try_get("balance_debited")?;
@@ -488,6 +513,27 @@ pub async fn decide_request(
             }
         }
     }
+
+    let employee_id: Uuid = row.try_get("employee_id")?;
+    let label_th: String = sqlx::query_scalar(
+        "SELECT label_th FROM leave_types WHERE name = $1 AND (tenant_id IS NULL OR tenant_id = $2) ORDER BY (tenant_id IS NOT NULL) DESC, label_th LIMIT 1"
+    )
+    .bind(&leave_type)
+    .bind(tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or_else(|| leave_type.clone());
+
+    enqueue_leave_decided(
+        &mut tx,
+        tenant_id.0,
+        employee_id,
+        &status,
+        &label_th,
+        start_date,
+        end_date,
+    )
+    .await?;
 
     tx.commit().await?;
     Ok(status)

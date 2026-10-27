@@ -366,3 +366,19 @@ test("HR enrolls in 2FA, logs in with a code, then disables it", async ({ page }
   await page.getByTestId("disable-2fa").click();
   await expect(page.getByTestId("totp-status")).toContainText("ปิดอยู่");
 });
+
+test("HR saves a LINE id for the invited user", async ({ page }) => {
+  expect(invitedEmail).not.toBe("");
+  await login(page);
+  await page.goto("/users");
+
+  const row = page.getByRole("row", { name: new RegExp(invitedEmail) });
+  await row.getByTestId("line-id").fill("U0123456789abcdef0123456789abcdef");
+  await row.getByTestId("save-line").click();
+  await expect(page.getByText("บันทึก LINE ID แล้ว")).toBeVisible();
+
+  await page.reload();
+  await expect(
+    page.getByRole("row", { name: new RegExp(invitedEmail) }).getByTestId("line-id"),
+  ).toHaveValue("U0123456789abcdef0123456789abcdef");
+});

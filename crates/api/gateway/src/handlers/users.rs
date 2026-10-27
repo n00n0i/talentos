@@ -67,6 +67,12 @@ pub struct UserDto {
     pub roles: Vec<String>,
     pub last_login_at: Option<String>,
     pub totp_enabled: bool,
+    pub line_user_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LineIdBody {
+    pub line_user_id: Option<String>,
 }
 
 /// GET /api/v1/users
@@ -79,7 +85,7 @@ pub async fn list(State(state): State<AppState>, Authed(ctx): Authed) -> Respons
         Err(e) => return internal_err(&e.to_string()),
     };
     let rows = sqlx::query(
-        r#"SELECT u.id, u.email, u.full_name_th, u.is_active, u.last_login_at, u.totp_enabled,
+        r#"SELECT u.id, u.email, u.full_name_th, u.is_active, u.last_login_at, u.totp_enabled, u.line_user_id,
                   COALESCE(array_remove(array_agg(DISTINCT r.name), NULL), '{}') AS roles
              FROM users u
              LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -108,6 +114,7 @@ pub async fn list(State(state): State<AppState>, Authed(ctx): Authed) -> Respons
                         .get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_login_at")
                         .map(|t| t.to_rfc3339()),
                     totp_enabled: row.get("totp_enabled"),
+                    line_user_id: row.get("line_user_id"),
                 })
                 .collect();
             (StatusCode::OK, Json(json!({ "users": users }))).into_response()
@@ -870,6 +877,80 @@ pub async fn reset_2fa(
     (StatusCode::OK, Json(json!({ "totp_enabled": false }))).into_response()
 }
 
+/// PUT /api/v1/users/:id/line — set or clear the LINE user id used for notifications.
+pub async fn set_line_id(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(user_id): Path<Uuid>,
+    Json(body): Json<LineIdBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "user_management", "update") {
+        return forbidden;
+    }
+    let line_id = body
+        .line_user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    if let Some(id) = line_id {
+        if !is_line_user_id(id) {
+            return bad_request(
+                "line_user_id must look like U + 32 hex characters (a LINE user id, not a group id)",
+            );
+        }
+    }
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let done = sqlx::query(
+        "UPDATE users SET line_user_id = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3",
+    )
+    .bind(line_id)
+    .bind(user_id)
+    .bind(ctx.tenant_id.0)
+    .execute(&mut *tx)
+    .await;
+    match done {
+        Ok(done) if done.rows_affected() == 0 => {
+            let _ = tx.rollback().await;
+            return error_response(StatusCode::NOT_FOUND, "not_found", "user not found");
+        }
+        Ok(_) => {}
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    }
+
+    if let Err(e) = sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'user.line_update', 'user', $3, $4)"#,
+    )
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0.to_string())
+    .bind(user_id.to_string())
+    .bind(json!({ "line_linked": line_id.is_some() }))
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
+    if let Err(e) = tx.commit().await {
+        return internal_err(&e.to_string());
+    }
+
+    (StatusCode::OK, Json(json!({ "line_user_id": line_id }))).into_response()
+}
+
+/// Messaging API user id: `U` + 32 hex. Group/room ids (`C…`/`R…`) would broadcast.
+fn is_line_user_id(id: &str) -> bool {
+    id.len() == 33 && id.starts_with('U') && id[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
 fn password_problem(password: &str) -> Option<String> {
     let len = password.chars().count();
     if len < PASSWORD_MIN {
@@ -921,4 +1002,19 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_line_user_id;
+
+    #[test]
+    fn line_user_id_shape() {
+        assert!(is_line_user_id("U0123456789abcdef0123456789ABCDEF"));
+        assert!(!is_line_user_id("C0123456789abcdef0123456789abcdef"));
+        assert!(!is_line_user_id("R0123456789abcdef0123456789abcdef"));
+        assert!(!is_line_user_id("U0123456789abcdef0123456789abcde"));
+        assert!(!is_line_user_id("U0123456789abcdef0123456789abcdeg"));
+        assert!(!is_line_user_id("u0123456789abcdef0123456789abcdef"));
+    }
 }

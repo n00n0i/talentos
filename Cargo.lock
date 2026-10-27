@@ -4000,6 +4000,7 @@ dependencies = [
  "futures-util",
  "hex",
  "rand 0.8.8",
+ "reqwest",
  "rust_decimal",
  "serde",
  "serde_json",

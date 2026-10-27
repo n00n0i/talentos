@@ -161,10 +161,20 @@ pub fn derive_day(
     work_date: chrono::NaiveDate,
     is_holiday: bool,
     is_weekend: bool,
-) -> Result<DaySummary, AttendanceError>;
+) -> Result<DaySummary, AttendanceRuleError>;
 pub fn bangkok_offset() -> chrono::FixedOffset; // UTC+7
 
-// AttendanceError is defined in the domain crate (Task 2) and re-used here.
+#[derive(Debug, thiserror::Error)]
+pub enum AttendanceError {
+    #[error("geofence is not configured")] NoGeofence,
+    #[error("outside geofence: {distance}m > {allowed}m")] OutsideGeofence { distance: f64, allowed: f64 },
+    #[error("no employee is linked to this user")] EmployeeNotLinked,
+    #[error("no shift is assigned for this date")] NoShift,
+    #[error("not found")] NotFound,
+    #[error("invalid import row {row}: {message}")] InvalidImport { row: usize, message: String },
+    #[error(transparent)] Rule(#[from] talentos_attendance::AttendanceRuleError),
+    #[error("database error: {0}")] Db(#[from] sqlx::Error),
+}
 ```
 - Pairs consecutive in/out; ignores a duplicate `In` before an `Out`; odd tail sets `incomplete = true` and contributes no duration.
 - Shift window: `work_date start` to `end`, or next day when `end <= start`; subtract `break_minutes` once.
@@ -227,17 +237,15 @@ pub struct DayView {
     pub status: String,
 }
 #[derive(Debug, thiserror::Error)]
-pub enum AttendanceError {
+pub enum AttendanceRuleError {
     #[error("invalid shift")] InvalidShift,
-    #[error("geofence is not configured")] NoGeofence,
-    #[error("outside geofence: {distance}m > {allowed}m")] OutsideGeofence { distance: f64, allowed: f64 },
-    #[error("no employee is linked to this user")] EmployeeNotLinked,
-    #[error("no shift is assigned for this date")] NoShift,
-    #[error("not found")] NotFound,
-    #[error("invalid import row {row}: {message}")] InvalidImport { row: usize, message: String },
-    #[error("database error: {0}")] Db(#[from] sqlx::Error),
 }
 ```
+
+The domain crate must not depend on SQLx. The persistence/service error lives in
+`talentos-hr-runner` (Task 3): `AttendanceError::{NoGeofence, OutsideGeofence,
+EmployeeNotLinked, NoShift, NotFound, InvalidImport, Rule(#[from]
+AttendanceRuleError), Db(#[from] sqlx::Error)}`.
 - `create_shift(pool, tenant, ShiftInput) -> Result<ShiftView, AttendanceError>`
 - `assign_shift(pool, tenant, employee_id, shift_id, effective_from) -> Result<(), AttendanceError>`
 - `set_geofence(pool, tenant, lat: f64, lng: f64, radius_m: i32) -> Result<(), AttendanceError>`

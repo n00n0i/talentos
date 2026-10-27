@@ -91,6 +91,17 @@ pub async fn deliver_pending(
     http: &reqwest::Client,
     config: &NotifyConfig,
 ) -> Result<usize, sqlx::Error> {
+    deliver_pending_for(pool, auth_pool, http, config, None).await
+}
+
+/// Deliver pending rows, optionally restricted to specific tenants (tests).
+pub async fn deliver_pending_for(
+    pool: &TenantPool,
+    auth_pool: &sqlx::PgPool,
+    http: &reqwest::Client,
+    config: &NotifyConfig,
+    tenant_ids: Option<&[uuid::Uuid]>,
+) -> Result<usize, sqlx::Error> {
     let channels: Vec<String> = config
         .enabled_channels()
         .into_iter()
@@ -100,9 +111,19 @@ pub async fn deliver_pending(
         return Ok(0);
     }
 
-    let tenant_rows = sqlx::query("SELECT id FROM tenants")
-        .fetch_all(auth_pool)
-        .await?;
+    let tenant_rows = match tenant_ids {
+        Some(ids) => {
+            sqlx::query("SELECT id FROM tenants WHERE id = ANY($1)")
+                .bind(ids)
+                .fetch_all(auth_pool)
+                .await?
+        }
+        None => {
+            sqlx::query("SELECT id FROM tenants")
+                .fetch_all(auth_pool)
+                .await?
+        }
+    };
 
     let mut total = 0usize;
     let mut remaining = BATCH_LIMIT;
@@ -622,7 +643,7 @@ mod tests {
         .await;
 
         let http = reqwest::Client::new();
-        let count = deliver_pending(&app, &admin, &http, &empty_config())
+        let count = deliver_pending_for(&app, &admin, &http, &empty_config(), Some(&[tenant_id]))
             .await
             .expect("deliver");
         assert_eq!(count, 0);
@@ -672,7 +693,7 @@ mod tests {
             line_api_base: DEFAULT_LINE_BASE.to_string(),
         };
 
-        let count = deliver_pending(&app, &admin, &http, &config)
+        let count = deliver_pending_for(&app, &admin, &http, &config, Some(&[tenant_id]))
             .await
             .expect("deliver");
         assert_eq!(count, 1);
@@ -738,7 +759,7 @@ mod tests {
             line_api_base: format!("http://{addr}"),
         };
 
-        let count = deliver_pending(&app, &admin, &http, &config)
+        let count = deliver_pending_for(&app, &admin, &http, &config, Some(&[tenant_id]))
             .await
             .expect("deliver");
         assert_eq!(count, 1);
@@ -805,7 +826,7 @@ mod tests {
         };
 
         for expected in [("pending", 1), ("pending", 2), ("failed", 3)] {
-            let count = deliver_pending(&app, &admin, &http, &config)
+            let count = deliver_pending_for(&app, &admin, &http, &config, Some(&[tenant_id]))
                 .await
                 .expect("deliver");
             assert_eq!(count, 1);
@@ -873,7 +894,7 @@ mod tests {
             line_api_base: DEFAULT_LINE_BASE.to_string(),
         };
 
-        let count = deliver_pending(&app, &admin, &http, &config)
+        let count = deliver_pending_for(&app, &admin, &http, &config, Some(&[tenant_id]))
             .await
             .expect("deliver");
         assert_eq!(count, 1);
@@ -936,7 +957,7 @@ mod tests {
             line_api_base: DEFAULT_LINE_BASE.to_string(),
         };
 
-        let count = deliver_pending(&app, &admin, &http, &config)
+        let count = deliver_pending_for(&app, &admin, &http, &config, Some(&[tenant_id]))
             .await
             .expect("deliver");
         assert_eq!(count, 1);

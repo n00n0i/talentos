@@ -146,6 +146,10 @@ async fn payslip_ready_enqueues_one_row_per_active_linked_user() {
         .bind(tenant_id)
         .execute(&mut *tx)
         .await;
+    let _ = sqlx::query("DELETE FROM notifications WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await;
     let _ = sqlx::query("DELETE FROM payroll_runs WHERE tenant_id = $1")
         .bind(tenant_id)
         .execute(&mut *tx)

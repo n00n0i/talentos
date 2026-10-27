@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
 type Balance = {
@@ -29,6 +29,28 @@ type Pending = LeaveRequest & {
   approver_role: string;
 };
 
+type BalanceImportRow = Record<string, string>;
+type BalanceImportResult = {
+  dry_run: boolean;
+  total: number;
+  valid: number;
+  invalid: number;
+  created: number;
+  rows: {
+    row: number;
+    employee_code: string;
+    leave_type: string;
+    year: number;
+    status: "valid" | "invalid";
+    errors: string[];
+  }[];
+};
+
+const BALANCE_IMPORT_REQUIRED = ["employee_code", "leave_type", "year", "total_days"];
+const BALANCE_IMPORT_OPTIONAL = ["used_days"];
+const BALANCE_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
+const BALANCE_IMPORT_MAX_ROWS = 1000;
+
 const STATUS: { [k: string]: { label: string; tone: string } } = {
   pending: { label: "รออนุมัติ", tone: "warning" },
   approved: { label: "อนุมัติแล้ว", tone: "success" },
@@ -37,6 +59,101 @@ const STATUS: { [k: string]: { label: string; tone: string } } = {
 };
 
 const num = (v: string) => Number(v).toString();
+
+function parseCsv(text: string): string[][] {
+  const out: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  let closed = false;
+  let quoteRec = 0;
+  const where = (rec: number) => (rec === 0 ? "แถวหัวตาราง" : `แถว ${rec}`);
+  const bad = (rec: number) =>
+    new Error(`ไฟล์ CSV ไม่ถูกต้อง: เครื่องหมายอัญประกาศผิดรูปแบบที่${where(rec)}`);
+  const src = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quoted) {
+      if (c === '"' && src[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (c === '"') {
+        quoted = false;
+        closed = true;
+      } else cell += c;
+    } else if (c === '"') {
+      if (closed || cell.trim() !== "") throw bad(out.length);
+      quoted = true;
+      quoteRec = out.length;
+      cell = "";
+    } else if (c === ",") {
+      row.push(cell);
+      cell = "";
+      closed = false;
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && src[i + 1] === "\n") i++;
+      row.push(cell);
+      cell = "";
+      closed = false;
+      out.push(row);
+      row = [];
+    } else if (closed && c !== " " && c !== "\t") throw bad(out.length);
+    else if (!closed) cell += c;
+  }
+  if (quoted) throw bad(quoteRec);
+  if (cell !== "" || row.length || closed) {
+    row.push(cell);
+    out.push(row);
+  }
+  return out.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+const BALANCE_IMPORT_ERRORS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^employee_code is required$/, () => "employee_code จำเป็นต้องระบุ"],
+  [/^leave_type is required$/, () => "leave_type จำเป็นต้องระบุ"],
+  [/^year is required$/, () => "year จำเป็นต้องระบุ"],
+  [/^total_days is required$/, () => "total_days จำเป็นต้องระบุ"],
+  [/(\w+) must be a number$/, (m) => `${m[1]} ต้องเป็นตัวเลข`],
+  [/(\w+) must be an integer$/, (m) => `${m[1]} ต้องเป็นจำนวนเต็ม`],
+  [/(\w+) must be >= 0$/, (m) => `${m[1]} ต้องไม่ติดลบ`],
+  [/(\w+) must be <= 366$/, (m) => `${m[1]} ต้องไม่เกิน 366`],
+  [/^year must be between 2000 and 2100$/, () => "year ต้องอยู่ระหว่าง 2000 ถึง 2100"],
+  [/^used_days must not exceed total_days$/, () => "used_days ต้องไม่เกิน total_days"],
+  [/^employee_code (.*) not found$/, (m) => `ไม่พบรหัสพนักงาน ${m[1]}`],
+  [/^leave_type (.*) not found$/, (m) => `ไม่พบประเภทการลา ${m[1]}`],
+  [/^duplicate row for \((.*), (.*), (.*)\) in file$/, (m) => `แถวซ้ำกัน (${m[1]}, ${m[2]}, ${m[3]})`],
+];
+
+function thBalanceImportError(message: string): string {
+  for (const [re, f] of BALANCE_IMPORT_ERRORS) {
+    const m = message.match(re);
+    if (m) return f(m);
+  }
+  return message;
+}
+
+function csvToBalanceImportRows(text: string): BalanceImportRow[] {
+  const [header, ...body] = parseCsv(text);
+  if (!header) throw new Error("ไฟล์ว่างเปล่า");
+  const cols = header.map((h) => h.trim());
+  const missing = BALANCE_IMPORT_REQUIRED.filter((h) => !cols.includes(h));
+  if (missing.length) throw new Error(`ไม่พบคอลัมน์ที่จำเป็น: ${missing.join(", ")}`);
+  if (body.length === 0) throw new Error("ไม่มีข้อมูลในไฟล์");
+  if (body.length > BALANCE_IMPORT_MAX_ROWS)
+    throw new Error(`นำเข้าได้ไม่เกิน ${BALANCE_IMPORT_MAX_ROWS} แถวต่อไฟล์`);
+  return body.map((cells, i) => {
+    if (cells.length !== cols.length)
+      throw new Error(`แถว ${i + 1}: จำนวนคอลัมน์ (${cells.length}) ไม่ตรงกับหัวตาราง (${cols.length})`);
+    const r: BalanceImportRow = {};
+    for (const key of [...BALANCE_IMPORT_REQUIRED, ...BALANCE_IMPORT_OPTIONAL]) {
+      const idx = cols.indexOf(key);
+      const v = idx < 0 ? "" : (cells[idx] ?? "").trim();
+      if (v === "") continue;
+      r[key] = v;
+    }
+    return r;
+  });
+}
 
 const ROLE_LABEL: { [k: string]: string } = {
   manager: "หัวหน้างาน",
@@ -56,6 +173,10 @@ export default function LeavePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [importRows, setImportRows] = useState<BalanceImportRow[]>([]);
+  const [importResult, setImportResult] = useState<BalanceImportResult | null>(null);
+  const [importKey, setImportKey] = useState(0);
+  const importGen = useRef(0);
 
   const load = useCallback(async () => {
     const me = await gw<Me>("api/v1/auth/me");
@@ -74,6 +195,56 @@ export default function LeavePage() {
   useEffect(() => {
     load().catch((e) => handleApiError(e, setError));
   }, [load]);
+
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    const gen = ++importGen.current;
+    setImportResult(null);
+    setImportRows([]);
+    setError("");
+    if (!file) return;
+    if (file.size > BALANCE_IMPORT_MAX_BYTES) {
+      setError("ไฟล์ใหญ่เกิน 2 MB");
+      return;
+    }
+    try {
+      const parsed = csvToBalanceImportRows(await file.text());
+      if (gen === importGen.current) setImportRows(parsed);
+    } catch (err) {
+      if (gen === importGen.current)
+        setError(err instanceof Error ? err.message : "อ่านไฟล์ไม่สำเร็จ");
+    }
+  }
+
+  async function runBalanceImport(dryRun: boolean) {
+    const gen = importGen.current;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const r = await gw<BalanceImportResult>("api/v1/leave/balances/import", {
+        method: "POST",
+        body: JSON.stringify({ dry_run: dryRun, rows: importRows }),
+      });
+      if (gen !== importGen.current) return;
+      if (dryRun) {
+        setImportResult(r);
+      } else if (r.invalid > 0 || r.created !== r.valid) {
+        setImportResult(r);
+        setError("ไม่มีการนำเข้าโควตา เนื่องจากข้อมูลบางแถวไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วลองใหม่");
+      } else {
+        setNotice(`นำเข้าโควตาการลา ${r.created} รายการแล้ว`);
+        setImportRows([]);
+        setImportResult(null);
+        setImportKey((k) => k + 1);
+        await load();
+      }
+    } catch (err) {
+      if (gen === importGen.current) handleApiError(err, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function act(done: string, path: string, body?: object) {
     setBusy(true);
@@ -191,6 +362,89 @@ export default function LeavePage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      )}
+
+      {isHr && (
+        <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
+          <h2>นำเข้าโควตาการลา (CSV)</h2>
+          <p className="hint">
+            คอลัมน์: {BALANCE_IMPORT_REQUIRED.join(", ")}, {BALANCE_IMPORT_OPTIONAL.join(", ")} (ไฟล์ไม่เกิน 2 MB และ{" "}
+            {BALANCE_IMPORT_MAX_ROWS} แถว)
+          </p>
+          <label htmlFor="import-balance-csv">เลือกไฟล์ CSV โควตาการลา</label>
+          <input
+            key={importKey}
+            id="import-balance-csv"
+            type="file"
+            accept=".csv"
+            data-testid="import-balance-csv"
+            onChange={onImportFile}
+            disabled={busy}
+          />
+          {importRows.length > 0 && (
+            <>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <button
+                  className="btn"
+                  data-testid="dry-run-balance-import"
+                  onClick={() => runBalanceImport(true)}
+                  disabled={busy}
+                >
+                  ตรวจสอบไฟล์
+                </button>
+                <button
+                  className="btn btn-primary"
+                  data-testid="confirm-balance-import"
+                  onClick={() => runBalanceImport(false)}
+                  disabled={busy || !importResult || importResult.valid === 0 || importResult.invalid > 0}
+                >
+                  ยืนยันนำเข้า
+                </button>
+                {importResult && (
+                  <span data-testid="import-summary">
+                    ทั้งหมด {importResult.total} · ถูกต้อง {importResult.valid} · ผิดพลาด {importResult.invalid}
+                  </span>
+                )}
+              </div>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>แถว</th>
+                    <th>รหัสพนักงาน</th>
+                    <th>ประเภท</th>
+                    <th className="num">ปี</th>
+                    <th className="num">วันทั้งหมด</th>
+                    <th className="num">วันที่ใช้</th>
+                    <th>สถานะ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((r, i) => {
+                    const res = importResult?.rows[i];
+                    return (
+                      <tr key={i} data-testid="import-row">
+                        <td>{i + 1}</td>
+                        <td>{String(r.employee_code ?? "")}</td>
+                        <td>{String(r.leave_type ?? "")}</td>
+                        <td className="num">{String(r.year ?? "")}</td>
+                        <td className="num">{String(r.total_days ?? "")}</td>
+                        <td className="num">{String(r.used_days ?? "")}</td>
+                        <td>
+                          {res &&
+                            (res.status === "valid" ? (
+                              <span className="badge success">ถูกต้อง</span>
+                            ) : (
+                              <span className="error">{res.errors.map(thBalanceImportError).join(" · ")}</span>
+                            ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
       )}

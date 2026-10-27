@@ -137,6 +137,10 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/me/leave", get(leave::me_leave))
         .route("/api/v1/me/leave/:id/cancel", post(leave::me_cancel))
         .route("/api/v1/leave/balances", get(leave::balances))
+        .route(
+            "/api/v1/leave/balances/import",
+            post(leave::import_balances),
+        )
         .route("/api/v1/leave/requests/:id/decision", post(leave::decide))
         .route("/api/v1/leave/approvals", get(leave::approvals))
         .route("/api/v1/me/ot", get(ot::me_ot).post(ot::create_me_ot))

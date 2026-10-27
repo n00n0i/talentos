@@ -37,6 +37,10 @@ pub enum LeaveError {
         requested: Decimal,
         remaining: Decimal,
     },
+    #[error("leave request not found")]
+    NotFound,
+    #[error("leave request cannot be cancelled in its current status")]
+    NotCancellable,
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -192,6 +196,27 @@ pub async fn create_request(
     .fetch_one(&mut *tx)
     .await?;
 
+    // Debit the balance when a row exists; unpaid leave is never tracked.
+    if input.leave_type != "unpaid" {
+        sqlx::query(
+            r#"UPDATE leave_balances lb
+               SET used_days = used_days + $1, updated_at = now()
+               FROM leave_types lt
+               WHERE lb.employee_id = $2
+                 AND lb.year = $3
+                 AND lt.id = lb.leave_type_id
+                 AND lt.name = $4
+                 AND (lt.tenant_id IS NULL OR lt.tenant_id = $5)"#,
+        )
+        .bind(days)
+        .bind(employee_id)
+        .bind(input.start_date.year())
+        .bind(&input.leave_type)
+        .bind(tenant_id.0)
+        .execute(&mut *tx)
+        .await?;
+    }
+
     tx.commit().await?;
 
     Ok(LeaveRequestView {
@@ -280,6 +305,144 @@ pub async fn list_requests(
                 end_date: row.try_get("end_date")?,
                 days: row.try_get("days")?,
                 status: row.try_get("status")?,
+                reason: row.try_get("reason")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()
+        .map_err(Into::into)
+}
+
+/// Pending leave request for an HR/manager inbox.
+#[derive(Debug, Serialize)]
+pub struct PendingLeave {
+    pub id: Uuid,
+    pub employee_id: Uuid,
+    pub employee_code: String,
+    pub employee_name: String,
+    pub leave_type: String,
+    pub start_date: NaiveDate,
+    pub end_date: NaiveDate,
+    pub days: Decimal,
+    pub reason: Option<String>,
+}
+
+/// Cancel a leave request. Only the owning employee may cancel, and only
+/// requests in `pending` status.
+pub async fn cancel_request(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    request_id: Uuid,
+) -> Result<String, LeaveError> {
+    let employee_id = match employee_of_user(pool, tenant_id, user_id).await? {
+        Some(id) => id,
+        None => return Err(LeaveError::NotFound),
+    };
+
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+
+    // Optimistic update guarded by status and ownership.
+    let updated = sqlx::query(
+        r#"UPDATE leave_requests
+           SET status = 'cancelled', updated_at = now()
+           WHERE id = $1 AND tenant_id = $2 AND employee_id = $3 AND status = 'pending'
+           RETURNING status, leave_type, start_date, days"#,
+    )
+    .bind(request_id)
+    .bind(tenant_id.0)
+    .bind(employee_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    if let Some(row) = updated {
+        let status: String = row.try_get("status")?;
+        let leave_type: String = row.try_get("leave_type")?;
+        let year: i32 = row.try_get::<NaiveDate, _>("start_date")?.year();
+        let days: Decimal = row.try_get("days")?;
+
+        if leave_type != "unpaid" {
+            sqlx::query(
+                r#"UPDATE leave_balances lb
+                   SET used_days = used_days - $1, updated_at = now()
+                   FROM leave_types lt
+                   WHERE lb.employee_id = $2
+                     AND lb.year = $3
+                     AND lt.id = lb.leave_type_id
+                     AND lt.name = $4
+                     AND (lt.tenant_id IS NULL OR lt.tenant_id = $5)"#,
+            )
+            .bind(days)
+            .bind(employee_id)
+            .bind(year)
+            .bind(&leave_type)
+            .bind(tenant_id.0)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        return Ok(status);
+    }
+
+    // No row updated: distinguish not-found / not-own from wrong status.
+    let row = sqlx::query(
+        r#"SELECT status, employee_id FROM leave_requests
+           WHERE id = $1 AND tenant_id = $2"#,
+    )
+    .bind(request_id)
+    .bind(tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let _ = tx.rollback().await;
+    match row {
+        Some(r) => {
+            let owner: Uuid = r.try_get("employee_id")?;
+            if owner != employee_id {
+                Err(LeaveError::NotFound)
+            } else {
+                Err(LeaveError::NotCancellable)
+            }
+        }
+        None => Err(LeaveError::NotFound),
+    }
+}
+
+/// All pending leave requests across the tenant, newest first.
+pub async fn pending_approvals(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+) -> Result<Vec<PendingLeave>, LeaveError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let rows = sqlx::query(
+        r#"SELECT lr.id, lr.employee_id, e.employee_code, e.first_name_th, e.last_name_th,
+                  lr.leave_type, lr.start_date, lr.end_date, lr.days, lr.reason
+           FROM leave_requests lr
+           JOIN employees e ON e.id = lr.employee_id
+           WHERE lr.tenant_id = $1 AND lr.status = 'pending'
+           ORDER BY lr.created_at DESC
+           LIMIT 200"#,
+    )
+    .bind(tenant_id.0)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    rows.into_iter()
+        .map(|row| {
+            Ok(PendingLeave {
+                id: row.try_get("id")?,
+                employee_id: row.try_get("employee_id")?,
+                employee_code: row.try_get("employee_code")?,
+                employee_name: format!(
+                    "{} {}",
+                    row.try_get::<String, _>("first_name_th")?,
+                    row.try_get::<String, _>("last_name_th")?
+                ),
+                leave_type: row.try_get("leave_type")?,
+                start_date: row.try_get("start_date")?,
+                end_date: row.try_get("end_date")?,
+                days: row.try_get("days")?,
                 reason: row.try_get("reason")?,
             })
         })

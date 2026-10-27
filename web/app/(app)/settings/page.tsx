@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { gw, handleApiError } from "@/lib/api";
+import { gw, handleApiError, Me } from "@/lib/api";
 
 type Num = string | number;
 type PayrollSettings = {
@@ -35,8 +35,14 @@ export default function SettingsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [enroll, setEnroll] = useState<{ secret: string; otpauth_url: string } | null>(null);
+  const [totpCode, setTotpCode] = useState("");
 
   useEffect(() => {
+    gw<Me>("api/v1/auth/me")
+      .then((me) => setTotpEnabled(Boolean(me.totp_enabled)))
+      .catch((e) => handleApiError(e, setError));
     Promise.all([
       gw<System>("api/v1/settings/system"),
       gw<{ tenant: Tenant; entities: Entity[] }>("api/v1/settings/organization"),
@@ -102,6 +108,39 @@ export default function SettingsPage() {
       });
       setEntities((list) => list.map((e) => (e.id === entity.id ? { ...e, name, tax_id: taxId || null } : e)));
       setNotice("บันทึกข้อมูลนิติบุคคลแล้ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setup2fa() {
+    setError("");
+    setNotice("");
+    try {
+      setEnroll(await gw("api/v1/auth/2fa/setup", { method: "POST" }));
+      setTotpCode("");
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function toggle2fa(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    const enabling = !totpEnabled;
+    try {
+      await gw(`api/v1/auth/2fa/${enabling ? "enable" : "disable"}`, {
+        method: "POST",
+        body: JSON.stringify({ code: totpCode }),
+      });
+      setTotpEnabled(enabling);
+      setEnroll(null);
+      setTotpCode("");
+      setNotice(enabling ? "เปิดใช้ 2FA แล้ว" : "ปิด 2FA แล้ว");
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -245,6 +284,78 @@ export default function SettingsPage() {
           </table>
         </div>
       </div>
+
+      <form className="card card-pad" onSubmit={toggle2fa} style={{ display: "grid", gap: 12 }}>
+        <h2>ความปลอดภัย (2FA)</h2>
+        <p data-testid="totp-status">
+          <span className={`badge ${totpEnabled ? "success" : ""}`}>
+            {totpEnabled ? "เปิดใช้งานอยู่" : "ปิดอยู่"}
+          </span>
+        </p>
+        {totpEnabled ? (
+          <>
+            <p className="hint">
+              กรอกรหัส 6 หลักจากแอป Authenticator เพื่อปิด 2FA — หากเข้าถึงแอปไม่ได้
+              ผู้ดูแล HR สามารถรีเซ็ต 2FA ให้ได้ที่หน้าผู้ใช้
+            </p>
+            <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
+              <div className="field">
+                <label htmlFor="totp-disable-code">รหัสยืนยัน</label>
+                <input
+                  id="totp-disable-code"
+                  data-testid="totp-disable-code"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ display: "flex", alignItems: "end" }}>
+                <button className="btn btn-danger" data-testid="disable-2fa" type="submit" disabled={busy}>
+                  ปิด 2FA
+                </button>
+              </div>
+            </div>
+          </>
+        ) : enroll ? (
+          <>
+            <p className="hint">
+              เปิดแอป Authenticator (เช่น Google Authenticator) เลือกเพิ่มบัญชีแบบกรอกรหัสด้วยตนเอง
+              แล้วใส่ secret ด้านล่าง (หรือคัดลอกลิงก์ otpauth) จากนั้นกรอกรหัส 6 หลักที่แอปแสดง
+            </p>
+            <code data-testid="totp-secret" style={{ wordBreak: "break-all" }}>
+              {enroll.secret}
+            </code>
+            <code style={{ wordBreak: "break-all", fontSize: 12 }}>{enroll.otpauth_url}</code>
+            <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
+              <div className="field">
+                <label htmlFor="totp-enable-code">รหัสยืนยัน</label>
+                <input
+                  id="totp-enable-code"
+                  data-testid="totp-enable-code"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  required
+                />
+              </div>
+              <div style={{ display: "flex", alignItems: "end" }}>
+                <button className="btn btn-primary" data-testid="enable-2fa" type="submit" disabled={busy}>
+                  ยืนยันและเปิด 2FA
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div>
+            <button className="btn btn-primary" data-testid="setup-2fa" type="button" onClick={setup2fa}>
+              ตั้งค่า 2FA
+            </button>
+          </div>
+        )}
+      </form>
 
       <form className="card card-pad" onSubmit={saveTenant} style={{ display: "grid", gap: 12 }}>
         <h2>องค์กร</h2>

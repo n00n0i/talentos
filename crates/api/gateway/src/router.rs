@@ -26,6 +26,9 @@ pub fn build(state: AppState) -> Router {
 
     let protected = Router::new()
         .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/auth/2fa/setup", post(auth::setup_2fa))
+        .route("/api/v1/auth/2fa/enable", post(auth::enable_2fa))
+        .route("/api/v1/auth/2fa/disable", post(auth::disable_2fa))
         .route("/api/v1/me/payslips", get(me::payslips))
         .route("/api/v1/me/payslips/:id/render", get(me::render))
         .route("/api/v1/me/payslips/:id/pdf", get(me::pdf))
@@ -68,6 +71,7 @@ pub fn build(state: AppState) -> Router {
             post(users::issue_password_reset),
         )
         .route("/api/v1/users/:id/roles", post(users::assign_role))
+        .route("/api/v1/users/:id/2fa/reset", post(users::reset_2fa))
         .route(
             "/api/v1/users/:id",
             axum::routing::delete(users::deactivate),

@@ -8,10 +8,12 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use serde::Deserialize;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::Error as SqlxError;
 
-use talentos_authz::{jwt, password, rbac, AuthError};
+use talentos_authz::{jwt, password, rbac, totp, AuthError};
 use talentos_kernel::{EntityId, TenantContext, TenantId, UserId};
 
 use crate::dto::requests::{LoginRequest, RefreshRequest};
@@ -79,7 +81,15 @@ pub async fn login(
         }
     }
 
-    match authenticate(&state, &body.tenant_slug, &email, &body.password).await {
+    match authenticate(
+        &state,
+        &body.tenant_slug,
+        &email,
+        &body.password,
+        body.totp_code.as_deref(),
+    )
+    .await
+    {
         Ok(ctx) => {
             ratelimit::reset(&state.redis, &[ip_key.clone(), email_key.clone()]).await;
             // M1: update last_login_at and insert audit_log row on success.
@@ -98,10 +108,12 @@ async fn authenticate(
     tenant_slug: &str,
     email: &str,
     plain: &str,
+    totp_code: Option<&str>,
 ) -> Result<TenantContext, AuthError> {
     // B7: propagate sqlx errors instead of swallowing them into InvalidCredentials.
     let row = sqlx::query!(
         r#"SELECT u.id AS user_id, u.tenant_id, u.password_hash, u.is_active,
+                  u.totp_secret, u.totp_enabled,
                   (SELECT ur2.entity_id FROM user_roles ur2
                     WHERE ur2.user_id = u.id AND ur2.entity_id IS NOT NULL
                     ORDER BY ur2.assigned_at LIMIT 1) AS entity_id,
@@ -143,6 +155,30 @@ async fn authenticate(
         return Err(AuthError::InsufficientPermission {
             reason: "no roles".into(),
         });
+    }
+
+    // 2FA gate after password success.
+    if row.totp_enabled {
+        let cipher = pii_cipher(state)?;
+        let secret = match row.totp_secret {
+            Some(enc) => cipher.decrypt(&enc).map_err(|e| {
+                tracing::error!(error = %e, user_id = %row.user_id, "failed to decrypt totp_secret");
+                AuthError::Internal("totp decrypt failed".into())
+            })?,
+            None => {
+                tracing::error!(user_id = %row.user_id, "totp enabled but secret missing");
+                return Err(AuthError::Internal("totp secret missing".into()));
+            }
+        };
+
+        match totp_code {
+            Some(code) => {
+                if !totp::verify(&secret, code, now_unix()) {
+                    return Err(AuthError::InvalidTotp);
+                }
+            }
+            None => return Err(AuthError::TotpRequired),
+        }
     }
 
     let ctx = TenantContext {
@@ -385,7 +421,7 @@ pub async fn me(State(state): State<AppState>, Authed(ctx): Authed) -> Response 
         Err(e) => return internal_err_to_response(e),
     };
     let row = sqlx::query!(
-        r#"SELECT email, full_name_th, full_name_en, last_login_at,
+        r#"SELECT email, full_name_th, full_name_en, last_login_at, totp_enabled,
                   (SELECT name FROM tenants WHERE id = $2) AS tenant_name
            FROM users WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE"#,
         ctx.user_id.0,
@@ -414,6 +450,414 @@ pub async fn me(State(state): State<AppState>, Authed(ctx): Authed) -> Response 
             roles: ctx.roles.clone(),
             permissions: perms,
             last_login_at: u.last_login_at.map(|t| t.to_rfc3339()),
+            totp_enabled: u.totp_enabled,
+        }),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TotpCodeBody {
+    pub code: String,
+}
+
+/// POST /api/v1/auth/2fa/setup
+pub async fn setup_2fa(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    let Some(cipher) = state.pii.as_deref() else {
+        return service_unavailable(
+            "PII_ENCRYPTION_KEY is not configured; 2FA setup is unavailable",
+        );
+    };
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
+
+    let row = match sqlx::query!(
+        "SELECT email, totp_enabled FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err_to_response(e);
+        }
+    };
+
+    let Some(row) = row else {
+        let _ = tx.rollback().await;
+        return auth_err_to_response(AuthError::AccountDisabled);
+    };
+
+    if row.totp_enabled {
+        let _ = tx.rollback().await;
+        return conflict("2FA is already enabled");
+    }
+
+    let secret_plain = totp::generate_secret();
+    let secret_encrypted = match cipher.encrypt(&secret_plain) {
+        Ok(enc) => enc,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to encrypt totp_secret");
+            let _ = tx.rollback().await;
+            return auth_err_to_response(AuthError::Internal("encryption failed".into()));
+        }
+    };
+
+    let updated = sqlx::query!(
+        "UPDATE users SET totp_secret = $1, totp_enabled = FALSE, totp_enabled_at = NULL \
+         WHERE id = $2 AND tenant_id = $3",
+        secret_encrypted,
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = updated {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = audit_2fa_tx(
+        &mut tx,
+        ctx.tenant_id,
+        ctx.user_id,
+        "auth.2fa_setup",
+        ctx.user_id,
+    )
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "secret": secret_plain,
+            "otpauth_url": totp::otpauth_url(&row.email, &secret_plain),
+        })),
+    )
+        .into_response()
+}
+
+/// POST /api/v1/auth/2fa/enable
+pub async fn enable_2fa(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<TotpCodeBody>,
+) -> Response {
+    if body.code.len() != 6 || !body.code.chars().all(|c| c.is_ascii_digit()) {
+        return bad_request("code must be 6 digits");
+    }
+    if let Err(retry_after) = ratelimit::check(
+        &state.redis,
+        &format!("rl:2fa:{}", ctx.user_id.0),
+        10,
+        Duration::from_secs(300),
+    )
+    .await
+    {
+        return too_many_2fa_attempts(retry_after);
+    }
+
+    let cipher = match pii_cipher(&state) {
+        Ok(c) => c,
+        Err(e) => return auth_err_to_response(e),
+    };
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
+
+    let row = match sqlx::query!(
+        "SELECT totp_secret FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err_to_response(e);
+        }
+    };
+
+    let Some(row) = row else {
+        let _ = tx.rollback().await;
+        return auth_err_to_response(AuthError::AccountDisabled);
+    };
+
+    let Some(secret_encrypted) = row.totp_secret else {
+        let _ = tx.rollback().await;
+        return bad_request("2FA setup required");
+    };
+
+    let secret_plain = match cipher.decrypt(&secret_encrypted) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to decrypt totp_secret");
+            let _ = tx.rollback().await;
+            return auth_err_to_response(AuthError::Internal("decryption failed".into()));
+        }
+    };
+
+    if !totp::verify(&secret_plain, &body.code, now_unix()) {
+        let _ = tx.rollback().await;
+        return bad_request("invalid TOTP code");
+    }
+
+    let updated = sqlx::query!(
+        "UPDATE users SET totp_enabled = TRUE, totp_enabled_at = now() \
+         WHERE id = $1 AND tenant_id = $2",
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = updated {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = audit_2fa_tx(
+        &mut tx,
+        ctx.tenant_id,
+        ctx.user_id,
+        "auth.2fa_enable",
+        ctx.user_id,
+    )
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
+    (StatusCode::OK, Json(json!({ "totp_enabled": true }))).into_response()
+}
+
+/// POST /api/v1/auth/2fa/disable
+pub async fn disable_2fa(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<TotpCodeBody>,
+) -> Response {
+    if body.code.len() != 6 || !body.code.chars().all(|c| c.is_ascii_digit()) {
+        return bad_request("code must be 6 digits");
+    }
+    if let Err(retry_after) = ratelimit::check(
+        &state.redis,
+        &format!("rl:2fa:{}", ctx.user_id.0),
+        10,
+        Duration::from_secs(300),
+    )
+    .await
+    {
+        return too_many_2fa_attempts(retry_after);
+    }
+
+    let cipher = match pii_cipher(&state) {
+        Ok(c) => c,
+        Err(e) => return auth_err_to_response(e),
+    };
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
+
+    let row = match sqlx::query!(
+        "SELECT totp_secret FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err_to_response(e);
+        }
+    };
+
+    let Some(row) = row else {
+        let _ = tx.rollback().await;
+        return auth_err_to_response(AuthError::AccountDisabled);
+    };
+
+    let Some(secret_encrypted) = row.totp_secret else {
+        let _ = tx.rollback().await;
+        return bad_request("2FA is not set up");
+    };
+
+    let secret_plain = match cipher.decrypt(&secret_encrypted) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to decrypt totp_secret");
+            let _ = tx.rollback().await;
+            return auth_err_to_response(AuthError::Internal("decryption failed".into()));
+        }
+    };
+
+    if !totp::verify(&secret_plain, &body.code, now_unix()) {
+        let _ = tx.rollback().await;
+        return bad_request("invalid TOTP code");
+    }
+
+    let updated = sqlx::query!(
+        "UPDATE users SET totp_secret = NULL, totp_enabled = FALSE, totp_enabled_at = NULL \
+         WHERE id = $1 AND tenant_id = $2",
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = updated {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = audit_2fa_tx(
+        &mut tx,
+        ctx.tenant_id,
+        ctx.user_id,
+        "auth.2fa_disable",
+        ctx.user_id,
+    )
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    // Same transaction: a disable that cannot revoke sessions is not a disable.
+    if let Err(e) = sqlx::query(
+        "UPDATE refresh_tokens SET revoked_at = now() \
+         WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(ctx.user_id.0)
+    .bind(ctx.tenant_id.0)
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
+    (StatusCode::OK, Json(json!({ "totp_enabled": false }))).into_response()
+}
+
+fn pii_cipher(state: &AppState) -> Result<&talentos_db::pii::PiiCipher, AuthError> {
+    state.pii.as_deref().ok_or_else(|| {
+        tracing::error!("PII_ENCRYPTION_KEY not configured but TOTP secret required");
+        AuthError::Internal("PII encryption not configured".into())
+    })
+}
+
+fn now_unix() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+async fn audit_2fa_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: TenantId,
+    actor_id: UserId,
+    action: &str,
+    target_id: UserId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, $3, 'user', $4, '{}'::jsonb)"#,
+        tenant_id.0,
+        actor_id.0.to_string(),
+        action,
+        target_id.0.to_string()
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+fn bad_request(message: &str) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            error: "invalid_request".into(),
+            message: message.into(),
+            details: vec![],
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
+        }),
+    )
+        .into_response()
+}
+
+fn too_many_2fa_attempts(retry_after: u64) -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        [(axum::http::header::RETRY_AFTER, retry_after.to_string())],
+        Json(ErrorResponse {
+            error: "rate_limited".into(),
+            message: "Too many 2FA attempts. Try again later.".into(),
+            details: vec![],
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after_seconds: Some(retry_after),
+        }),
+    )
+        .into_response()
+}
+
+fn conflict(message: &str) -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(ErrorResponse {
+            error: "conflict".into(),
+            message: message.into(),
+            details: vec![],
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
+        }),
+    )
+        .into_response()
+}
+
+fn service_unavailable(message: &str) -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(ErrorResponse {
+            error: "service_unavailable".into(),
+            message: message.into(),
+            details: vec![],
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after_seconds: None,
         }),
     )
         .into_response()
@@ -455,7 +899,12 @@ fn auth_err_to_response(e: AuthError) -> Response {
                 AuthError::TokenExpired => "Refresh token expired".into(),
                 AuthError::RateLimited => "Too many attempts. Try again later.".into(),
                 AuthError::InsufficientPermission { .. } => "Invalid email or password".into(),
-                _ => "Authentication failed".into(),
+                AuthError::TotpRequired => "TOTP code required".into(),
+                AuthError::InvalidTotp => "Invalid TOTP code".into(),
+                AuthError::TokenMalformed | AuthError::TokenSignatureInvalid => {
+                    "Authentication failed".into()
+                }
+                AuthError::Internal(_) => "An unexpected error occurred".into(),
             },
             details: vec![],
             request_id: uuid::Uuid::new_v4().to_string(),

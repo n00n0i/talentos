@@ -119,6 +119,8 @@ fn safe_message(e: &talentos_authz::AuthError) -> String {
         TokenSignatureInvalid => "Invalid access token".into(),
         InsufficientPermission { .. } => "Insufficient permission".into(),
         RateLimited => "Too many attempts".into(),
+        TotpRequired => "TOTP code required".into(),
+        InvalidTotp => "Invalid TOTP code".into(),
         Internal(_) => "An unexpected error occurred".into(),
     }
 }

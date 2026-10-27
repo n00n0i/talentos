@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT email, full_name_th, full_name_en, last_login_at,\n                  (SELECT name FROM tenants WHERE id = $2) AS tenant_name\n           FROM users WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE",
+  "query": "SELECT email, full_name_th, full_name_en, last_login_at, totp_enabled,\n                  (SELECT name FROM tenants WHERE id = $2) AS tenant_name\n           FROM users WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE",
   "describe": {
     "columns": [
       {
@@ -25,6 +25,11 @@
       },
       {
         "ordinal": 4,
+        "name": "totp_enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
         "name": "tenant_name",
         "type_info": "Text"
       }
@@ -40,8 +45,9 @@
       true,
       true,
       true,
+      false,
       null
     ]
   },
-  "hash": "7089cbb5817013117e145868c8447d8b602b9d8d885dbc49243841211f8c1ffc"
+  "hash": "a66d218fad1b1246dd4f3330577b9893f1766b81c7846bb61d3d6d62964adf5d"
 }

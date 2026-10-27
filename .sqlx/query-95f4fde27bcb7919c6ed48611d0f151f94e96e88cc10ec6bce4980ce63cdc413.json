@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT totp_secret FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "totp_secret",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "95f4fde27bcb7919c6ed48611d0f151f94e96e88cc10ec6bce4980ce63cdc413"
+}

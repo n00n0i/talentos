@@ -5,6 +5,7 @@ pub struct LoginRequest {
     pub email: String,
     pub password: String,
     pub tenant_slug: String,
+    pub totp_code: Option<String>,
 }
 
 impl LoginRequest {
@@ -25,7 +26,48 @@ impl LoginRequest {
         {
             errs.push(("tenant_slug", "must match [a-z0-9-]{2,63}"));
         }
+        if let Some(code) = &self.totp_code {
+            if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
+                errs.push(("totp_code", "must be 6 digits"));
+            }
+        }
         errs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn req(code: Option<&str>) -> LoginRequest {
+        LoginRequest {
+            email: "a@b.com".into(),
+            password: "12345678".into(),
+            tenant_slug: "acme".into(),
+            totp_code: code.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn absent_totp_code_is_valid() {
+        assert!(req(None).validate().is_empty());
+    }
+
+    #[test]
+    fn six_digit_totp_code_is_valid() {
+        assert!(req(Some("123456")).validate().is_empty());
+        assert!(req(Some("000000")).validate().is_empty());
+    }
+
+    #[test]
+    fn non_six_digit_totp_code_is_invalid() {
+        for code in ["12345", "1234567", "abcdef", "12345a", " 123456 "] {
+            let errs = req(Some(code)).validate();
+            assert!(
+                errs.iter().any(|(f, _)| f == &"totp_code"),
+                "code {code} should be rejected"
+            );
+        }
     }
 }
 

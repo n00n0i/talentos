@@ -73,6 +73,7 @@ export type Me = {
   roles: string[];
   permissions: string[];
   last_login_at: string | null;
+  totp_enabled?: boolean;
 };
 
 export type PayrollRun = {

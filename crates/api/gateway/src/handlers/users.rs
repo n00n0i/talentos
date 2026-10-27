@@ -66,6 +66,7 @@ pub struct UserDto {
     pub is_active: bool,
     pub roles: Vec<String>,
     pub last_login_at: Option<String>,
+    pub totp_enabled: bool,
 }
 
 /// GET /api/v1/users
@@ -78,7 +79,7 @@ pub async fn list(State(state): State<AppState>, Authed(ctx): Authed) -> Respons
         Err(e) => return internal_err(&e.to_string()),
     };
     let rows = sqlx::query(
-        r#"SELECT u.id, u.email, u.full_name_th, u.is_active, u.last_login_at,
+        r#"SELECT u.id, u.email, u.full_name_th, u.is_active, u.last_login_at, u.totp_enabled,
                   COALESCE(array_remove(array_agg(DISTINCT r.name), NULL), '{}') AS roles
              FROM users u
              LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -106,6 +107,7 @@ pub async fn list(State(state): State<AppState>, Authed(ctx): Authed) -> Respons
                     last_login_at: row
                         .get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_login_at")
                         .map(|t| t.to_rfc3339()),
+                    totp_enabled: row.get("totp_enabled"),
                 })
                 .collect();
             (StatusCode::OK, Json(json!({ "users": users }))).into_response()
@@ -786,6 +788,86 @@ pub async fn deactivate(
     .await;
 
     StatusCode::NO_CONTENT.into_response()
+}
+
+/// POST /api/v1/users/:id/2fa/reset — HR admin clears the target user's 2FA.
+pub async fn reset_2fa(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(user_id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "user_management", "reset_2fa") {
+        return forbidden;
+    }
+    // Recovery is for a locked-out colleague, not a way around your own code.
+    if user_id == ctx.user_id.0 {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "use /auth/2fa/disable with your current code to turn off your own 2FA",
+        );
+    }
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+
+    let done = sqlx::query(
+        "UPDATE users SET totp_secret = NULL, totp_enabled = FALSE, totp_enabled_at = NULL \
+         WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(user_id)
+    .bind(ctx.tenant_id.0)
+    .execute(&mut *tx)
+    .await;
+
+    match done {
+        Ok(done) if done.rows_affected() == 0 => {
+            let _ = tx.rollback().await;
+            return error_response(StatusCode::NOT_FOUND, "not_found", "user not found");
+        }
+        Ok(_) => {}
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    }
+
+    if let Err(e) = sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'user.2fa_reset', 'user', $3, '{}'::jsonb)"#,
+    )
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0.to_string())
+    .bind(user_id.to_string())
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
+
+    // Same transaction: reset is only complete if the old sessions die with it.
+    if let Err(e) = sqlx::query(
+        "UPDATE refresh_tokens SET revoked_at = now() \
+         WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .bind(ctx.tenant_id.0)
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_err(&e.to_string());
+    }
+
+    (StatusCode::OK, Json(json!({ "totp_enabled": false }))).into_response()
 }
 
 fn password_problem(password: &str) -> Option<String> {

@@ -61,6 +61,10 @@ argon2 = "0.5"
 rand = "0.8"
 # SHA-256 (refresh token hashing)
 sha2 = "0.10"
+# TOTP HMAC-SHA1
+hmac = "0.12"
+sha1 = "0.10"
+base32 = "0.5"
 # Hex encoding (refresh token representation)
 hex = "0.4"
 # Web framework

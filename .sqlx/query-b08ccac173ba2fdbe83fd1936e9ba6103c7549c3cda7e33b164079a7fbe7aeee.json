@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users SET totp_secret = $1, totp_enabled = FALSE, totp_enabled_at = NULL WHERE id = $2 AND tenant_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b08ccac173ba2fdbe83fd1936e9ba6103c7549c3cda7e33b164079a7fbe7aeee"
+}

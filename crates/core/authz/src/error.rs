@@ -23,6 +23,12 @@ pub enum AuthError {
     #[error("rate limited")]
     RateLimited,
 
+    #[error("totp code required")]
+    TotpRequired,
+
+    #[error("invalid totp")]
+    InvalidTotp,
+
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -34,6 +40,7 @@ impl AuthError {
             Self::TokenExpired | Self::TokenMalformed | Self::TokenSignatureInvalid => 401,
             Self::InsufficientPermission { .. } => 403,
             Self::RateLimited => 429,
+            Self::TotpRequired | Self::InvalidTotp => 401,
             Self::Internal(_) => 500,
         }
     }
@@ -47,6 +54,8 @@ impl AuthError {
             Self::InsufficientPermission { .. } => "insufficient_permission",
             Self::AccountDisabled => "unauthorized",
             Self::RateLimited => "rate_limited",
+            Self::TotpRequired => "totp_required",
+            Self::InvalidTotp => "invalid_totp",
             Self::Internal(_) => "internal_error",
         }
     }

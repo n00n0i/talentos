@@ -8,8 +8,8 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **163 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 24 files apply cleanly |
+| Tests | `cargo test --workspace` | **171 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 25 files apply cleanly |
 
 Unit tests by crate: kernel 5, authz 27, attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
@@ -25,15 +25,17 @@ totals, state machine, template round-trip, PDF, stuck-run recovery,
 attendance+unpaid-leave feed, tenant policy overrides, 30-employee attendance
 scale — 3 of the 30 employees are driven through punch/correct/approve; the
 rest seed approved records directly), attendance 30 (approve/correct, import, punch, schema
-isolation, self, shifts), memory 3 (recall, RLS isolation, layer filter, expiry
-purge, stats), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 163 passed, 1 ignored (`load.rs`).
+isolation, self, shifts), leave self-service 8 (me/leave, cancel, approvals,
+balance debit/restore, legacy pending isolation, RBAC), memory 3 (recall, RLS
+isolation, layer filter, expiry purge, stats), wasm-host 6 (real guest module:
+sandbox, capability refusal, tenant scoping). Total: 171 passed, 1 ignored
+(`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
 2 payslips, total gross ฿99,000, SSO ฿1,450, PND ฿9,416.67 (hand-verified).
 Payslip PDF: 77 KB, `%PDF-1.4`, Thai text round-trips through `pdftotext`.
-Leave: create (3 days computed server-side) → overlap 409 → bad type 422 → balances → list.
+Leave: create (3 days computed server-side) → overlap 409 → bad type 422 → balances → list → me/leave → cancel restores balance → approvals inbox → decision.
 
 ## Compiling workspace members
 
@@ -70,7 +72,7 @@ crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT pe
 `web/` — Next.js 15.5.28 + React 19, TypeScript strict, no UI dependency beyond
 React. `npm audit` reports 0 vulnerabilities; CI fails on high/critical in
 production deps.
-`npm run build` passes (20 routes). Browser never holds a token: `/api/session/login`
+`npm run build` passes (21 routes). Browser never holds a token: `/api/session/login`
 sets `HttpOnly` cookies and `/api/gw/*` proxies with a bearer header, refreshing
 single-flight. Verified against the real gateway: login → `/auth/me` → GraphQL →
 payslip template → HTML render → 77 KB PDF, and an expired access token rotates
@@ -81,23 +83,25 @@ against a live gateway.
 Full compose stack verified separately (isolated project + volume): migrate →
 gateway → web → nginx with the TLS overlay. HTTPS `/health` 200, HTTP→HTTPS 301,
 web session login and `/api/gw/auth/me` 200, RLS enforced (`talentos_app`),
-PII configured, 23 migrations tracked, and `talentos-gateway provision` created
+PII configured, 25 migrations tracked, and `talentos-gateway provision` created
 the first tenant through the compose service.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings) and `/users` (invite, roles, deactivate, HR-issued password reset).
 Payroll runs export a UTF-8 CSV register (formula-injection safe) with totals.
 Employees can be linked to a login and see only their own payslips
-(`/me/payslips`). The audit trail has a read API and `/audit` page.
-Attendance has a tenant holiday calendar; OT is classified holiday > weekend >
-weekday automatically. HTTPS is a compose overlay (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
+(`/me/payslips`) and request leave self-service (`/leave`). The audit trail has a
+read API and `/audit` page. Attendance has a tenant holiday calendar; OT is
+classified holiday > weekend > weekday automatically. HTTPS is a compose overlay
+(`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
-cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout. Browser E2E (`web/e2e`, Playwright) passes 9/9
-locally and runs in CI: invite acceptance → login, settings +
-audit, employee → attendance → payroll → approval, holiday OT, user invite,
-password reset, self-service payslips, employee clock punch with GPS, HR shift
-creation and day correction/approval. Payroll load test: 500 employees in
-~0.38 s locally (~1,300/s).
+cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout.
+Browser E2E (`web/e2e`, Playwright) passes 10/10 locally and runs in CI: invite
+acceptance → login, settings + audit, employee → attendance → payroll → approval,
+holiday OT, user invite, password reset, self-service payslips, employee clock
+punch with GPS, HR shift creation and day correction/approval, and employee leave
+request → HR approval. Payroll load test: 500 employees in ~0.38 s locally
+(~1,300/s).
 
 ## Known risks
 
@@ -114,6 +118,11 @@ creation and day correction/approval. Payroll load test: 500 employees in
 - Attendance GPS geofencing deters but does not cryptographically prove location;
   no face recognition / liveness check. No offline queue; punches require a live
   connection. Shift swaps and self-scheduling are not implemented.
+- Leave self-service debits `used_days` when a request becomes pending and
+  restores it on cancel/reject; approve keeps the debit. Legacy pending rows
+  with `balance_debited=false` are not retroactively debited. There are no
+  email/push notifications for leave approvals yet, and OT self-service requests
+  are still deferred.
 
 ## Deferred — not wired
 
@@ -170,3 +179,5 @@ phase boundary is already isolated, so the Temporal swap is a wiring change, not
 - Only one default template per tenant is editable through the API (no per-entity or multiple named templates in the UI).
 - In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
 - Single static HS256 signing key (no JWKS rotation yet).
+- OT self-service requests are deferred to the next slice; leave has no email/push
+  notifications yet.

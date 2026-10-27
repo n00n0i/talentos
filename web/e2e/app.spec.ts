@@ -269,6 +269,7 @@ test("HR creates a shift, corrects and approves a derived day", async ({ page })
 test("employee requests leave, HR approves it", async ({ page }) => {
   async function loginAs(email: string, password: string) {
     await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
     await page.getByLabel("องค์กร").fill("e2e");
     await page.getByLabel("อีเมล").fill(email);
     await page.getByLabel("รหัสผ่าน").fill(password);
@@ -391,6 +392,7 @@ test("HR saves a LINE id for the invited user", async ({ page }) => {
 test("employee requests OT, HR approves it", async ({ page }) => {
   async function loginAs(email: string, password: string) {
     await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
     await page.getByLabel("องค์กร").fill("e2e");
     await page.getByLabel("อีเมล").fill(email);
     await page.getByLabel("รหัสผ่าน").fill(password);
@@ -425,6 +427,7 @@ test("employee requests OT, HR approves it", async ({ page }) => {
 test("multi-level leave approval chain", async ({ page }) => {
   async function loginAs(email: string, password: string) {
     await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
     await page.getByLabel("องค์กร").fill("e2e");
     await page.getByLabel("อีเมล").fill(email);
     await page.getByLabel("รหัสผ่าน").fill(password);

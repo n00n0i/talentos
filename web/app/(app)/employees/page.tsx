@@ -60,6 +60,91 @@ const EMPTY: FormState = {
   user_id: "",
 };
 
+type ImportRow = Record<string, string | boolean>;
+type ImportResult = {
+  dry_run: boolean;
+  total: number;
+  valid: number;
+  invalid: number;
+  created: number;
+  rows: { row: number; employee_code: string; status: "valid" | "invalid"; errors: string[] }[];
+};
+
+const IMPORT_REQUIRED = [
+  "employee_code",
+  "first_name_th",
+  "last_name_th",
+  "position_title",
+  "base_salary",
+  "hire_date",
+];
+const IMPORT_OPTIONAL = [
+  "department",
+  "first_name_en",
+  "last_name_en",
+  "tax_filing_status",
+  "pf_member",
+  "sso_enrolled",
+];
+const IMPORT_BOOLS = ["pf_member", "sso_enrolled"];
+
+function parseCsv(text: string): string[][] {
+  const out: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  const src = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quoted) {
+      if (c === '"' && src[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (c === '"') quoted = false;
+      else cell += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (c === "\n" || c === "\r") {
+      if (c === "\r" && src[i + 1] === "\n") i++;
+      row.push(cell);
+      cell = "";
+      out.push(row);
+      row = [];
+    } else cell += c;
+  }
+  if (cell !== "" || row.length) {
+    row.push(cell);
+    out.push(row);
+  }
+  return out.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+function csvToImportRows(text: string): ImportRow[] {
+  const [header, ...body] = parseCsv(text);
+  if (!header) throw new Error("ไฟล์ว่างเปล่า");
+  const cols = header.map((h) => h.trim());
+  const missing = IMPORT_REQUIRED.filter((h) => !cols.includes(h));
+  if (missing.length) throw new Error(`ไม่พบคอลัมน์ที่จำเป็น: ${missing.join(", ")}`);
+  if (body.length === 0) throw new Error("ไม่มีข้อมูลพนักงานในไฟล์");
+  return body.map((cells, i) => {
+    const r: ImportRow = {};
+    for (const key of [...IMPORT_REQUIRED, ...IMPORT_OPTIONAL]) {
+      const idx = cols.indexOf(key);
+      const v = idx < 0 ? "" : (cells[idx] ?? "").trim();
+      if (v === "") continue;
+      if (IMPORT_BOOLS.includes(key)) {
+        const b = v.toLowerCase();
+        if (!["true", "1", "yes", "false", "0", "no"].includes(b))
+          throw new Error(`แถว ${i + 1}: ค่า ${key} ต้องเป็น true หรือ false`);
+        r[key] = ["true", "1", "yes"].includes(b);
+      } else r[key] = v;
+    }
+    return r;
+  });
+}
+
 export default function EmployeesPage() {
   const [rows, setRows] = useState<Employee[] | null>(null);
   const [query, setQuery] = useState("");
@@ -70,6 +155,9 @@ export default function EmployeesPage() {
   const [users, setUsers] = useState<{ id: string; email: string; full_name_th: string | null }[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importKey, setImportKey] = useState(0);
 
   const load = useCallback(async (all: boolean) => {
     const r = await gw<{ employees: Employee[] }>(
@@ -145,6 +233,44 @@ export default function EmployeesPage() {
       await load(showTerminated);
     } catch (e) {
       handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setImportResult(null);
+    setImportRows([]);
+    setError("");
+    if (!file) return;
+    try {
+      setImportRows(csvToImportRows(await file.text()));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "อ่านไฟล์ไม่สำเร็จ");
+    }
+  }
+
+  async function runImport(dryRun: boolean) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const r = await gw<ImportResult>("api/v1/employees/import", {
+        method: "POST",
+        body: JSON.stringify({ dry_run: dryRun, rows: importRows }),
+      });
+      if (dryRun) {
+        setImportResult(r);
+      } else {
+        setNotice(`นำเข้าพนักงาน ${r.created} รายการแล้ว`);
+        setImportRows([]);
+        setImportResult(null);
+        setImportKey((k) => k + 1);
+        await load(showTerminated);
+      }
+    } catch (err) {
+      handleApiError(err, setError);
     } finally {
       setBusy(false);
     }
@@ -332,6 +458,74 @@ export default function EmployeesPage() {
           </div>
         </form>
       )}
+
+      <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
+        <h2>นำเข้าพนักงานจากไฟล์ CSV</h2>
+        <p className="hint">
+          คอลัมน์ที่จำเป็น: {IMPORT_REQUIRED.join(", ")} · ไม่บังคับ: {IMPORT_OPTIONAL.join(", ")}
+        </p>
+        <input key={importKey} type="file" accept=".csv" data-testid="import-csv" onChange={onImportFile} />
+        {importRows.length > 0 && (
+          <>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button className="btn" data-testid="dry-run-import" onClick={() => runImport(true)} disabled={busy}>
+                ตรวจสอบไฟล์
+              </button>
+              <button
+                className="btn btn-primary"
+                data-testid="confirm-import"
+                onClick={() => runImport(false)}
+                disabled={busy || !importResult || importResult.valid === 0 || importResult.invalid > 0}
+              >
+                ยืนยันนำเข้า
+              </button>
+              {importResult && (
+                <span data-testid="import-summary">
+                  ทั้งหมด {importResult.total} · ถูกต้อง {importResult.valid} · ผิดพลาด {importResult.invalid}
+                </span>
+              )}
+            </div>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>แถว</th>
+                  <th>รหัส</th>
+                  <th>ชื่อ</th>
+                  <th>ตำแหน่ง</th>
+                  <th className="num">เงินเดือน</th>
+                  <th>วันเริ่มงาน</th>
+                  <th>สถานะ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importRows.map((r, i) => {
+                  const res = importResult?.rows[i];
+                  return (
+                    <tr key={i} data-testid="import-row">
+                      <td>{i + 1}</td>
+                      <td>{String(r.employee_code ?? "")}</td>
+                      <td>
+                        {String(r.first_name_th ?? "")} {String(r.last_name_th ?? "")}
+                      </td>
+                      <td>{String(r.position_title ?? "")}</td>
+                      <td className="num">{String(r.base_salary ?? "")}</td>
+                      <td>{String(r.hire_date ?? "")}</td>
+                      <td>
+                        {res &&
+                          (res.status === "valid" ? (
+                            <span className="badge success">ถูกต้อง</span>
+                          ) : (
+                            <span className="error">{res.errors.join(" · ")}</span>
+                          ))}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
 
       <div className="card">
         {rows === null ? (

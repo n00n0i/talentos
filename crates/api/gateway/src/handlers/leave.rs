@@ -357,6 +357,7 @@ pub async fn import_balances(
     (StatusCode::OK, Json(report)).into_response()
 }
 
+#[allow(dead_code)]
 fn merge_balance_import_rows(
     parse_results: Vec<Option<talentos_hr_runner::leave::BalanceImportRowResult>>,
     service_rows: &[talentos_hr_runner::leave::BalanceImportRowResult],

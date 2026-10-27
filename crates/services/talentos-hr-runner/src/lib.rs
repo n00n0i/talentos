@@ -7,6 +7,7 @@ pub mod attendance;
 pub mod leave;
 pub mod notify;
 pub mod ot;
+pub mod reports;
 
 pub use attendance::{
     active_shift, assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError,

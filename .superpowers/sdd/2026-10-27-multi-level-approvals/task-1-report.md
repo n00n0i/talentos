@@ -1,10 +1,11 @@
 # Task 1 Report: Multi-level Leave Approvals (Backend)
 
 ## Status
-Complete.
+Complete. Review fixes applied.
 
-## Commit
-`cdeffad34b0502b784779ddda00bc5e0e68538a3`
+## Commits
+- Initial implementation: `cdeffad34b0502b784779ddda00bc5e0e68538a3`
+- Review fixes: `cec854d`
 
 ## Changes
 - `migrations/20261107000001_leave_approval_steps.sql`
@@ -39,12 +40,19 @@ Complete.
 
 ## Test Summary
 - `cargo fmt --all` ✓
-- `cargo clippy -p talentos-hr-runner -p talentos-gateway --all-targets -- -D warnings` ✓
-- `cargo test -p talentos-hr-runner` ✓ — 73 passed (11 unit + 62 integration)
+- `cargo clippy -p talentos-hr-runner -p talentos-gateway -p talentos-graphql --all-targets -- -D warnings` ✓
+- `cargo test -p talentos-hr-runner` ✓ — 81 passed (11 unit + 70 integration)
 - `cargo test -p talentos-gateway` ✓ — 48 passed
+- `cargo test -p talentos-graphql` ✓ — 3 passed
 - `cargo check -p talentos-payroll-runner` ✓
+
+## Review Fixes (cec854d)
+1. **Rejection notification regression** — `decide_request` now enqueues `leave_decided` for both final approve and final reject; intermediate steps still do not notify. Added `rejected_request_creates_notification_for_employee` test.
+2. **GraphQL bypass** — `request_leave`, `approve_leave_request`, `reject_leave_request`, and `cancel_leave_request` mutations in `crates/api/graphql/src/resolvers/leave.rs` now immediately return an `async_graphql::Error` directing callers to the equivalent REST endpoints. Query resolvers remain intact.
+3. **Legacy inbox visibility** — `pending_approvals` now uses a `LEFT JOIN` to `leave_approval_steps`; pending requests without steps appear as `step_no=1`, `total_steps=1`, `approver_role='hr_admin'`.
+4. **Reject step number** — `decide_request` now returns the step that was actually rejected (`step_no`) rather than `total_steps`.
+5. **Duplicate roles** — `PayrollSettings::leave_approval_chain_is_valid` and the defensive `normalise_chain` both reject duplicate roles (e.g. `["manager","manager","hr_admin"]` is invalid).
 
 ## Concerns / Risks
 - Between Task 1 and Task 2, the web settings page PUT does not send `leave_approval_chain`, so saving payroll settings will reset the chain to the default `["hr_admin"]`. Task 2 updates the UI to preserve/send the chain.
-- `pending_approvals` only shows requests that have a pending step; legacy pending rows without steps will not appear until a decision creates the step. This matches the plan's legacy-on-the-fly behavior for `decide_request`.
 - Migration was applied manually with `docker exec -i talentos-postgres-1 psql ...`; ensure CI/production migrations include `20261107000001_leave_approval_steps.sql`.

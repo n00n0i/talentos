@@ -92,7 +92,26 @@ Expected: FAIL — relation `work_shifts` does not exist.
 
 - [ ] **Step 3: Write the migration**
 
-Create the four tables with `tenant_id`, FKs, checks, indexes, `ENABLE` + `FORCE ROW LEVEL SECURITY`, and `CREATE POLICY ... USING (tenant_id = current_tenant_id())`. Add `entities.geofence_lat NUMERIC(9,6)`, `geofence_lng NUMERIC(9,6)`, `geofence_radius_m INT NOT NULL DEFAULT 200`. Unique indexes: `work_shifts(entity_id, name)`, `shift_assignments(employee_id, effective_from)`, `attendance_days(employee_id, work_date)`; index `attendance_events(employee_id, occurred_at)`.
+Create the four tables with `tenant_id`, FKs, checks, indexes, `ENABLE` + `FORCE ROW LEVEL SECURITY`, and `CREATE POLICY ... USING (tenant_id = current_tenant_id())`. Add `entities.geofence_lat NUMERIC(9,6)`, `geofence_lng NUMERIC(9,6)`, `geofence_radius_m INT NOT NULL DEFAULT 200` with range checks (lat -90..90, lng -180..180, radius 1..5000). Unique indexes: `work_shifts(entity_id, name)`, `shift_assignments(employee_id, effective_from)`, `attendance_days(employee_id, work_date)`; index `attendance_events(employee_id, occurred_at)`. Index `tenant_id` on every new table and the FK columns used for joins.
+
+`attendance_days` must store the domain's integer minutes and approval state — later tasks depend on these exact columns:
+
+```sql
+id UUID PK, tenant_id UUID, employee_id UUID, work_date DATE, shift_id UUID NULL,
+worked_minutes INT NOT NULL DEFAULT 0 CHECK (worked_minutes >= 0),
+late_minutes INT NOT NULL DEFAULT 0 CHECK (late_minutes >= 0),
+early_leave_minutes INT NOT NULL DEFAULT 0 CHECK (early_leave_minutes >= 0),
+ot_minutes INT NOT NULL DEFAULT 0 CHECK (ot_minutes >= 0),
+ot_kind TEXT NOT NULL DEFAULT 'weekday' CHECK (ot_kind IN ('weekday','weekend','holiday')),
+incomplete BOOLEAN NOT NULL DEFAULT FALSE,
+status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved')),
+approved_by UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+approved_at TIMESTAMPTZ NULL,
+computed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+UNIQUE (employee_id, work_date)
+```
 
 - [ ] **Step 4: Apply + verify**
 

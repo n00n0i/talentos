@@ -38,3 +38,6 @@ docker-compose.override.yml
 
 # TLS certificates (generate locally, never commit private keys)
 certs/
+
+# Local git worktrees
+.worktrees/

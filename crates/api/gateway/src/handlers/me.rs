@@ -3,7 +3,7 @@
 //! ownership check.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{connect_info::ConnectInfo, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -92,6 +92,7 @@ pub async fn payslips(State(state): State<AppState>, Authed(ctx): Authed) -> Res
 /// POST /api/v1/me/payslips/:id/acknowledge — idempotent receipt confirmation.
 pub async fn acknowledge(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
     Authed(ctx): Authed,
     Path(id): Path<Uuid>,
 ) -> Response {
@@ -103,7 +104,7 @@ pub async fn acknowledge(
         Err(e) => return internal_err(&e.to_string()),
     };
 
-    let owned: Option<Uuid> = sqlx::query_scalar(
+    let owned: Option<Uuid> = match sqlx::query_scalar(
         r#"SELECT p.id FROM payslips p
              JOIN employees e ON e.id = p.employee_id
             WHERE p.id = $1 AND p.tenant_id = $2 AND e.user_id = $3"#,
@@ -113,7 +114,13 @@ pub async fn acknowledge(
     .bind(ctx.user_id.0)
     .fetch_optional(&mut *tx)
     .await
-    .unwrap_or(None);
+    {
+        Ok(found) => found,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    };
 
     if owned.is_none() {
         let _ = tx.rollback().await;
@@ -121,12 +128,13 @@ pub async fn acknowledge(
     }
 
     if let Err(e) = sqlx::query(
-        "INSERT INTO payslip_acknowledgements (payslip_id, tenant_id, user_id)
-         VALUES ($1, $2, $3) ON CONFLICT (payslip_id) DO NOTHING",
+        "INSERT INTO payslip_acknowledgements (payslip_id, tenant_id, user_id, ip_address)
+         VALUES ($1, $2, $3, $4) ON CONFLICT (payslip_id) DO NOTHING",
     )
     .bind(id)
     .bind(ctx.tenant_id.0)
     .bind(ctx.user_id.0)
+    .bind(sqlx::types::ipnetwork::IpNetwork::from(addr.ip()))
     .execute(&mut *tx)
     .await
     {
@@ -134,14 +142,20 @@ pub async fn acknowledge(
         return internal_err(&e.to_string());
     }
 
-    let acknowledged_at: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
+    let acknowledged_at: Option<chrono::DateTime<chrono::Utc>> = match sqlx::query_scalar(
         "SELECT acknowledged_at FROM payslip_acknowledgements WHERE payslip_id = $1 AND tenant_id = $2",
     )
     .bind(id)
     .bind(ctx.tenant_id.0)
     .fetch_optional(&mut *tx)
     .await
-    .unwrap_or(None);
+    {
+        Ok(ts) => ts,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    };
 
     let _ = tx.commit().await;
     match acknowledged_at {

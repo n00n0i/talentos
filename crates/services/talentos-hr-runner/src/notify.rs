@@ -217,6 +217,17 @@ async fn insert_notification(
     Ok(())
 }
 
+/// Rendered body for a payslip-ready notification (kept pure for tests).
+pub fn payslip_ready_body(
+    period_start: chrono::NaiveDate,
+    period_end: chrono::NaiveDate,
+    app_url: &str,
+) -> String {
+    format!(
+        "สลิปเงินเดือนสำหรับงวด {period_start} ถึง {period_end} พร้อมให้ดาวน์โหลดแล้ว เปิดดูได้ที่ {app_url}/me/payslips"
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,10 +252,15 @@ mod tests {
     }
 
     #[test]
-    fn payslip_ready_rendering_contains_period_only() {
-        let body = "สลิปเงินเดือนสำหรับงวด 2026-10-01 ถึง 2026-10-31 พร้อมให้ดาวน์โหลดแล้ว";
+    fn payslip_ready_rendering_contains_period_and_link() {
+        let body = payslip_ready_body(
+            NaiveDate::from_ymd_opt(2026, 10, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 10, 31).unwrap(),
+            "https://hr.example.com",
+        );
         assert!(body.contains("2026-10-01"));
         assert!(body.contains("2026-10-31"));
+        assert!(body.contains("https://hr.example.com/me/payslips"));
         assert!(!body.contains("net_pay"));
         assert!(!body.contains("30,000"));
     }

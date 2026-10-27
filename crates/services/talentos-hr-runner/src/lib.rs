@@ -6,6 +6,7 @@
 pub mod attendance;
 pub mod leave;
 pub mod notify;
+pub mod ot;
 
 pub use attendance::{
     active_shift, assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError,
@@ -15,4 +16,10 @@ pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,
     list_balances, list_requests, pending_approvals, LeaveBalanceView, LeaveError, LeaveInput,
     LeaveRequestView, PendingLeave,
+};
+pub use ot::{
+    cancel_request as cancel_ot_request, create_request as create_ot_request,
+    decide_request as decide_ot_request, list_requests as list_ot_requests,
+    pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests, OtError,
+    OtInput, OtRequestView, PendingOt,
 };

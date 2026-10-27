@@ -382,3 +382,37 @@ test("HR saves a LINE id for the invited user", async ({ page }) => {
     page.getByRole("row", { name: new RegExp(invitedEmail) }).getByTestId("line-id"),
   ).toHaveValue("U0123456789abcdef0123456789abcdef");
 });
+
+test("employee requests OT, HR approves it", async ({ page }) => {
+  async function loginAs(email: string, password: string) {
+    await page.getByLabel("ออกจากระบบ").click();
+    await page.getByLabel("องค์กร").fill("e2e");
+    await page.getByLabel("อีเมล").fill(email);
+    await page.getByLabel("รหัสผ่าน").fill(password);
+    await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+    await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+  }
+
+  await login(page);
+  await loginAs(invitedEmail, "ResetPass123!");
+  await page.goto("/ot");
+  await page.getByTestId("ot-date").fill("2026-12-03");
+  await page.getByTestId("ot-hours").fill("2");
+  await page.getByTestId("ot-reason").fill("E2E");
+  await page.getByTestId("request-ot").click();
+  await expect(page.getByTestId("ot-row").filter({ hasText: "3 ธ.ค. 2569" })).toContainText("รออนุมัติ");
+
+  await loginAs("e2e@example.com", "E2ePassword123!");
+  await page.goto("/ot");
+  const inbox = page.getByTestId("ot-approval-row").filter({ hasText: "E2E001" }).filter({ hasText: "3 ธ.ค. 2569" });
+  await expect(inbox).toBeVisible();
+  await inbox.getByTestId("approve-ot").click();
+  await expect(inbox).toHaveCount(0);
+  await expect(
+    page.getByTestId("ot-history-row").filter({ hasText: "E2E001" }).filter({ hasText: "3 ธ.ค. 2569" }),
+  ).toContainText("อนุมัติแล้ว");
+
+  await loginAs(invitedEmail, "ResetPass123!");
+  await page.goto("/ot");
+  await expect(page.getByTestId("ot-row").filter({ hasText: "3 ธ.ค. 2569" })).toContainText("อนุมัติแล้ว");
+});

@@ -9,6 +9,7 @@ pub mod leave;
 pub mod mcp;
 pub mod me;
 pub mod memory;
+pub mod ot;
 pub mod payroll;
 pub mod plugins;
 pub mod settings;

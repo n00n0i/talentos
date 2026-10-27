@@ -7,7 +7,7 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, employees, graphql, health, leave, mcp, me, memory, payroll,
+    ai, attendance, audit, auth, employees, graphql, health, leave, mcp, me, memory, ot, payroll,
     plugins, settings, users,
 };
 use crate::middleware::auth::auth_middleware;
@@ -138,6 +138,10 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/leave/balances", get(leave::balances))
         .route("/api/v1/leave/requests/:id/decision", post(leave::decide))
         .route("/api/v1/leave/approvals", get(leave::approvals))
+        .route("/api/v1/me/ot", get(ot::me_ot).post(ot::create_me_ot))
+        .route("/api/v1/me/ot/:id/cancel", post(ot::me_cancel))
+        .route("/api/v1/ot/approvals", get(ot::approvals))
+        .route("/api/v1/ot/requests/:id/decision", post(ot::decide))
         .route("/api/v1/ai/tools", get(ai::list_tools))
         .route("/api/v1/graphql", post(graphql::execute))
         .route(

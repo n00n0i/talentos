@@ -59,6 +59,16 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
             ),
             (("leave_request", "view_team"), &["hr_admin", "manager"][..]),
             (
+                ("ot_request", "submit_self"),
+                &["hr_admin", "payroll_manager", "manager", "employee"][..],
+            ),
+            (
+                ("ot_request", "view_self"),
+                &["hr_admin", "payroll_manager", "manager", "employee"][..],
+            ),
+            (("ot_request", "approve_team"), &["hr_admin", "manager"][..]),
+            (("ot_request", "view_team"), &["hr_admin", "manager"][..]),
+            (
                 ("attendance", "manage"),
                 &["hr_admin", "payroll_manager"][..],
             ),
@@ -195,8 +205,10 @@ mod tests {
         assert!(perms.contains(&"payslip.view_self".to_string()));
         assert!(perms.contains(&"leave_request.submit_self".to_string()));
         assert!(perms.contains(&"leave_request.view_self".to_string()));
+        assert!(perms.contains(&"ot_request.submit_self".to_string()));
+        assert!(perms.contains(&"ot_request.view_self".to_string()));
         assert!(!perms.contains(&"employee.create".to_string()));
-        assert_eq!(perms.len(), 5); // update_self + payslip.view_self + leave_request.submit_self + leave_request.view_self + punch_self
+        assert_eq!(perms.len(), 7); // update_self + payslip.view_self + leave_request.submit_self + leave_request.view_self + ot_request.submit_self + ot_request.view_self + punch_self
     }
 
     #[test]

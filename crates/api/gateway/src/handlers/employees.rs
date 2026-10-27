@@ -344,7 +344,7 @@ pub async fn import(
             if let Some(entity_id) = resolved[idx] {
                 if existing
                     .iter()
-                    .any(|(e, c)| *e == entity_id && c == &row.employee_code)
+                    .any(|(e, c)| *e == entity_id && c == row.employee_code.trim())
                 {
                     results[idx].errors.push(format!(
                         "employee_code {} already exists",
@@ -863,7 +863,9 @@ fn validate_import_rows(rows: &[ImportEmployeeRow]) -> Vec<ImportRowResult> {
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for row in rows {
         if !row.employee_code.trim().is_empty() {
-            *counts.entry(row.employee_code.clone()).or_insert(0) += 1;
+            *counts
+                .entry(row.employee_code.trim().to_string())
+                .or_insert(0) += 1;
         }
     }
 
@@ -871,7 +873,7 @@ fn validate_import_rows(rows: &[ImportEmployeeRow]) -> Vec<ImportRowResult> {
         .enumerate()
         .map(|(idx, row)| {
             let mut errors = validate_import_row(row);
-            if counts.get(&row.employee_code).copied().unwrap_or(0) > 1 {
+            if counts.get(row.employee_code.trim()).copied().unwrap_or(0) > 1 {
                 errors.push(format!(
                     "employee_code {} is duplicated in file",
                     row.employee_code
@@ -981,6 +983,17 @@ mod tests {
         assert_eq!(results[0].status, "invalid");
         assert_eq!(results[1].status, "invalid");
         assert!(results[1].errors.iter().any(|e| e.contains("duplicated")));
+    }
+
+    #[test]
+    fn import_treats_whitespace_variants_as_duplicates() {
+        let rows = vec![
+            row("E001", Decimal::ONE, None),
+            row(" E001 ", Decimal::ONE, None),
+        ];
+        let results = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert_eq!(results[1].status, "invalid");
     }
 
     #[test]

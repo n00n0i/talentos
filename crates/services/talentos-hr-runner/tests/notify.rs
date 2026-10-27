@@ -112,6 +112,19 @@ async fn payslip_ready_enqueues_one_row_per_active_linked_user() {
     assert_eq!(rows.len(), 1, "only the active linked user is notified");
     let channel: String = rows[0].get("channel");
     assert_eq!(channel, "email");
+    let mut tx = raw.begin().await.expect("begin");
+    set_tenant(&mut tx, tenant_id).await;
+    let expected_recipient: String = sqlx::query_scalar("SELECT email FROM users WHERE id = $1")
+        .bind(active_user)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("active user email");
+    let _ = tx.rollback().await;
+    let recipient: String = rows[0].get("recipient");
+    assert_eq!(
+        recipient, expected_recipient,
+        "recipient must be the linked user"
+    );
     let body: String = rows[0].get("body");
     assert!(
         body.contains("2026-10-01"),

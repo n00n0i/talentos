@@ -799,6 +799,14 @@ pub async fn reset_2fa(
     if let Err(forbidden) = require(&ctx, "user_management", "reset_2fa") {
         return forbidden;
     }
+    // Recovery is for a locked-out colleague, not a way around your own code.
+    if user_id == ctx.user_id.0 {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_request",
+            "use /auth/2fa/disable with your current code to turn off your own 2FA",
+        );
+    }
 
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
@@ -826,7 +834,7 @@ pub async fn reset_2fa(
         }
     }
 
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         r#"INSERT INTO audit_log
              (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
            VALUES ($1, 'user', $2, 'user.2fa_reset', 'user', $3, '{}'::jsonb)"#,
@@ -835,18 +843,29 @@ pub async fn reset_2fa(
     .bind(ctx.user_id.0.to_string())
     .bind(user_id.to_string())
     .execute(&mut *tx)
-    .await;
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
+
+    // Same transaction: reset is only complete if the old sessions die with it.
+    if let Err(e) = sqlx::query(
+        "UPDATE refresh_tokens SET revoked_at = now() \
+         WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .bind(ctx.tenant_id.0)
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
 
     if let Err(e) = tx.commit().await {
         return internal_err(&e.to_string());
     }
-
-    let _ = sqlx::query(
-        "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
-    )
-    .bind(user_id)
-    .execute(&state.auth_pool)
-    .await;
 
     (StatusCode::OK, Json(json!({ "totp_enabled": false }))).into_response()
 }

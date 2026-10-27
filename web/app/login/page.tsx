@@ -56,7 +56,17 @@ export default function LoginPage() {
         <form onSubmit={submit}>
           <div className="field">
             <label htmlFor="tenant">องค์กร</label>
-            <input id="tenant" value={tenant} onChange={(e) => setTenant(e.target.value)} required />
+            <input
+              id="tenant"
+              value={tenant}
+              onChange={(e) => {
+                setTenant(e.target.value);
+                setErrorCode("");
+                setTotp("");
+                setError("");
+              }}
+              required
+            />
           </div>
           <div className="field">
             <label htmlFor="email">อีเมล</label>
@@ -65,7 +75,12 @@ export default function LoginPage() {
               type="email"
               autoComplete="username"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setErrorCode("");
+                setTotp("");
+                setError("");
+              }}
               required
             />
           </div>

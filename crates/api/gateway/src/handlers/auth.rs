@@ -475,7 +475,7 @@ pub async fn setup_2fa(State(state): State<AppState>, Authed(ctx): Authed) -> Re
     };
 
     let row = match sqlx::query!(
-        "SELECT email, totp_enabled FROM users WHERE id = $1 AND tenant_id = $2 AND is_active",
+        "SELECT email, totp_enabled FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
         ctx.user_id.0,
         ctx.tenant_id.0
     )
@@ -524,14 +524,18 @@ pub async fn setup_2fa(State(state): State<AppState>, Authed(ctx): Authed) -> Re
         return internal_err_to_response(e);
     }
 
-    audit_2fa(
-        &state,
+    if let Err(e) = audit_2fa_tx(
+        &mut tx,
         ctx.tenant_id,
         ctx.user_id,
         "auth.2fa_setup",
         ctx.user_id,
     )
-    .await;
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
 
     if let Err(e) = tx.commit().await {
         return internal_err_to_response(e);
@@ -556,6 +560,16 @@ pub async fn enable_2fa(
     if body.code.len() != 6 || !body.code.chars().all(|c| c.is_ascii_digit()) {
         return bad_request("code must be 6 digits");
     }
+    if let Err(retry_after) = ratelimit::check(
+        &state.redis,
+        &format!("rl:2fa:{}", ctx.user_id.0),
+        10,
+        Duration::from_secs(300),
+    )
+    .await
+    {
+        return too_many_2fa_attempts(retry_after);
+    }
 
     let cipher = match pii_cipher(&state) {
         Ok(c) => c,
@@ -568,7 +582,7 @@ pub async fn enable_2fa(
     };
 
     let row = match sqlx::query!(
-        "SELECT totp_secret FROM users WHERE id = $1 AND tenant_id = $2 AND is_active",
+        "SELECT totp_secret FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
         ctx.user_id.0,
         ctx.tenant_id.0
     )
@@ -620,14 +634,18 @@ pub async fn enable_2fa(
         return internal_err_to_response(e);
     }
 
-    audit_2fa(
-        &state,
+    if let Err(e) = audit_2fa_tx(
+        &mut tx,
         ctx.tenant_id,
         ctx.user_id,
         "auth.2fa_enable",
         ctx.user_id,
     )
-    .await;
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
 
     if let Err(e) = tx.commit().await {
         return internal_err_to_response(e);
@@ -645,6 +663,16 @@ pub async fn disable_2fa(
     if body.code.len() != 6 || !body.code.chars().all(|c| c.is_ascii_digit()) {
         return bad_request("code must be 6 digits");
     }
+    if let Err(retry_after) = ratelimit::check(
+        &state.redis,
+        &format!("rl:2fa:{}", ctx.user_id.0),
+        10,
+        Duration::from_secs(300),
+    )
+    .await
+    {
+        return too_many_2fa_attempts(retry_after);
+    }
 
     let cipher = match pii_cipher(&state) {
         Ok(c) => c,
@@ -657,7 +685,7 @@ pub async fn disable_2fa(
     };
 
     let row = match sqlx::query!(
-        "SELECT totp_secret FROM users WHERE id = $1 AND tenant_id = $2 AND is_active",
+        "SELECT totp_secret FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
         ctx.user_id.0,
         ctx.tenant_id.0
     )
@@ -709,20 +737,36 @@ pub async fn disable_2fa(
         return internal_err_to_response(e);
     }
 
-    audit_2fa(
-        &state,
+    if let Err(e) = audit_2fa_tx(
+        &mut tx,
         ctx.tenant_id,
         ctx.user_id,
         "auth.2fa_disable",
         ctx.user_id,
     )
-    .await;
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
+    // Same transaction: a disable that cannot revoke sessions is not a disable.
+    if let Err(e) = sqlx::query(
+        "UPDATE refresh_tokens SET revoked_at = now() \
+         WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+    )
+    .bind(ctx.user_id.0)
+    .bind(ctx.tenant_id.0)
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
 
     if let Err(e) = tx.commit().await {
         return internal_err_to_response(e);
     }
-
-    revoke_user_refresh_tokens(&state, ctx.user_id.0).await;
 
     (StatusCode::OK, Json(json!({ "totp_enabled": false }))).into_response()
 }
@@ -741,14 +785,14 @@ fn now_unix() -> u64 {
         .unwrap_or(0)
 }
 
-async fn audit_2fa(
-    state: &AppState,
+async fn audit_2fa_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     tenant_id: TenantId,
     actor_id: UserId,
     action: &str,
     target_id: UserId,
-) {
-    let _ = sqlx::query!(
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
         r#"INSERT INTO audit_log
              (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
            VALUES ($1, 'user', $2, $3, 'user', $4, '{}'::jsonb)"#,
@@ -757,19 +801,9 @@ async fn audit_2fa(
         action,
         target_id.0.to_string()
     )
-    .execute(&state.auth_pool)
-    .await
-    .map_err(|e| tracing::warn!(error = %e, action, "failed to write 2fa audit"));
-}
-
-async fn revoke_user_refresh_tokens(state: &AppState, user_id: uuid::Uuid) {
-    let _ = sqlx::query(
-        "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
-    )
-    .bind(user_id)
-    .execute(&state.auth_pool)
-    .await
-    .map_err(|e| tracing::warn!(error = %e, %user_id, "failed to revoke refresh tokens"));
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 fn bad_request(message: &str) -> Response {
@@ -781,6 +815,21 @@ fn bad_request(message: &str) -> Response {
             details: vec![],
             request_id: uuid::Uuid::new_v4().to_string(),
             retry_after_seconds: None,
+        }),
+    )
+        .into_response()
+}
+
+fn too_many_2fa_attempts(retry_after: u64) -> Response {
+    (
+        StatusCode::TOO_MANY_REQUESTS,
+        [(axum::http::header::RETRY_AFTER, retry_after.to_string())],
+        Json(ErrorResponse {
+            error: "rate_limited".into(),
+            message: "Too many 2FA attempts. Try again later.".into(),
+            details: vec![],
+            request_id: uuid::Uuid::new_v4().to_string(),
+            retry_after_seconds: Some(retry_after),
         }),
     )
         .into_response()

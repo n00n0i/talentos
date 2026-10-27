@@ -138,6 +138,8 @@ jobs:
           GATEWAY_PORT: '18080'
           PAYSLIP_STORE_DIR: /tmp/payslips
           RUST_LOG: warn
+          # Test-only key so the 2FA enrollment E2E can encrypt the TOTP secret.
+          PII_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         run: nohup ./target/debug/talentos-gateway > /tmp/gateway.log 2>&1 &
       - uses: actions/setup-node@v4
         with:

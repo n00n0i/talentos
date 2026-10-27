@@ -177,9 +177,7 @@ fn map_ot_error(e: talentos_hr_runner::OtError) -> Response {
         talentos_hr_runner::OtError::DuplicateDate => {
             conflict("a request already exists for this work date")
         }
-        talentos_hr_runner::OtError::InvalidMinutes | talentos_hr_runner::OtError::InvalidDate => {
-            unprocessable(&e.to_string())
-        }
+        talentos_hr_runner::OtError::InvalidMinutes => unprocessable(&e.to_string()),
         talentos_hr_runner::OtError::EmployeeNotFound => (
             StatusCode::FORBIDDEN,
             Json(envelope(

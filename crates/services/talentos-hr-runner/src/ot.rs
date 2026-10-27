@@ -22,8 +22,6 @@ pub enum OtError {
     DuplicateDate,
     #[error("minutes must be between 1 and 720")]
     InvalidMinutes,
-    #[error("work date is invalid")]
-    InvalidDate,
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -306,5 +304,5 @@ pub async fn employee_of_user(
         .fetch_optional(&mut *tx)
         .await?;
     tx.commit().await?;
-    Ok(row.map(|r| r.get("id")))
+    row.map(|r| r.try_get("id")).transpose().map_err(Into::into)
 }

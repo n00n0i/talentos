@@ -926,7 +926,7 @@ pub async fn set_line_id(
         }
     }
 
-    let _ = sqlx::query(
+    if let Err(e) = sqlx::query(
         r#"INSERT INTO audit_log
              (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
            VALUES ($1, 'user', $2, 'user.line_update', 'user', $3, $4)"#,
@@ -936,7 +936,11 @@ pub async fn set_line_id(
     .bind(user_id.to_string())
     .bind(json!({ "line_linked": line_id.is_some() }))
     .execute(&mut *tx)
-    .await;
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
     if let Err(e) = tx.commit().await {
         return internal_err(&e.to_string());
     }

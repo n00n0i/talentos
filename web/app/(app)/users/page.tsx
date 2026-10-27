@@ -125,6 +125,7 @@ export default function UsersPage() {
         body: JSON.stringify({ line_user_id: value.trim() || null }),
       });
       setNotice("บันทึก LINE ID แล้ว");
+      setLines((prev) => ({ ...prev, [user.id]: value.trim() }));
       await load();
     } catch (e) {
       handleApiError(e, setError);

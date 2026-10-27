@@ -8,10 +8,10 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **157 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 23 files apply cleanly |
+| Tests | `cargo test --workspace` | **163 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 24 files apply cleanly |
 
-Unit tests by crate: kernel 5, authz 27, attendance 8 (shift derivation,
+Unit tests by crate: kernel 5, authz 27, attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
 agent 7, hr-runner 7 (leave day maths, attendance break/grace validation), db 5
 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking), graphql 3
@@ -23,11 +23,11 @@ management, attendance import/punch/correction/approval).
 Integration tests: payroll-runner 10 (real PostgreSQL + Chromium: payslips,
 totals, state machine, template round-trip, PDF, stuck-run recovery,
 attendance+unpaid-leave feed, tenant policy overrides, 30-employee attendance
-scale — the scale fixture seeds `ot_kind` explicitly; classification itself is
-unit/E2E-tested), attendance 26 (approve/correct, import, punch, schema
+scale — 3 of the 30 employees are driven through punch/correct/approve; the
+rest seed approved records directly), attendance 30 (approve/correct, import, punch, schema
 isolation, self, shifts), memory 3 (recall, RLS isolation, layer filter, expiry
 purge, stats), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 157 passed, 1 ignored (`load.rs`).
+tenant scoping). Total: 163 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with

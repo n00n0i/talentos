@@ -15,7 +15,7 @@ for exactly what compiles, what is tested, and what is deferred.
 - **Deploy**: one-command compose stack (migrate + gateway + web + nginx), backup/restore scripts
 - **Payroll**: deterministic DAG (gross → OT → SSO → PND tax → PF → net → payslip) with a per-step audit trace
 - **Thai compliance**: PND 2567 progressive brackets, SSO 5% capped at ฿15,000, PF, LPA §118 severance, OT 1.5×/2×/3×
-- **Attendance**: mobile clock page with GPS geofence, shifts + assignments, device CSV import, HR corrections/approval, holiday/weekend/weekday OT classification
+- **Attendance**: mobile clock page with GPS geofence, shifts + assignments, device JSON import, HR corrections/approval, holiday/weekend/weekday OT classification
 - **Agent**: Observe → Plan → Act → Reflect loop over the HR/memory tools (runs in-process; Temporal pending)
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
 - **API**: `/health`, `/api/v1/auth/*`, `/api/v1/employees*`, `/api/v1/users*`,
@@ -239,48 +239,83 @@ requires HTTPS in production (use the TLS compose overlay or terminate TLS in
 front of nginx).
 
 ```
-POST /api/v1/me/attendance/punch   {kind: in|out, lat?, lng?, accuracy_m?}
-GET  /api/v1/me/attendance?month=  own derived days (clock + shift summary)
-GET  /api/v1/attendance            HR list derived days
+POST /api/v1/me/attendance/punch   {kind: "in"|"out", lat, lng, accuracy_m?}   lat/lng required
+GET  /api/v1/me/attendance?month=YYYY-MM   own derived days
+GET  /api/v1/attendance/days?from=&to=&employee_id=&status=   HR derived days
 ```
 
+Every punch is stored with the Bangkok `work_date` it belongs to, and the day is
+recomputed from the events of that date. An out punch closes the employee's open
+in from the previous 16 hours, so early arrivals, late leaves and overnight shifts
+stay on the day they started. Worked time deducts the shift break only when the
+stint is longer than 5 hours (LPA §27). Weekday OT is the time worked **after the
+shift ends** (early arrival is not OT); holiday/weekend time is all OT.
+
 Shifts define the expected window and break. Assign a shift to an employee from
-`/attendance/shifts` or via `POST /api/v1/shifts/:id/assign`.
+`/attendance/shifts` or via `POST /api/v1/shifts/:id/assign`. The entity geofence
+is set with `PUT /api/v1/settings/entities/:id/geofence {lat, lng, radius_m}`
+(radius 50–5000 m).
 
 ```
 GET/POST   /api/v1/shifts
-POST       /api/v1/shifts/:id/assign
+POST       /api/v1/shifts/:id/assign          {employee_id, effective_from}
+PUT        /api/v1/settings/entities/:id/geofence
 GET/POST   /api/v1/attendance/holidays
 DELETE     /api/v1/attendance/holidays/:id
 ```
 
-HR can correct a derived day (in/out times and OT minutes) on `/attendance`; the
-correction creates a pending revision that must be approved before it reaches
-payroll. `POST /api/v1/attendance/:id/approve` moves the day to `approved` and
-writes the matching `attendance_records` row.
-
-Device CSV import is available for bulk clock punches:
+HR works on `/attendance` (Bangkok month picker; filter by pending / incomplete /
+late / early leave):
 
 ```
-POST /api/v1/attendance/import      multipart/form-data with device CSV
+POST /api/v1/attendance/days/:id/correct   {in_at, out_at, note?}   RFC 3339 instants
+POST /api/v1/attendance/days/:id/approve
 ```
 
-The import maps employee code → `employee_id`, validates timestamps, and creates
-`attendance_events` rows that feed the same derived-day pipeline as manual clock
-punches.
+A correction replaces the day's events with one manual in/out pair and resets the
+day to `pending`. **Only approved days feed payroll.** Approval writes the matching
+`attendance_records` row; any change that re-opens an approved day (a new punch, a
+correction, or a device import) resets it to `pending`, clears the approver and
+**deletes that payroll row** until HR approves again. Incomplete days (an `in`
+without an `out`) cannot be approved (422); correct them first.
+
+Device rows are imported as JSON (no CSV/multipart upload):
+
+```
+POST /api/v1/attendance/import   {"rows": [{"employee_code": "E001", "date": "2026-10-27", "in": "09:00", "out": "18:00"}]}
+```
+
+Times are Bangkok `HH:MM`. For an overnight shift an `out` at or before `in` lands
+on the next calendar day while the row's `date` stays the work date. Each row is
+validated on its own; the response reports `imported`, `skipped` and per-row
+`errors`. Days that already have mobile punches are skipped (mobile is
+authoritative); re-importing replaces earlier manual/import events.
+
+Legacy raw records (`GET/POST /api/v1/attendance`, `DELETE /api/v1/attendance/:id`)
+remain only for migration/backfill of historical hours; the UI no longer exposes
+them and derived approval is the supported path into payroll.
+
+### Location data retention
+
+Each mobile punch stores GPS-derived `distance_m` and `accuracy_m` (not the raw
+coordinates). Attendance events are kept 24 months by default and then purged by
+an operator script or cron job (for example
+`DELETE FROM attendance_events WHERE occurred_at < now() - interval '24 months'`
+run with the owner role). There is no automatic purge job yet.
 
 ### Attendance → payroll
 
-Payroll reads approved `attendance_records` OT hours by class inside the period,
+Payroll reads `attendance_records` OT hours by class inside the period (rows exist only for approved days),
 plus approved `unpaid` leave. Unpaid leave deducts `base_salary / 30` per day; OT
 is priced on `base_salary / 30 / 8`, unaffected by that deduction. SSO follows the
 explicit `sso_enrolled` flag, independent of provident fund.
 
 The OT class is automatic: a date in the tenant holiday calendar is `holiday`
 (3x), weekends are `weekend` (2x), everything else `weekday` (1.5x). HR can still
-override the class on a record. The 30-employee acceptance fixture in
-`talentos-payroll-runner` seeds approved records directly to exercise the payroll
-boundary at scale; punching and classification are covered by unit and E2E tests.
+override the class on a legacy record. The 30-employee acceptance fixture in
+`talentos-payroll-runner` drives three employees (weekday, weekend, holiday)
+through `punch_at` / `correct_day` / `approve_day` and seeds the other 27 approved
+records directly to exercise the payroll boundary at scale.
 
 ### Attendance v1 limits
 
@@ -293,7 +328,7 @@ boundary at scale; punching and classification are covered by unit and E2E tests
 - Holiday/weekend OT policy: all hours on a holiday or weekend are classified as
   OT (holiday 3x, weekend 2x). There is no separate "holiday pay" multiplier
   beyond the OT class.
-- Only approved days feed payroll; pending days are ignored.
+- Only approved days feed payroll; pending and incomplete days are ignored.
 
 ## Settings (admin UI)
 

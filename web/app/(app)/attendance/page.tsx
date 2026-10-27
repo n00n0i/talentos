@@ -6,24 +6,15 @@ import { gw, handleApiError } from "@/lib/api";
 
 type Employee = { id: string; employee_code: string; first_name_th: string; last_name_th: string };
 type Holiday = { id: string; holiday_date: string; name_th: string };
-type Record = {
-  id: string;
-  employee_id: string;
-  employee_code: string;
-  work_date: string;
-  hours_worked: string;
-  ot_hours: string;
-  ot_kind: string;
-  note: string | null;
-};
-
 type Day = {
   id: string;
   employee_id: string;
   work_date: string;
   worked_minutes: number;
   late_minutes: number;
+  early_leave_minutes: number;
   ot_minutes: number;
+  ot_kind: string;
   incomplete: boolean;
   status: string;
 };
@@ -35,24 +26,31 @@ const STATUS: { [k: string]: { label: string; tone: string } } = {
 
 const hm = (min: number) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}`;
 
-const KINDS = [
-  { value: "", label: "อัตโนมัติ (ตามวัน/ปฏิทิน)" },
-  { value: "weekday", label: "วันทำงาน (1.5x)" },
-  { value: "weekend", label: "วันหยุด (2x)" },
-  { value: "holiday", label: "วันหยุดนักขัตฤกษ์ (3x)" },
+const OT_KIND: { [k: string]: string } = {
+  weekday: "วันทำงาน (1.5x)",
+  weekend: "วันหยุด (2x)",
+  holiday: "วันหยุดนักขัตฤกษ์ (3x)",
+};
+
+const FILTERS = [
+  { value: "all", label: "ทั้งหมด" },
+  { value: "pending", label: "รออนุมัติ" },
+  { value: "incomplete", label: "ไม่ครบ" },
+  { value: "late", label: "มาสาย" },
+  { value: "early", label: "ออกก่อน" },
 ];
 
-function monthRange() {
-  const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { from: iso(first), to: iso(last) };
+const bangkokMonth = () =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date()).slice(0, 7);
+
+function monthRange(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
 }
 
 export default function AttendancePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [records, setRecords] = useState<Record[] | null>(null);
   const [days, setDays] = useState<Day[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [inAt, setInAt] = useState("");
@@ -60,62 +58,39 @@ export default function AttendancePage() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [holidayDate, setHolidayDate] = useState("");
   const [holidayName, setHolidayName] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
-  const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
-  const [otHours, setOtHours] = useState("0");
-  const [otKind, setOtKind] = useState("");
-  const [note, setNote] = useState("");
-  const [range] = useState(monthRange);
+  const [month, setMonth] = useState(bangkokMonth);
+  const [filter, setFilter] = useState("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
-    const year = range.from.slice(0, 4);
-    const [emps, recs, hols, derived] = await Promise.all([
+    const range = monthRange(month);
+    const [emps, hols, derived] = await Promise.all([
       gw<{ employees: Employee[] }>("api/v1/employees?status=active&limit=500"),
-      gw<{ records: Record[] }>(`api/v1/attendance?from=${range.from}&to=${range.to}`),
-      gw<{ holidays: Holiday[] }>(`api/v1/attendance/holidays?year=${year}`),
+      gw<{ holidays: Holiday[] }>(`api/v1/attendance/holidays?year=${month.slice(0, 4)}`),
       gw<{ days: Day[] }>(`api/v1/attendance/days?from=${range.from}&to=${range.to}`),
     ]);
     setDays(derived.days);
     setEmployees(emps.employees);
-    setRecords(recs.records);
     setHolidays(hols.holidays);
-    if (!employeeId && emps.employees[0]) setEmployeeId(emps.employees[0].id);
-  }, [range.from, range.to, employeeId]);
+  }, [month]);
 
   useEffect(() => {
     load().catch((e) => handleApiError(e, setError));
   }, [load]);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError("");
-    setNotice("");
-    try {
-      await gw("api/v1/attendance", {
-        method: "POST",
-        body: JSON.stringify({
-          employee_id: employeeId,
-          work_date: workDate,
-          hours_worked: 8,
-          ot_hours: Number(otHours || "0"),
-          ot_kind: otKind || null,
-          note: note.trim() || null,
-        }),
-      });
-      setNotice("บันทึกเวลาแล้ว");
-      setOtHours("0");
-      setNote("");
-      await load();
-    } catch (e) {
-      handleApiError(e, setError);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const visible = (days ?? []).filter((d) =>
+    filter === "pending"
+      ? d.status === "pending"
+      : filter === "incomplete"
+        ? d.incomplete
+        : filter === "late"
+          ? d.late_minutes > 0
+          : filter === "early"
+            ? d.early_leave_minutes > 0
+            : true,
+  );
 
   function startCorrection(day: Day) {
     setEditing(day.id);
@@ -178,30 +153,28 @@ export default function AttendancePage() {
     }
   }
 
-  async function remove(record: Record) {
-    if (!confirm(`ลบรายการวันที่ ${record.work_date} ของ ${record.employee_code}?`)) return;
-    setBusy(true);
-    try {
-      await gw(`api/v1/attendance/${record.id}`, { method: "DELETE" });
-      await load();
-    } catch (e) {
-      handleApiError(e, setError);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <>
       <div className="page-head">
         <div>
           <h1>เวลาและ OT</h1>
-          <p className="page-sub">บันทึก OT เพื่อให้รอบเงินเดือนคำนวณอัตราตามกฎหมาย</p>
+          <p className="page-sub">อนุมัติวันทำงานที่คำนวณจากการลงเวลา — เฉพาะวันที่อนุมัติแล้วเท่านั้นที่เข้ารอบเงินเดือน</p>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <span className="hint">
-            {range.from} – {range.to}
-          </span>
+          <input
+            data-testid="month-picker"
+            type="month"
+            aria-label="เดือน"
+            value={month}
+            onChange={(e) => e.target.value && setMonth(e.target.value)}
+          />
+          <select data-testid="day-filter" aria-label="ตัวกรอง" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            {FILTERS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
           <Link className="btn btn-sm" href="/attendance/shifts">
             จัดการกะ
           </Link>
@@ -213,13 +186,13 @@ export default function AttendancePage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>วันทำงาน (derived)</h2>
-          <span className="hint">คำนวณจากการลงเวลาและกะ</span>
+          <h2>วันทำงาน (คำนวณจากการลงเวลา)</h2>
+          <span className="hint">เวลาไทย (UTC+7)</span>
         </div>
         {days === null ? (
           <div className="spinner">กำลังโหลด…</div>
-        ) : days.length === 0 ? (
-          <div className="empty">ยังไม่มีวันทำงานในเดือนนี้</div>
+        ) : visible.length === 0 ? (
+          <div className="empty">ไม่มีวันทำงานตามตัวกรองในเดือนนี้</div>
         ) : (
           <div style={{ overflowX: "auto" }}>
             <table className="table">
@@ -229,13 +202,15 @@ export default function AttendancePage() {
                   <th>พนักงาน</th>
                   <th className="num">ทำงาน</th>
                   <th className="num">สาย (นาที)</th>
+                  <th className="num">ออกก่อน (นาที)</th>
                   <th className="num">OT</th>
+                  <th>ประเภท OT</th>
                   <th>สถานะ</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {days.map((d) => {
+                {visible.map((d) => {
                   const st = STATUS[d.status] ?? { label: d.status, tone: "" };
                   return (
                     <tr key={d.id} data-testid="day-row">
@@ -243,7 +218,9 @@ export default function AttendancePage() {
                       <td>{employees.find((e) => e.id === d.employee_id)?.employee_code ?? "—"}</td>
                       <td className="num">{hm(d.worked_minutes)}</td>
                       <td className="num">{d.late_minutes}</td>
+                      <td className="num">{d.early_leave_minutes}</td>
                       <td className="num">{hm(d.ot_minutes)}</td>
+                      <td>{d.ot_minutes > 0 ? (OT_KIND[d.ot_kind] ?? d.ot_kind) : "—"}</td>
                       <td>
                         <span className={`badge ${st.tone}`}>{st.label}</span>
                         {d.incomplete && <span className="hint"> · ไม่ครบ</span>}
@@ -277,7 +254,8 @@ export default function AttendancePage() {
                               className="btn btn-sm btn-primary"
                               data-testid="approve-day"
                               onClick={() => dayAction("อนุมัติวันทำงานแล้ว", `api/v1/attendance/days/${d.id}/approve`)}
-                              disabled={busy}
+                              disabled={busy || d.incomplete}
+                              title={d.incomplete ? "ต้องแก้ไขเวลาให้ครบก่อนอนุมัติ" : undefined}
                             >
                               อนุมัติ
                             </button>
@@ -292,63 +270,6 @@ export default function AttendancePage() {
           </div>
         )}
       </div>
-
-      <form className="card card-pad" onSubmit={submit}>
-        <h2 style={{ marginBottom: 14 }}>บันทึกเวลา</h2>
-        <div className="form-row">
-          <div className="field">
-            <label>พนักงาน</label>
-            <select data-testid="attendance-employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.employee_code} · {e.first_name_th} {e.last_name_th}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>วันที่</label>
-            <input data-testid="attendance-date" type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} required />
-          </div>
-          <div className="field">
-            <label>ชั่วโมง OT</label>
-            <input
-              type="number"
-              min="0"
-              max="12"
-              step="0.5"
-              data-testid="attendance-ot"
-              value={otHours}
-              onChange={(e) => setOtHours(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="form-row" style={{ marginTop: 12, gridTemplateColumns: "1fr 1fr auto" }}>
-          <div className="field">
-            <label>ประเภท OT</label>
-            <select
-              data-testid="attendance-ot-kind"
-              value={otKind}
-              onChange={(e) => setOtKind(e.target.value)}
-            >
-              {KINDS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>หมายเหตุ</label>
-            <input value={note} onChange={(e) => setNote(e.target.value)} />
-          </div>
-          <div style={{ display: "flex", alignItems: "end" }}>
-            <button className="btn btn-primary" data-testid="save-attendance" type="submit" disabled={busy || !employeeId}>
-              {busy ? "กำลังบันทึก…" : "บันทึก"}
-            </button>
-          </div>
-        </div>
-      </form>
 
       <div className="grid-2">
         <form className="card card-pad" onSubmit={addHoliday} style={{ display: "grid", gap: 12 }}>
@@ -425,45 +346,6 @@ export default function AttendancePage() {
             </table>
           )}
         </div>
-      </div>
-
-      <div className="card">
-        {records === null ? (
-          <div className="spinner">กำลังโหลด…</div>
-        ) : records.length === 0 ? (
-          <div className="empty">ยังไม่มีรายการในเดือนนี้</div>
-        ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>วันที่</th>
-                <th>พนักงาน</th>
-                <th className="num">ชั่วโมงทำงาน</th>
-                <th className="num">OT</th>
-                <th>ประเภท</th>
-                <th>หมายเหตุ</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {records.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.work_date}</td>
-                  <td>{r.employee_code}</td>
-                  <td className="num">{r.hours_worked}</td>
-                  <td className="num">{r.ot_hours}</td>
-                  <td>{KINDS.find((k) => k.value === r.ot_kind)?.label ?? r.ot_kind}</td>
-                  <td>{r.note ?? "—"}</td>
-                  <td className="num">
-                    <button className="btn btn-sm btn-danger" onClick={() => remove(r)} disabled={busy}>
-                      ลบ
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
       </div>
     </>
   );

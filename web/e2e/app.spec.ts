@@ -63,12 +63,30 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await expect(page.getByText("เพิ่มพนักงานแล้ว")).toBeVisible();
   await expect(page.getByRole("cell", { name: "E2E001" })).toBeVisible();
 
+  // Derived path: shift + device import (09:00-22:00 = 4h after shift end), then HR approval.
+  const shift = await page.request.post("/api/gw/api/v1/shifts", {
+    data: { name: "E2E OT", start: "09:00", end: "18:00", break_minutes: 60, grace_minutes: 0 },
+  });
+  expect(shift.ok()).toBeTruthy();
+  const { id: shiftId } = await shift.json();
+  const found = await page.request.get("/api/gw/api/v1/employees?q=E2E001");
+  const employeeId = (await found.json()).employees[0].id;
+  const assign = await page.request.post(`/api/gw/api/v1/shifts/${shiftId}/assign`, {
+    data: { employee_id: employeeId, effective_from: "2026-01-01" },
+  });
+  expect(assign.ok()).toBeTruthy();
+  const imported = await page.request.post("/api/gw/api/v1/attendance/import", {
+    data: { rows: [{ employee_code: "E2E001", date: "2026-10-05", in: "09:00", out: "22:00" }] },
+  });
+  expect((await imported.json()).imported).toBe(1);
+
   await page.goto("/attendance");
-  await page.getByTestId("attendance-date").fill("2026-10-05");
-  await page.getByTestId("attendance-ot").fill("4");
-  await page.getByTestId("save-attendance").click();
-  await expect(page.getByText("บันทึกเวลาแล้ว")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "2026-10-05" })).toBeVisible();
+  await page.getByTestId("month-picker").fill("2026-10");
+  const otRow = page.getByTestId("day-row").filter({ hasText: "2026-10-05" });
+  await expect(otRow).toContainText("4:00");
+  await otRow.getByTestId("approve-day").click();
+  await expect(page.getByText("อนุมัติวันทำงานแล้ว")).toBeVisible();
+  await expect(otRow).toContainText("อนุมัติแล้ว");
 
   await page.goto("/payroll");
   await page.getByTestId("create-run").click();
@@ -95,11 +113,21 @@ test("classifies OT on a company holiday", async ({ page }) => {
   await page.getByTestId("add-holiday").click();
   await expect(page.getByText("ทดสอบวันหยุด")).toBeVisible();
 
-  await page.getByTestId("attendance-date").fill("2026-10-07");
-  await page.getByTestId("attendance-ot").fill("2");
-  await page.getByTestId("save-attendance").click();
-  await expect(page.getByText("บันทึกเวลาแล้ว")).toBeVisible();
-  await expect(page.getByRole("cell", { name: "วันหยุดนักขัตฤกษ์ (3x)" })).toBeVisible();
+  const imported = await page.request.post("/api/gw/api/v1/attendance/import", {
+    data: { rows: [{ employee_code: "E2E001", date: "2026-10-07", in: "09:00", out: "13:00" }] },
+  });
+  expect((await imported.json()).imported).toBe(1);
+
+  await page.reload();
+  await page.getByTestId("month-picker").fill("2026-10");
+  const row = page.getByTestId("day-row").filter({ hasText: "2026-10-07" });
+  await expect(row.getByRole("cell", { name: "วันหยุดนักขัตฤกษ์ (3x)" })).toBeVisible();
+  await expect(row).toContainText("4:00");
+
+  await page.getByTestId("day-filter").selectOption("incomplete");
+  await expect(row).toHaveCount(0);
+  await page.getByTestId("day-filter").selectOption("pending");
+  await expect(row).toBeVisible();
 });
 
 test("invites a user from the admin screen", async ({ page }) => {

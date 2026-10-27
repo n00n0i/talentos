@@ -401,12 +401,14 @@ UI states: permission denied, outside geofence (show distance), inside (show In/
 - Modify: `web/app/(app)/attendance/page.tsx` (tabs: days / calendar / shifts)
 - Modify: `web/e2e/app.spec.ts`
 
-**Interfaces:** consumes Task 3/5 endpoints.
+**Interfaces:** consumes Task 3/5 endpoints (`GET/POST /shifts`, `/shifts/:id/assign`, `GET /attendance/days`, `/days/:id/approve`, `/days/:id/correct`).
 
-- [ ] **Step 1: Failing E2E** — HR creates shift 09:00–18:00, assigns E2E001, sees the day row, corrects it, approves it, and sees the record in the attendance table.
+**Scope:** a shifts page with create/assign, plus a derived-days section on `/attendance` (not a full tab rewrite). Show employee codes by mapping the existing employee list. Correction inputs are **Bangkok wall time**; the UI submits `${value}:00+07:00` so the server receives the right UTC instant regardless of the browser timezone.
+
+- [ ] **Step 1: Failing E2E** — HR creates a shift (name `E2E UI`, 09:00–18:00, break 60), assigns E2E001 effective today, sees the pending day from the clock test, corrects it to 09:00–18:00 Bangkok, approves it, and sees status approved.
 - [ ] **Step 2: Run, expect failure.**
-- [ ] **Step 3: Implement shift form, assignment, day table with approve/correct.**
-- [ ] **Step 4: Run E2E + `npm run build`.**
+- [ ] **Step 3: Implement shifts page, `/attendance` link + derived-days table with approve/correct.**
+- [ ] **Step 4: Run E2E + `npm run build` + fmt/clippy.**
 - [ ] **Step 5: Commit.**
 
 ---

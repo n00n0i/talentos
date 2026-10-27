@@ -2,6 +2,8 @@ import { expect, Page, test } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
+let invitedEmail = "";
+
 async function login(page: Page) {
   await page.goto("/login");
   await page.getByLabel("องค์กร").fill("e2e");
@@ -77,6 +79,7 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await page.getByRole("cell", { name: /–/ }).first().click();
   await expect(page.getByText("41,000.00").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "PDF" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "CSV" }).first()).toBeVisible();
 });
 
 test("invites a user from the admin screen", async ({ page }) => {
@@ -84,10 +87,48 @@ test("invites a user from the admin screen", async ({ page }) => {
   await page.goto("/users");
   await expect(page.getByRole("heading", { name: "ผู้ใช้", exact: true })).toBeVisible();
 
-  const email = `invited-${Date.now()}@example.com`;
-  await page.getByLabel("อีเมล").fill(email);
+  invitedEmail = `invited-${Date.now()}@example.com`;
+  await page.getByLabel("อีเมล").fill(invitedEmail);
   await page.getByLabel("ชื่อ (ไทย)").fill("ผู้ถูกเชิญ");
   await page.getByRole("button", { name: "สร้างลิงก์เชิญ" }).click();
   await expect(page.getByText("ลิงก์เชิญ (ใช้ได้ครั้งเดียว")).toBeVisible();
-  await expect(page.getByText(`/invite/`).first()).toBeVisible();
+  const inviteLink = page.getByRole("link", { name: /\/invite\// });
+  await expect(inviteLink).toBeVisible();
+  const inviteHref = await inviteLink.getAttribute("href");
+  expect(inviteHref).toBeTruthy();
+
+  // Accept it so the user exists for the reset test.
+  await page.goto(inviteHref!);
+  const passwords = page.locator('input[type="password"]');
+  await passwords.nth(0).fill("InvitedPass123!");
+  await passwords.nth(1).fill("InvitedPass123!");
+  await page.getByRole("button", { name: "ตั้งรหัสผ่าน" }).click();
+  await expect(page.getByRole("heading", { name: "ตั้งรหัสผ่านแล้ว" })).toBeVisible();
+});
+
+test("resets the invited user's password with an HR link", async ({ page }) => {
+  expect(invitedEmail).not.toBe("");
+  await login(page);
+  await page.goto("/users");
+
+  const row = page.getByRole("row", { name: new RegExp(invitedEmail) });
+  await row.getByRole("button", { name: "รีเซ็ต" }).click();
+  const link = page.getByRole("link", { name: /\/reset\// });
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute("href");
+  expect(href).toBeTruthy();
+
+  await page.goto(href!);
+  const passwords = page.locator('input[type="password"]');
+  await passwords.nth(0).fill("ResetPass123!");
+  await passwords.nth(1).fill("ResetPass123!");
+  await page.getByRole("button", { name: "ตั้งรหัสผ่าน" }).click();
+  await expect(page.getByRole("heading", { name: "ตั้งรหัสผ่านใหม่แล้ว" })).toBeVisible();
+
+  await page.getByRole("button", { name: "ไปหน้าเข้าสู่ระบบ" }).click();
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill(invitedEmail);
+  await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByRole("link", { name: "ภาพรวม" })).toBeVisible();
 });

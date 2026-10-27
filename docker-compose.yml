@@ -127,6 +127,7 @@ services:
     image: talentos-gateway:latest
     build: .
     environment:
+      APP_ENV: ${APP_ENV:-production}
       DATABASE_URL: postgres://talentos_app:${APP_DB_PASSWORD:-app_dev_secret}@postgres:5432/talentos
       DATABASE_AUTH_URL: postgres://talentos_auth:${AUTH_DB_PASSWORD:-auth_dev_secret}@postgres:5432/talentos
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_secret}@redis:6379

@@ -229,6 +229,188 @@ pub async fn approve_payroll_run(
         .into_response()
 }
 
+/// GET /api/v1/payroll/runs/:id/export.csv — payroll register for accountants.
+pub async fn export_payroll_csv(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(run_id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "export_report") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
+    let run = sqlx::query(
+        "SELECT period_start, period_end FROM payroll_runs WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(run_id)
+    .bind(ctx.tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await;
+    use chrono::NaiveDate;
+    use sqlx::Row;
+    let (period_start, period_end): (NaiveDate, NaiveDate) = match run {
+        Ok(Some(row)) => (row.get("period_start"), row.get("period_end")),
+        Ok(None) => {
+            let _ = tx.rollback().await;
+            return not_found();
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(e);
+        }
+    };
+
+    let rows = sqlx::query(
+        r#"SELECT e.employee_code, e.first_name_th, e.last_name_th,
+                  p.gross_earnings, p.ot_amount, p.sso_employee, p.sso_employer,
+                  p.tax_withheld, p.pf_employee, p.net_pay
+             FROM payslips p
+             JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id
+            WHERE p.payroll_run_id = $1 AND p.tenant_id = $2
+            ORDER BY e.employee_code"#,
+    )
+    .bind(run_id)
+    .bind(ctx.tenant_id.0)
+    .fetch_all(&mut *tx)
+    .await;
+    let _ = tx.rollback().await;
+
+    let rows = match rows {
+        Ok(rows) => rows,
+        Err(e) => return internal_err(e),
+    };
+    let csv_rows: Vec<CsvRow> = rows
+        .iter()
+        .map(|row| CsvRow {
+            employee_code: row.get("employee_code"),
+            employee_name: format!(
+                "{} {}",
+                row.get::<String, _>("first_name_th"),
+                row.get::<String, _>("last_name_th")
+            ),
+            gross: row
+                .get::<rust_decimal::Decimal, _>("gross_earnings")
+                .to_string(),
+            ot: row.get::<rust_decimal::Decimal, _>("ot_amount").to_string(),
+            sso_employee: row
+                .get::<rust_decimal::Decimal, _>("sso_employee")
+                .to_string(),
+            sso_employer: row
+                .get::<rust_decimal::Decimal, _>("sso_employer")
+                .to_string(),
+            tax: row
+                .get::<rust_decimal::Decimal, _>("tax_withheld")
+                .to_string(),
+            pf: row
+                .get::<rust_decimal::Decimal, _>("pf_employee")
+                .to_string(),
+            net: row.get::<rust_decimal::Decimal, _>("net_pay").to_string(),
+        })
+        .collect();
+
+    let body = payroll_csv(&csv_rows);
+    let filename = format!("payroll-{}-{}.csv", period_start, period_end);
+    (
+        StatusCode::OK,
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "text/csv; charset=utf-8".to_string(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}\""),
+            ),
+        ],
+        body,
+    )
+        .into_response()
+}
+
+#[derive(Debug)]
+struct CsvRow {
+    employee_code: String,
+    employee_name: String,
+    gross: String,
+    ot: String,
+    sso_employee: String,
+    sso_employer: String,
+    tax: String,
+    pf: String,
+    net: String,
+}
+
+fn csv_field(value: &str) -> String {
+    // Spreadsheet formula injection guard.
+    let safe = if value.starts_with(['=', '+', '-', '@']) {
+        format!("'{value}")
+    } else {
+        value.to_string()
+    };
+    format!("\"{}\"", safe.replace('"', "\"\""))
+}
+
+fn payroll_csv(rows: &[CsvRow]) -> String {
+    let mut out = String::from(
+        "\u{feff}employee_code,employee_name,gross_earnings,ot_amount,sso_employee,sso_employer,tax_withheld,pf_employee,net_pay\r\n",
+    );
+    let (mut gross, mut ot, mut sso_ee, mut sso_er, mut tax, mut pf, mut net) = (
+        rust_decimal::Decimal::ZERO,
+        rust_decimal::Decimal::ZERO,
+        rust_decimal::Decimal::ZERO,
+        rust_decimal::Decimal::ZERO,
+        rust_decimal::Decimal::ZERO,
+        rust_decimal::Decimal::ZERO,
+        rust_decimal::Decimal::ZERO,
+    );
+    for row in rows {
+        out.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{}\r\n",
+            csv_field(&row.employee_code),
+            csv_field(&row.employee_name),
+            csv_field(&row.gross),
+            csv_field(&row.ot),
+            csv_field(&row.sso_employee),
+            csv_field(&row.sso_employer),
+            csv_field(&row.tax),
+            csv_field(&row.pf),
+            csv_field(&row.net),
+        ));
+        gross += row
+            .gross
+            .parse::<rust_decimal::Decimal>()
+            .unwrap_or_default();
+        ot += row.ot.parse::<rust_decimal::Decimal>().unwrap_or_default();
+        sso_ee += row
+            .sso_employee
+            .parse::<rust_decimal::Decimal>()
+            .unwrap_or_default();
+        sso_er += row
+            .sso_employer
+            .parse::<rust_decimal::Decimal>()
+            .unwrap_or_default();
+        tax += row.tax.parse::<rust_decimal::Decimal>().unwrap_or_default();
+        pf += row.pf.parse::<rust_decimal::Decimal>().unwrap_or_default();
+        net += row.net.parse::<rust_decimal::Decimal>().unwrap_or_default();
+    }
+    out.push_str(&format!(
+        "{},{},{},{},{},{},{},{},{}\r\n",
+        csv_field("TOTAL"),
+        csv_field(""),
+        csv_field(&gross.to_string()),
+        csv_field(&ot.to_string()),
+        csv_field(&sso_ee.to_string()),
+        csv_field(&sso_er.to_string()),
+        csv_field(&tax.to_string()),
+        csv_field(&pf.to_string()),
+        csv_field(&net.to_string()),
+    ));
+    out
+}
+
 /// GET /api/v1/payroll/runs/:id/payslips
 pub async fn list_payslips(
     State(state): State<AppState>,
@@ -550,4 +732,40 @@ fn internal_err(e: sqlx::Error) -> Response {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod csv_tests {
+    use super::*;
+
+    fn row(code: &str, name: &str, net: &str) -> CsvRow {
+        CsvRow {
+            employee_code: code.into(),
+            employee_name: name.into(),
+            gross: "41000.00".into(),
+            ot: "1000.00".into(),
+            sso_employee: "750.00".into(),
+            sso_employer: "750.00".into(),
+            tax: "1975.00".into(),
+            pf: "0.00".into(),
+            net: net.into(),
+        }
+    }
+
+    #[test]
+    fn csv_has_bom_header_rows_and_totals() {
+        let out = payroll_csv(&[row("E001", "สมชาย ทดสอบ", "38275.00")]);
+        assert!(out.starts_with('\u{feff}'));
+        assert!(out.contains("employee_code,employee_name"));
+        assert!(out.contains("\"E001\",\"สมชาย ทดสอบ\""));
+        assert!(out.contains("\"TOTAL\""));
+        assert!(out.contains("\"38275.00\""));
+        assert!(out.ends_with("\r\n"));
+    }
+
+    #[test]
+    fn csv_neutralizes_formula_injection() {
+        assert_eq!(csv_field("=HYPERLINK(\"x\")"), "\"'=HYPERLINK(\"\"x\"\")\"");
+        assert_eq!(csv_field("normal"), "\"normal\"");
+    }
 }

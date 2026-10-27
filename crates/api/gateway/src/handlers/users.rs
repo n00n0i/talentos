@@ -47,6 +47,12 @@ pub struct ChangePasswordBody {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct ResetPasswordBody {
+    pub token: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct AssignRoleBody {
     pub role: String,
     pub entity_id: Option<Uuid>,
@@ -450,6 +456,191 @@ pub async fn change_password(
     .await;
 
     StatusCode::NO_CONTENT.into_response()
+}
+
+/// POST /api/v1/users/:id/reset-password — HR-issued, single-use link (1 hour).
+pub async fn issue_password_reset(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(user_id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "user_management", "assign_role") {
+        return forbidden;
+    }
+
+    let mut token_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut token_bytes);
+    let token = hex::encode(token_bytes);
+    let token_hash = Sha256::digest(token.as_bytes()).to_vec();
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let email: Option<String> = sqlx::query_scalar(
+        "SELECT email FROM users WHERE id = $1 AND tenant_id = $2 AND is_active",
+    )
+    .bind(user_id)
+    .bind(ctx.tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await
+    .unwrap_or(None);
+    let Some(email) = email else {
+        let _ = tx.rollback().await;
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "user not found or inactive",
+        );
+    };
+
+    let expires_at = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+        r#"INSERT INTO password_resets (tenant_id, user_id, token_hash, expires_at, created_by)
+           VALUES ($1, $2, $3, now() + interval '1 hour', $4)
+           RETURNING expires_at"#,
+    )
+    .bind(ctx.tenant_id.0)
+    .bind(user_id)
+    .bind(&token_hash)
+    .bind(ctx.user_id.0)
+    .fetch_one(&mut *tx)
+    .await;
+
+    let expires_at = match expires_at {
+        Ok(t) => t,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    };
+
+    let _ = sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'user.password_reset_issued', 'user', $3, '{}'::jsonb)"#,
+    )
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0.to_string())
+    .bind(user_id.to_string())
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = tx.commit().await {
+        return internal_err(&e.to_string());
+    }
+
+    (
+        StatusCode::CREATED,
+        Json(json!({
+            "email": email,
+            "expires_at": expires_at.to_rfc3339(),
+            "reset_token": token,
+            "reset_path": format!("/reset/{token}"),
+        })),
+    )
+        .into_response()
+}
+
+/// POST /api/v1/auth/reset-password — public: the token is the credential.
+pub async fn accept_password_reset(
+    State(state): State<AppState>,
+    Json(body): Json<ResetPasswordBody>,
+) -> Response {
+    let token = body.token.trim();
+    if token.len() < 32 {
+        return bad_request("reset token is invalid");
+    }
+    if let Some(message) = password_problem(&body.password) {
+        return bad_request(&message);
+    }
+    let token_hash = Sha256::digest(token.as_bytes()).to_vec();
+
+    let row = sqlx::query(
+        "SELECT id, tenant_id, user_id, expires_at, used_at
+           FROM password_resets WHERE token_hash = $1",
+    )
+    .bind(&token_hash)
+    .fetch_optional(&state.auth_pool)
+    .await;
+
+    use sqlx::Row;
+    let row = match row {
+        Ok(Some(row)) => row,
+        Ok(None) => return bad_request("reset token is invalid or already used"),
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let used_at: Option<chrono::DateTime<chrono::Utc>> = row.get("used_at");
+    let expires_at: chrono::DateTime<chrono::Utc> = row.get("expires_at");
+    if used_at.is_some() || expires_at <= chrono::Utc::now() {
+        return bad_request("reset token is invalid or expired");
+    }
+    let reset_id: Uuid = row.get("id");
+    let tenant_id = talentos_kernel::TenantId(row.get("tenant_id"));
+    let user_id: Uuid = row.get("user_id");
+
+    let new_password = body.password.clone();
+    let hash =
+        match tokio::task::spawn_blocking(move || password::hash_password(&new_password)).await {
+            Ok(Ok(hash)) => hash,
+            _ => return internal_err("password hashing failed"),
+        };
+
+    let mut tx = match state.pool.begin_tenant(tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let claimed = sqlx::query(
+        "UPDATE password_resets SET used_at = now()
+          WHERE id = $1 AND used_at IS NULL AND expires_at > now()",
+    )
+    .bind(reset_id)
+    .execute(&mut *tx)
+    .await;
+    match claimed {
+        Ok(done) if done.rows_affected() == 1 => {}
+        Ok(_) => {
+            let _ = tx.rollback().await;
+            return conflict("reset token is invalid or already used");
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    }
+
+    if let Err(e) = sqlx::query(
+        "UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2 AND tenant_id = $3",
+    )
+    .bind(&hash)
+    .bind(user_id)
+    .bind(tenant_id.0)
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
+    let _ = sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'user.password_reset', 'user', $2, '{}'::jsonb)"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id.to_string())
+    .execute(&mut *tx)
+    .await;
+    if let Err(e) = tx.commit().await {
+        return internal_err(&e.to_string());
+    }
+
+    let _ = sqlx::query(
+        "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .execute(&state.auth_pool)
+    .await;
+
+    (StatusCode::OK, Json(json!({ "ok": true }))).into_response()
 }
 
 /// POST /api/v1/users/:id/roles — add/replace one role for an existing user.

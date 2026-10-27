@@ -238,6 +238,15 @@ function RunRow({
         <td className="num">฿{thb(run.totalGross)}</td>
         <td className="num">฿{thb(run.totalNet)}</td>
         <td className="num" onClick={(e) => e.stopPropagation()}>
+          <a
+            className="badge accent"
+            href={`/api/gw/api/v1/payroll/runs/${run.id}/export.csv`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ marginRight: 6 }}
+          >
+            CSV
+          </a>
           {run.status === "pending_approval" && (
             <button className="btn btn-sm btn-primary" data-testid="approve-run" disabled={busy} onClick={onApprove}>
               อนุมัติ

@@ -108,9 +108,14 @@ async fn main() {
         .await
         .expect("Redis connect failed");
 
+    let deployment = std::env::var("APP_ENV").unwrap_or_else(|_| "development".into());
     let pii = match talentos_db::pii::PiiCipher::from_env() {
         Ok(Some(cipher)) => Some(Arc::new(cipher)),
         Ok(None) => {
+            if deployment == "production" {
+                eprintln!("FATAL: PII_ENCRYPTION_KEY is required when APP_ENV=production");
+                std::process::exit(1);
+            }
             tracing::warn!("PII_ENCRYPTION_KEY is unset: new employee PII is stored as plaintext");
             None
         }
@@ -119,6 +124,12 @@ async fn main() {
             std::process::exit(1);
         }
     };
+    if deployment == "production"
+        && jwt_secret == "dev-secret-change-me-in-prod-minimum-32-bytes-okay!!"
+    {
+        eprintln!("FATAL: AUTH_JWT_SECRET is still the development default");
+        std::process::exit(1);
+    }
 
     let state = AppState {
         pool: pool.clone(),

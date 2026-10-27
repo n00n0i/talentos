@@ -27,6 +27,7 @@ export default function UsersPage() {
   const [name, setName] = useState("");
   const [role, setRole] = useState("employee");
   const [invite, setInvite] = useState<InviteResult | null>(null);
+  const [reset, setReset] = useState<{ email: string; reset_path: string; expires_at: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -78,6 +79,24 @@ export default function UsersPage() {
     }
   }
 
+  async function issueReset(user: User) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    setReset(null);
+    try {
+      const r = await gw<{ email: string; reset_path: string; expires_at: string }>(
+        `api/v1/users/${user.id}/reset-password`,
+        { method: "POST" },
+      );
+      setReset(r);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deactivate(user: User) {
     if (!confirm(`ปิดการใช้งานบัญชี ${user.email}?`)) return;
     setBusy(true);
@@ -94,6 +113,9 @@ export default function UsersPage() {
 
   const inviteUrl = invite
     ? `${typeof window === "undefined" ? "" : window.location.origin}${invite.invite_path}`
+    : "";
+  const resetUrl = reset
+    ? `${typeof window === "undefined" ? "" : window.location.origin}${reset.reset_path}`
     : "";
 
   return (
@@ -144,7 +166,9 @@ export default function UsersPage() {
         {invite && (
           <div style={{ background: "#eef0ff", borderRadius: 6, padding: 12, display: "grid", gap: 6 }}>
             <strong>ลิงก์เชิญ (ใช้ได้ครั้งเดียว, หมดอายุ 7 วัน)</strong>
-            <code style={{ wordBreak: "break-all", fontSize: 12 }}>{inviteUrl}</code>
+            <a href={inviteUrl} style={{ wordBreak: "break-all", fontSize: 12, color: "var(--teal)" }}>
+              {inviteUrl}
+            </a>
             <div>
               <button
                 type="button"
@@ -157,6 +181,25 @@ export default function UsersPage() {
           </div>
         )}
       </form>
+
+      {reset && (
+        <div className="card card-pad" style={{ display: "grid", gap: 6 }}>
+          <strong>ลิงก์รีเซ็ตรหัสผ่านสำหรับ {reset.email}</strong>
+          <span className="hint">ใช้ได้ครั้งเดียว · หมดอายุใน 1 ชั่วโมง</span>
+          <a href={resetUrl} style={{ wordBreak: "break-all", fontSize: 12, color: "var(--teal)" }}>
+            {resetUrl}
+          </a>
+          <div>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => navigator.clipboard?.writeText(resetUrl)}
+            >
+              คัดลอกลิงก์
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         {users === null ? (
@@ -202,9 +245,14 @@ export default function UsersPage() {
                       ))}
                     </select>{" "}
                     {u.is_active && (
-                      <button className="btn btn-sm btn-danger" onClick={() => deactivate(u)} disabled={busy}>
-                        ปิด
-                      </button>
+                      <>
+                        <button className="btn btn-sm" onClick={() => issueReset(u)} disabled={busy}>
+                          รีเซ็ต
+                        </button>{" "}
+                        <button className="btn btn-sm btn-danger" onClick={() => deactivate(u)} disabled={busy}>
+                          ปิด
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

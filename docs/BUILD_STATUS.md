@@ -8,7 +8,7 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **106 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Tests | `cargo test --workspace` | **108 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
 | Migrations | `sqlx migrate run` on a fresh DB | 18 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 17, rag 7, agent 7,
@@ -19,7 +19,7 @@ wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
 db 5 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking),
 graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
 destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
-RLS isolation, layer filter, expiry purge, stats), gateway 4 (RBAC gate + tenant provisioning CLI:
+RLS isolation, layer filter, expiry purge, stats), gateway 6 (RBAC gate, tenant provisioning CLI, CSV escaping/totals:
 hr_admin allowed, employee refused, manager cannot approve payroll).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
@@ -69,8 +69,9 @@ on the next request (old refresh token then 401, as designed). The standalone
 image (`web/Dockerfile`) was built and served `login` → session login → `/me`
 against a live gateway.
 
-Admin UI: `/settings` (organization, payroll/OT policy, system status with an
-RLS warning) and `/users`. UI restyled to the approved reference: rounded app
+Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
+PII warnings) and `/users` (invite, roles, deactivate, HR-issued password reset).
+Payroll runs export a UTF-8 CSV register (formula-injection safe) with totals. UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout. Browser E2E (`web/e2e`, Playwright) passes 4/4
 locally and runs in CI: invite acceptance → login, settings persistence,

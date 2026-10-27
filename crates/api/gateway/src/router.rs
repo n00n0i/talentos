@@ -18,7 +18,11 @@ pub fn build(state: AppState) -> Router {
     let public = Router::new()
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/refresh", post(auth::refresh))
-        .route("/api/v1/auth/accept-invite", post(users::accept_invite));
+        .route("/api/v1/auth/accept-invite", post(users::accept_invite))
+        .route(
+            "/api/v1/auth/reset-password",
+            post(users::accept_password_reset),
+        );
 
     let protected = Router::new()
         .route("/api/v1/auth/me", get(auth::me))
@@ -52,6 +56,10 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/settings/system", get(settings::system))
         .route("/api/v1/users", get(users::list))
         .route("/api/v1/users/invite", post(users::invite))
+        .route(
+            "/api/v1/users/:id/reset-password",
+            post(users::issue_password_reset),
+        )
         .route("/api/v1/users/:id/roles", post(users::assign_role))
         .route(
             "/api/v1/users/:id",
@@ -66,6 +74,10 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/v1/payroll/runs/:id/payslips",
             get(payroll::list_payslips),
+        )
+        .route(
+            "/api/v1/payroll/runs/:id/export.csv",
+            get(payroll::export_payroll_csv),
         )
         .route(
             "/api/v1/leave/requests",

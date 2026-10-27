@@ -75,8 +75,8 @@ AES-256-GCM before insert and are returned only as `****1234`.
 export PII_ENCRYPTION_KEY=$(openssl rand -hex 32)   # keep it in your secret store
 ```
 
-If the key is missing the gateway warns and stores new values as plaintext
-(dev only). For rows written before encryption was enabled:
+If `APP_ENV=production`, a missing key (or the development JWT secret) makes the
+gateway refuse to start. In development it warns and stores plaintext. For rows written before encryption was enabled:
 
 ```bash
 DATABASE_ADMIN_URL=... PII_ENCRYPTION_KEY=... \
@@ -99,6 +99,7 @@ POST /api/v1/payroll/runs          {period_start, period_end, payment_date, enti
   → 201 {run_id, status: "draft"}   (execution starts in the background)
 GET  /api/v1/payroll/runs/:id      → status: pending_approval + totals
 GET  /api/v1/payroll/runs/:id/payslips
+GET  /api/v1/payroll/runs/:id/export.csv  → UTF-8 CSV register + totals
 POST /api/v1/payroll/runs/:id/approve
 GET  /api/v1/payroll/payslips/:id/render   → printable HTML (tenant template applied)
 GET  /api/v1/payroll/payslips/:id/pdf      → PDF via headless Chromium (Thai shaping)
@@ -203,11 +204,16 @@ POST       /api/v1/users/invite         one-time invite link (no email service)
 POST       /api/v1/auth/accept-invite   public: token + new password
 POST       /api/v1/auth/change-password own password, revokes refresh tokens
 POST       /api/v1/users/:id/roles      add a role
+POST       /api/v1/users/:id/reset-password  issue a 1-hour reset link
+POST       /api/v1/auth/reset-password  public: token + new password
 DELETE     /api/v1/users/:id            deactivate
 ```
 
 Invitations are hashed, single-use and expire in 7 days. HR copies
 `/invite/<token>` to the new user; the page sets a password (12+ chars).
+Password resets work the same way: HR issues `/reset/<token>` (1 hour, single
+use) and the user sets a new password; every refresh token for that user is
+revoked.
 
 ## Attendance → payroll
 

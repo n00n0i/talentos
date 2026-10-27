@@ -9,7 +9,7 @@ use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
 use talentos_hr_runner::leave::{
     cancel_request, create_request, decide_request, employee_of_user, list_balances, list_requests,
-    pending_approvals, LeaveInput,
+    pending_approvals, DecideOutcome, LeaveInput,
 };
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -477,6 +477,7 @@ async fn approve_keeps_balance_debited_and_reject_restores() {
 
     let approver = user_id_of(&raw, tenant_id, entities[0].1).await;
     let requester = user_id_of(&raw, tenant_id, entities[1].1).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
     seed_balance(&raw, tenant_id, entities[1].1, annual_id, year, dec!(6)).await;
 
     let to_approve = create_request(
@@ -515,15 +516,43 @@ async fn approve_keeps_balance_debited_and_reject_restores() {
         dec!(4)
     );
 
-    let approved = decide_request(&pool, tenant, approver, to_approve.id, true)
-        .await
-        .expect("approve");
-    assert_eq!(approved, "approved");
+    let approved = decide_request(
+        &pool,
+        tenant,
+        approver,
+        &["hr_admin".into()],
+        to_approve.id,
+        true,
+    )
+    .await
+    .expect("approve");
+    assert_eq!(
+        approved,
+        DecideOutcome {
+            status: "approved".into(),
+            step: 1,
+            total_steps: 1,
+        }
+    );
 
-    let rejected = decide_request(&pool, tenant, approver, to_reject.id, false)
-        .await
-        .expect("reject");
-    assert_eq!(rejected, "rejected");
+    let rejected = decide_request(
+        &pool,
+        tenant,
+        approver,
+        &["hr_admin".into()],
+        to_reject.id,
+        false,
+    )
+    .await
+    .expect("reject");
+    assert_eq!(
+        rejected,
+        DecideOutcome {
+            status: "rejected".into(),
+            step: 1,
+            total_steps: 1,
+        }
+    );
 
     // Approved kept the debit, rejected restored it: net 2 used days.
     assert_eq!(
@@ -778,15 +807,77 @@ async fn decided_request_creates_notification_for_employee() {
         .expect("clear notifications");
     tx.commit().await.expect("commit clear");
 
-    let status = decide_request(&pool, tenant, approver, req.id, true)
+    let status = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, true)
         .await
         .expect("approve");
-    assert_eq!(status, "approved");
+    assert_eq!(status.status, "approved");
 
     let emails = pending_notifications(&raw, tenant_id, "email").await;
     assert_eq!(emails.len(), 1, "employee should receive decision email");
     assert!(emails[0].1.contains("ลาป่วย"));
     assert!(emails[0].1.contains("อนุมัติ"));
+
+    let lines = pending_notifications(&raw, tenant_id, "line").await;
+    assert_eq!(lines.len(), 1, "employee with line id should receive LINE");
+    assert_eq!(lines[0].0, "U_EMP");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn rejected_request_creates_notification_for_employee() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+
+    let approver = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let requester = user_id_of(&raw, tenant_id, entities[1].1).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
+    set_line_user_id(&raw, tenant_id, requester, "U_EMP").await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester,
+        LeaveInput {
+            leave_type: "sick".into(),
+            start_date: d(2026, 11, 3),
+            end_date: d(2026, 11, 4),
+            reason: None,
+            employee_id: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    // clear submit notifications so only the decision notification remains
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("DELETE FROM notifications WHERE tenant_id = $1")
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .expect("clear notifications");
+    tx.commit().await.expect("commit clear");
+
+    let outcome = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, false)
+        .await
+        .expect("reject");
+    assert_eq!(outcome.status, "rejected");
+
+    let emails = pending_notifications(&raw, tenant_id, "email").await;
+    assert_eq!(emails.len(), 1, "employee should receive decision email");
+    assert!(emails[0].1.contains("ลาป่วย"));
+    assert!(emails[0].1.contains("ปฏิเสธ"));
 
     let lines = pending_notifications(&raw, tenant_id, "line").await;
     assert_eq!(lines.len(), 1, "employee with line id should receive LINE");

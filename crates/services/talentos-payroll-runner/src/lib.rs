@@ -120,7 +120,8 @@ pub async fn execute_run(
 
     // Company policy (divisor + OT multipliers). Missing row = Thai standard.
     let settings = sqlx::query(
-        "SELECT unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate, ot_holiday_rate
+        "SELECT unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate, ot_holiday_rate,
+                leave_approval_chain
            FROM tenant_payroll_settings WHERE tenant_id = $1",
     )
     .bind(tenant_id.0)
@@ -132,6 +133,9 @@ pub async fn execute_run(
             ot_weekday_rate: row.try_get("ot_weekday_rate")?,
             ot_weekend_rate: row.try_get("ot_weekend_rate")?,
             ot_holiday_rate: row.try_get("ot_holiday_rate")?,
+            leave_approval_chain: row
+                .try_get::<Option<Vec<String>>, _>("leave_approval_chain")?
+                .unwrap_or_else(|| vec!["hr_admin".to_string()]),
         })
     })
     .transpose()?

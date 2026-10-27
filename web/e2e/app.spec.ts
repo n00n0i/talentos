@@ -269,6 +269,7 @@ test("HR creates a shift, corrects and approves a derived day", async ({ page })
 test("employee requests leave, HR approves it", async ({ page }) => {
   async function loginAs(email: string, password: string) {
     await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
     await page.getByLabel("องค์กร").fill("e2e");
     await page.getByLabel("อีเมล").fill(email);
     await page.getByLabel("รหัสผ่าน").fill(password);
@@ -391,6 +392,7 @@ test("HR saves a LINE id for the invited user", async ({ page }) => {
 test("employee requests OT, HR approves it", async ({ page }) => {
   async function loginAs(email: string, password: string) {
     await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
     await page.getByLabel("องค์กร").fill("e2e");
     await page.getByLabel("อีเมล").fill(email);
     await page.getByLabel("รหัสผ่าน").fill(password);
@@ -420,4 +422,52 @@ test("employee requests OT, HR approves it", async ({ page }) => {
   await loginAs(invitedEmail, "ResetPass123!");
   await page.goto("/ot");
   await expect(page.getByTestId("ot-row").filter({ hasText: "3 ธ.ค. 2569" })).toContainText("อนุมัติแล้ว");
+});
+
+test("multi-level leave approval chain", async ({ page }) => {
+  async function loginAs(email: string, password: string) {
+    await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
+    await page.getByLabel("องค์กร").fill("e2e");
+    await page.getByLabel("อีเมล").fill(email);
+    await page.getByLabel("รหัสผ่าน").fill(password);
+    await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+    await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+  }
+
+  await login(page);
+  await page.goto("/settings");
+  await page.getByTestId("leave-chain").selectOption("manager,hr_admin");
+  await page.getByTestId("save-policy").click();
+  await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
+
+  await loginAs(invitedEmail, "ResetPass123!");
+  await page.goto("/leave");
+  await page.getByTestId("leave-type").selectOption("annual");
+  await page.getByTestId("leave-start").fill("2026-12-04");
+  await page.getByTestId("leave-end").fill("2026-12-05");
+  await page.getByTestId("leave-reason").fill("E2E-2STEP");
+  await page.getByTestId("request-leave").click();
+  const mine = page.getByTestId("leave-row").filter({ hasText: "E2E-2STEP" });
+  await expect(mine).toContainText("รออนุมัติ");
+
+  await loginAs("e2e@example.com", "E2ePassword123!");
+  await page.goto("/leave");
+  const inbox = page.getByTestId("approval-row").filter({ hasText: "E2E-2STEP" });
+  await expect(inbox).toBeVisible();
+  await expect(inbox.getByTestId("leave-step")).toContainText("ขั้น 1/2 · หัวหน้างาน");
+  await inbox.getByTestId("approve-leave").click();
+  await expect(inbox.getByTestId("leave-step")).toContainText("ขั้น 2/2 · HR");
+  await inbox.getByTestId("approve-leave").click();
+  await expect(inbox).toHaveCount(0);
+
+  await loginAs(invitedEmail, "ResetPass123!");
+  await page.goto("/leave");
+  await expect(page.getByTestId("leave-row").filter({ hasText: "E2E-2STEP" })).toContainText("อนุมัติแล้ว");
+
+  await loginAs("e2e@example.com", "E2ePassword123!");
+  await page.goto("/settings");
+  await page.getByTestId("leave-chain").selectOption("hr_admin");
+  await page.getByTestId("save-policy").click();
+  await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
 });

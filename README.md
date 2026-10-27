@@ -152,6 +152,12 @@ when no employee is linked. Employees cancel their own pending request with
 HR/managers use `GET /api/v1/leave/approvals` as the pending inbox and
 `POST /api/v1/leave/requests/:id/decision` to approve or reject.
 
+Leave approvals can be one step (HR) or a sequential chain
+`manager → hr_admin`, configured in `/settings` (`leave_approval_chain`). The
+chain is snapshotted onto each request; the current step's role decides, and an
+HR admin may override. Rejection at any step is final; intermediate steps send
+no notification. GraphQL leave mutations are disabled — use these REST routes.
+
 Balance accounting is tied to status transitions: a pending request debits
 `used_days`, cancel or reject restores it, and approve keeps it debited. Legacy
 pending rows created before the `balance_debited` flag was introduced are left

@@ -255,16 +255,19 @@ pub async fn decide(
         &state.pool,
         ctx.tenant_id,
         ctx.user_id.0,
+        &ctx.roles,
         id,
         body.approve,
     )
     .await
     {
-        Ok(status) => (
+        Ok(outcome) => (
             StatusCode::OK,
             Json(serde_json::json!({
                 "request_id": id.to_string(),
-                "status": status,
+                "status": outcome.status,
+                "step": outcome.step,
+                "total_steps": outcome.total_steps,
                 "approver_id": ctx.user_id.to_string(),
             })),
         )
@@ -308,6 +311,14 @@ fn map_leave_error(e: talentos_hr_runner::LeaveError) -> Response {
         talentos_hr_runner::LeaveError::UnknownType
         | talentos_hr_runner::LeaveError::BadRange
         | talentos_hr_runner::LeaveError::TooLong => unprocessable(&e.to_string()),
+        talentos_hr_runner::LeaveError::Forbidden => (
+            StatusCode::FORBIDDEN,
+            Json(envelope(
+                "forbidden",
+                "approver is not authorised for this step",
+            )),
+        )
+            .into_response(),
         talentos_hr_runner::LeaveError::EmployeeNotFound
         | talentos_hr_runner::LeaveError::NotActive => (
             StatusCode::FORBIDDEN,

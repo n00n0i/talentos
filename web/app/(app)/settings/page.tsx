@@ -9,6 +9,7 @@ type PayrollSettings = {
   ot_weekday_rate: Num;
   ot_weekend_rate: Num;
   ot_holiday_rate: Num;
+  leave_approval_chain: string[];
 };
 type Tenant = { id: string; name: string; slug: string };
 type Entity = { id: string; name: string; tax_id: string | null; is_active: boolean };
@@ -26,6 +27,7 @@ const DEFAULTS: PayrollSettings = {
   ot_weekday_rate: "1.50",
   ot_weekend_rate: "2.00",
   ot_holiday_rate: "3.00",
+  leave_approval_chain: ["hr_admin"],
 };
 
 export default function SettingsPage() {
@@ -71,6 +73,7 @@ export default function SettingsPage() {
           ot_weekday_rate: Number(policy.ot_weekday_rate),
           ot_weekend_rate: Number(policy.ot_weekend_rate),
           ot_holiday_rate: Number(policy.ot_holiday_rate),
+          leave_approval_chain: policy.leave_approval_chain,
         }),
       });
       setNotice("บันทึกสูตรเงินเดือนแล้ว — มีผลกับรอบถัดไป");
@@ -231,6 +234,20 @@ export default function SettingsPage() {
                 onChange={(e) => setPolicyValue("ot_holiday_rate", e.target.value)}
               />
             </div>
+          </div>
+          <div className="field">
+            <label htmlFor="leave-chain">ขั้นตอนการอนุมัติการลา</label>
+            <select
+              id="leave-chain"
+              data-testid="leave-chain"
+              value={policy.leave_approval_chain.join(",")}
+              onChange={(e) =>
+                setPolicy((p) => ({ ...p, leave_approval_chain: e.target.value.split(",") }))
+              }
+            >
+              <option value="hr_admin">HR อนุมัติขั้นเดียว</option>
+              <option value="manager,hr_admin">หัวหน้างาน → HR</option>
+            </select>
           </div>
           <div>
             <button className="btn btn-primary" data-testid="save-policy" type="submit" disabled={busy}>

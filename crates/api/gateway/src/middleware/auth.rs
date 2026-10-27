@@ -163,4 +163,12 @@ mod tests {
         assert!(require(&ctx(&["employee"]), "attendance", "shifts").is_err());
         assert!(require(&ctx(&["manager"]), "attendance", "shifts").is_err());
     }
+
+    #[test]
+    fn manager_can_approve_attendance_employee_cannot() {
+        assert!(require(&ctx(&["manager"]), "attendance", "approve").is_ok());
+        assert!(require(&ctx(&["hr_admin"]), "attendance", "approve").is_ok());
+        assert!(require(&ctx(&["payroll_manager"]), "attendance", "approve").is_ok());
+        assert!(require(&ctx(&["employee"]), "attendance", "approve").is_err());
+    }
 }

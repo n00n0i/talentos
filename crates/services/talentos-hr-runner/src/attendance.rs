@@ -1,6 +1,7 @@
 //! Attendance service: shifts, assignments, geofence settings, and mobile punch.
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveTime, TimeZone, Utc};
+use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use serde::Serialize;
 use serde_json::json;
@@ -52,6 +53,7 @@ pub struct DayView {
     pub ot_minutes: i32,
     pub ot_kind: String,
     pub incomplete: bool,
+    pub status: String,
 }
 
 /// Attendance service errors.
@@ -71,6 +73,10 @@ pub enum AttendanceError {
     InvalidImport,
     #[error("attendance rule error: {0}")]
     Rule(#[from] AttendanceRuleError),
+    #[error("attendance values exceed allowed range")]
+    OutOfRange,
+    #[error("invalid correction: {0}")]
+    InvalidCorrection(&'static str),
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -563,6 +569,293 @@ async fn recompute_day(
         ot_minutes: summary.ot_minutes,
         ot_kind: ot_kind_str.to_string(),
         incomplete: summary.incomplete,
+        status: "pending".to_string(),
+    })
+}
+
+/// List attendance days for a tenant in a date range, optionally filtered by
+/// employee and status. Ordered by work_date DESC.
+pub async fn list_days(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    from: NaiveDate,
+    to: NaiveDate,
+    employee_id: Option<Uuid>,
+    status: Option<&str>,
+) -> Result<Vec<DayView>, AttendanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let rows = sqlx::query(
+        r#"SELECT work_date, worked_minutes, late_minutes, early_leave_minutes,
+                  ot_minutes, ot_kind, incomplete, status
+             FROM attendance_days
+            WHERE tenant_id = current_tenant_id()
+              AND work_date BETWEEN $1 AND $2
+              AND ($3::uuid IS NULL OR employee_id = $3)
+              AND ($4::text IS NULL OR status = $4)
+            ORDER BY work_date DESC"#,
+    )
+    .bind(from)
+    .bind(to)
+    .bind(employee_id)
+    .bind(status)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let mut days = Vec::with_capacity(rows.len());
+    for row in rows {
+        days.push(map_day(row)?);
+    }
+    let _ = tx.rollback().await;
+    Ok(days)
+}
+
+/// Approve an attendance day and feed the payroll row in one transaction.
+pub async fn approve_day(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    approver: Uuid,
+    day_id: Uuid,
+) -> Result<(), AttendanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+
+    let day = sqlx::query(
+        r#"SELECT employee_id, work_date, shift_id, worked_minutes, ot_minutes, ot_kind
+             FROM attendance_days
+            WHERE id = $1 AND tenant_id = current_tenant_id()"#,
+    )
+    .bind(day_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let day = match day {
+        Some(d) => d,
+        None => return Err(AttendanceError::NotFound),
+    };
+
+    let shift_id: Option<Uuid> = day.try_get("shift_id")?;
+    if shift_id.is_none() {
+        return Err(AttendanceError::NoShift);
+    }
+
+    let employee_id: Uuid = day.try_get("employee_id")?;
+    let work_date: NaiveDate = day.try_get("work_date")?;
+    let worked_minutes: i32 = day.try_get("worked_minutes")?;
+    let ot_minutes: i32 = day.try_get("ot_minutes")?;
+    let ot_kind: String = day.try_get("ot_kind")?;
+
+    if worked_minutes > 1440 || ot_minutes > 720 {
+        return Err(AttendanceError::OutOfRange);
+    }
+
+    let hours_worked = (Decimal::from(worked_minutes) / Decimal::from(60)).round_dp(2);
+    let ot_hours = (Decimal::from(ot_minutes) / Decimal::from(60)).round_dp(2);
+
+    sqlx::query(
+        r#"INSERT INTO attendance_records
+             (tenant_id, employee_id, work_date, hours_worked, ot_hours, ot_kind, created_by)
+           VALUES (current_tenant_id(), $1, $2, $3, $4, $5, $6)
+           ON CONFLICT (employee_id, work_date) DO UPDATE SET
+               hours_worked = EXCLUDED.hours_worked,
+               ot_hours = EXCLUDED.ot_hours,
+               ot_kind = EXCLUDED.ot_kind,
+               created_by = EXCLUDED.created_by,
+               updated_at = now()"#,
+    )
+    .bind(employee_id)
+    .bind(work_date)
+    .bind(hours_worked)
+    .bind(ot_hours)
+    .bind(&ot_kind)
+    .bind(approver)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"UPDATE attendance_days
+              SET status = 'approved',
+                  approved_by = $1,
+                  approved_at = now(),
+                  updated_at = now()
+            WHERE id = $2 AND tenant_id = current_tenant_id()"#,
+    )
+    .bind(approver)
+    .bind(day_id)
+    .execute(&mut *tx)
+    .await?;
+
+    sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES (current_tenant_id(), 'user', $1, 'attendance.approve', 'attendance_day', $2, $3)"#,
+    )
+    .bind(approver.to_string())
+    .bind(day_id.to_string())
+    .bind(json!({
+        "employee_id": employee_id,
+        "work_date": work_date,
+        "hours_worked": hours_worked.to_string(),
+        "ot_hours": ot_hours.to_string(),
+        "ot_kind": ot_kind,
+    }))
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Correct an attendance day by replacing its events with two manual punches,
+/// recomputing the day, and forcing it back to pending.
+pub async fn correct_day(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    actor: Uuid,
+    day_id: Uuid,
+    in_at: DateTime<Utc>,
+    out_at: DateTime<Utc>,
+    note: &str,
+) -> Result<(), AttendanceError> {
+    if out_at <= in_at {
+        return Err(AttendanceError::InvalidCorrection(
+            "out_at must be after in_at",
+        ));
+    }
+
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+
+    let day = sqlx::query(
+        r#"SELECT employee_id, work_date, shift_id FROM attendance_days
+            WHERE id = $1 AND tenant_id = current_tenant_id()"#,
+    )
+    .bind(day_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let day = match day {
+        Some(d) => d,
+        None => return Err(AttendanceError::NotFound),
+    };
+
+    let employee_id: Uuid = day.try_get("employee_id")?;
+    let work_date: NaiveDate = day.try_get("work_date")?;
+    let shift_id: Option<Uuid> = day.try_get("shift_id")?;
+    let shift_id = shift_id.ok_or(AttendanceError::NoShift)?;
+
+    let shift = shift_by_id_in_tx(&mut tx, shift_id).await?;
+    let shift = shift.ok_or(AttendanceError::NoShift)?;
+
+    let bkk = bangkok_offset();
+    let shift_start_bkk = bkk
+        .from_local_datetime(&work_date.and_time(shift.start))
+        .single()
+        .ok_or_else(|| sqlx::Error::RowNotFound)?;
+    let shift_end_bkk = if shift.end > shift.start {
+        bkk.from_local_datetime(&work_date.and_time(shift.end))
+    } else {
+        bkk.from_local_datetime(&(work_date + Duration::days(1)).and_time(shift.end))
+    }
+    .single()
+    .ok_or_else(|| sqlx::Error::RowNotFound)?;
+
+    let events = sqlx::query(
+        r#"SELECT id, kind, occurred_at FROM attendance_events
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $1
+              AND occurred_at BETWEEN $2 AND $3
+            ORDER BY occurred_at"#,
+    )
+    .bind(employee_id)
+    .bind(shift_start_bkk.with_timezone(&Utc))
+    .bind(shift_end_bkk.with_timezone(&Utc))
+    .fetch_all(&mut *tx)
+    .await?;
+
+    let mut old_times = Vec::with_capacity(events.len());
+    let mut event_ids = Vec::with_capacity(events.len());
+    for row in events {
+        let id: Uuid = row.try_get("id")?;
+        let kind: String = row.try_get("kind")?;
+        let at: DateTime<Utc> = row.try_get("occurred_at")?;
+        old_times.push(json!({"id": id, "kind": kind, "occurred_at": at.to_rfc3339()}));
+        event_ids.push(id);
+    }
+
+    if !event_ids.is_empty() {
+        sqlx::query(
+            r#"DELETE FROM attendance_events
+                WHERE tenant_id = current_tenant_id()
+                  AND id = ANY($1)"#,
+        )
+        .bind(event_ids)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for (kind, at) in [("in", in_at), ("out", out_at)] {
+        sqlx::query(
+            r#"INSERT INTO attendance_events
+                 (tenant_id, employee_id, kind, source, occurred_at)
+               VALUES (current_tenant_id(), $1, $2, 'manual', $3)"#,
+        )
+        .bind(employee_id)
+        .bind(kind)
+        .bind(at)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, before_state, after_state)
+           VALUES (current_tenant_id(), 'user', $1, 'attendance.correct', 'attendance_day', $2, $3, $4)"#,
+    )
+    .bind(actor.to_string())
+    .bind(day_id.to_string())
+    .bind(json!({
+        "employee_id": employee_id,
+        "work_date": work_date,
+        "old_events": old_times,
+    }))
+    .bind(json!({
+        "in_at": in_at.to_rfc3339(),
+        "out_at": out_at.to_rfc3339(),
+        "note": note,
+    }))
+    .execute(&mut *tx)
+    .await?;
+
+    recompute_day(&mut tx, employee_id, &shift, work_date).await?;
+
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn shift_by_id_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    shift_id: Uuid,
+) -> Result<Option<ShiftView>, sqlx::Error> {
+    let row = sqlx::query(
+        r#"SELECT id, name, start_time, end_time, break_minutes, grace_minutes
+             FROM work_shifts
+            WHERE id = $1 AND tenant_id = current_tenant_id()"#,
+    )
+    .bind(shift_id)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    row.map(map_shift).transpose()
+}
+
+fn map_day(row: sqlx::postgres::PgRow) -> Result<DayView, sqlx::Error> {
+    Ok(DayView {
+        work_date: row.try_get("work_date")?,
+        worked_minutes: row.try_get("worked_minutes")?,
+        late_minutes: row.try_get("late_minutes")?,
+        early_leave_minutes: row.try_get("early_leave_minutes")?,
+        ot_minutes: row.try_get("ot_minutes")?,
+        ot_kind: row.try_get("ot_kind")?,
+        incomplete: row.try_get("incomplete")?,
+        status: row.try_get("status")?,
     })
 }
 

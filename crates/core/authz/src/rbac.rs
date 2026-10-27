@@ -66,6 +66,10 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 ("attendance", "shifts"),
                 &["hr_admin", "payroll_manager"][..],
             ),
+            (
+                ("attendance", "approve"),
+                &["hr_admin", "payroll_manager", "manager"][..],
+            ),
             (("settings", "manage_company"), &["hr_admin"][..]),
             (
                 ("settings", "view_company"),
@@ -202,5 +206,24 @@ mod tests {
                 "{role} should not manage shifts"
             );
         }
+    }
+
+    #[test]
+    fn hr_admin_payroll_manager_and_manager_can_approve_attendance_day() {
+        for role in ["hr_admin", "payroll_manager", "manager"] {
+            assert!(
+                has_permission(&[role.into()], "attendance", "approve"),
+                "{role} should approve attendance days"
+            );
+        }
+    }
+
+    #[test]
+    fn employee_cannot_approve_attendance_day() {
+        assert!(!has_permission(
+            &["employee".into()],
+            "attendance",
+            "approve"
+        ));
     }
 }

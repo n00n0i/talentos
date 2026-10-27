@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use chrono::{Datelike, NaiveDate, NaiveTime};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -71,6 +71,21 @@ pub struct GeofenceBody {
     pub lat: f64,
     pub lng: f64,
     pub radius_m: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DayListQuery {
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+    pub employee_id: Option<Uuid>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CorrectBody {
+    pub in_at: DateTime<Utc>,
+    pub out_at: DateTime<Utc>,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -574,7 +589,9 @@ pub async fn set_geofence(
 
 pub(crate) fn map_attendance_error(e: AttendanceError) -> Response {
     match e {
-        AttendanceError::InvalidImport => unprocessable(&e.to_string()),
+        AttendanceError::InvalidImport
+        | AttendanceError::OutOfRange
+        | AttendanceError::InvalidCorrection(_) => unprocessable(&e.to_string()),
         AttendanceError::NotFound
         | AttendanceError::NoShift
         | AttendanceError::NoGeofence
@@ -650,6 +667,79 @@ pub async fn delete(
         return internal_err(&e.to_string());
     }
     StatusCode::NO_CONTENT.into_response()
+}
+
+/// GET /api/v1/attendance/days?from=&to=&employee_id=&status=
+pub async fn list_days(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Query(query): Query<DayListQuery>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "read") {
+        return forbidden;
+    }
+    match talentos_hr_runner::attendance::list_days(
+        &state.pool,
+        ctx.tenant_id,
+        query.from,
+        query.to,
+        query.employee_id,
+        query.status.as_deref(),
+    )
+    .await
+    {
+        Ok(days) => (StatusCode::OK, Json(json!({ "days": days }))).into_response(),
+        Err(e) => map_attendance_error(e),
+    }
+}
+
+/// POST /api/v1/attendance/days/:id/approve
+pub async fn approve_day(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "approve") {
+        return forbidden;
+    }
+    match talentos_hr_runner::attendance::approve_day(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+    )
+    .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => map_attendance_error(e),
+    }
+}
+
+/// POST /api/v1/attendance/days/:id/correct
+pub async fn correct_day(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<CorrectBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "approve") {
+        return forbidden;
+    }
+    let note = body.note.unwrap_or_default();
+    match talentos_hr_runner::attendance::correct_day(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        body.in_at,
+        body.out_at,
+        &note,
+    )
+    .await
+    {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => map_attendance_error(e),
+    }
 }
 
 fn bad_request(message: &str) -> Response {

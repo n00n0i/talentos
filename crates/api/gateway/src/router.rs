@@ -104,6 +104,15 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/attendance/:id",
             axum::routing::delete(attendance::delete),
         )
+        .route("/api/v1/attendance/days", get(attendance::list_days))
+        .route(
+            "/api/v1/attendance/days/:id/approve",
+            post(attendance::approve_day),
+        )
+        .route(
+            "/api/v1/attendance/days/:id/correct",
+            post(attendance::correct_day),
+        )
         .route(
             "/api/v1/shifts",
             get(attendance::list_shifts).post(attendance::create_shift),

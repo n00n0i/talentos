@@ -9,6 +9,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenant, setTenant] = useState("smoke");
+  const [totp, setTotp] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -20,10 +22,16 @@ export default function LoginPage() {
       const res = await fetch("/api/session/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, tenant_slug: tenant }),
+        body: JSON.stringify({ email, password, tenant_slug: tenant, ...(totp ? { totp_code: totp } : {}) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        if (res.status === 401 && (body.error === "totp_required" || body.error === "invalid_totp")) {
+          setErrorCode(body.error);
+          setTotp("");
+          setError(body.error === "invalid_totp" ? "รหัสยืนยันไม่ถูกต้อง ลองอีกครั้ง" : "");
+          return;
+        }
         throw new Error(body.message || "เข้าสู่ระบบไม่สำเร็จ");
       }
       router.replace("/");
@@ -72,6 +80,23 @@ export default function LoginPage() {
               required
             />
           </div>
+          {errorCode && (
+            <div className="field">
+              <label htmlFor="totp">กรอกรหัสจากแอป Authenticator</label>
+              <input
+                id="totp"
+                data-testid="login-totp"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                autoFocus
+                value={totp}
+                onChange={(e) => setTotp(e.target.value)}
+                required
+              />
+            </div>
+          )}
           {error && <p className="error">{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}

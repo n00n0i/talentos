@@ -66,6 +66,7 @@ pub struct UserDto {
     pub is_active: bool,
     pub roles: Vec<String>,
     pub last_login_at: Option<String>,
+    pub totp_enabled: bool,
 }
 
 /// GET /api/v1/users
@@ -78,7 +79,7 @@ pub async fn list(State(state): State<AppState>, Authed(ctx): Authed) -> Respons
         Err(e) => return internal_err(&e.to_string()),
     };
     let rows = sqlx::query(
-        r#"SELECT u.id, u.email, u.full_name_th, u.is_active, u.last_login_at,
+        r#"SELECT u.id, u.email, u.full_name_th, u.is_active, u.last_login_at, u.totp_enabled,
                   COALESCE(array_remove(array_agg(DISTINCT r.name), NULL), '{}') AS roles
              FROM users u
              LEFT JOIN user_roles ur ON ur.user_id = u.id
@@ -106,6 +107,7 @@ pub async fn list(State(state): State<AppState>, Authed(ctx): Authed) -> Respons
                     last_login_at: row
                         .get::<Option<chrono::DateTime<chrono::Utc>>, _>("last_login_at")
                         .map(|t| t.to_rfc3339()),
+                    totp_enabled: row.get("totp_enabled"),
                 })
                 .collect();
             (StatusCode::OK, Json(json!({ "users": users }))).into_response()

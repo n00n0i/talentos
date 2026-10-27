@@ -10,6 +10,7 @@ type User = {
   is_active: boolean;
   roles: string[];
   last_login_at: string | null;
+  totp_enabled: boolean;
 };
 
 type InviteResult = { invite_path: string; email: string; role: string; expires_at: string };
@@ -90,6 +91,21 @@ export default function UsersPage() {
         { method: "POST" },
       );
       setReset(r);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reset2fa(user: User) {
+    if (!confirm(`รีเซ็ต 2FA ของ ${user.email}? ผู้ใช้จะเข้าสู่ระบบได้โดยไม่ต้องใช้รหัสจนกว่าจะเปิดใหม่`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/users/${user.id}/2fa/reset`, { method: "POST" });
+      setNotice(`รีเซ็ต 2FA ของ ${user.email} แล้ว`);
+      await load();
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -249,6 +265,18 @@ export default function UsersPage() {
                         <button className="btn btn-sm" onClick={() => issueReset(u)} disabled={busy}>
                           รีเซ็ต
                         </button>{" "}
+                        {u.totp_enabled && (
+                          <>
+                            <button
+                              className="btn btn-sm"
+                              data-testid="reset-2fa"
+                              onClick={() => reset2fa(u)}
+                              disabled={busy}
+                            >
+                              รีเซ็ต 2FA
+                            </button>{" "}
+                          </>
+                        )}
                         <button className="btn btn-sm btn-danger" onClick={() => deactivate(u)} disabled={busy}>
                           ปิด
                         </button>

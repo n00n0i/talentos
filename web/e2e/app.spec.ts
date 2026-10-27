@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { expect, Page, test } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
@@ -325,4 +326,43 @@ test("HR bulk-imports employees from a CSV", async ({ page }) => {
   await expect(
     page.locator('tr:not([data-testid="import-row"])').filter({ hasText: "E2E-IMP-BAD" }),
   ).toHaveCount(0);
+});
+
+function totp(secret: string): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const c of secret.replace(/=+$/, "").toUpperCase()) bits += alphabet.indexOf(c).toString(2).padStart(5, "0");
+  const key = Buffer.from(bits.match(/.{8}/g)!.map((b) => parseInt(b, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+  const h = createHmac("sha1", key).update(counter).digest();
+  const o = h[h.length - 1] & 0xf;
+  const n = ((h[o] & 0x7f) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
+  return String(n % 1_000_000).padStart(6, "0");
+}
+
+test("HR enrolls in 2FA, logs in with a code, then disables it", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings");
+  await page.getByTestId("setup-2fa").click();
+  const secret = (await page.getByTestId("totp-secret").innerText()).trim();
+  await page.getByTestId("totp-enable-code").fill(totp(secret));
+  await page.getByTestId("enable-2fa").click();
+  await expect(page.getByTestId("totp-status")).toContainText("เปิดใช้งานอยู่");
+
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.goto("/login");
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill("e2e@example.com");
+  await page.getByLabel("รหัสผ่าน").fill("E2ePassword123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByTestId("login-totp")).toBeVisible();
+  await page.getByTestId("login-totp").fill(totp(secret));
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+
+  await page.goto("/settings");
+  await page.getByTestId("totp-disable-code").fill(totp(secret));
+  await page.getByTestId("disable-2fa").click();
+  await expect(page.getByTestId("totp-status")).toContainText("ปิดอยู่");
 });

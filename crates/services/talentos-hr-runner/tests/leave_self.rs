@@ -150,12 +150,16 @@ async fn linked_user_sees_only_own_balances_and_requests() {
         .await
         .expect("resolve employee")
         .expect("employee exists");
-    let balances = list_balances(&pool, tenant, my_emp, year).await.expect("balances");
+    let balances = list_balances(&pool, tenant, my_emp, year)
+        .await
+        .expect("balances");
     let annual = balances.iter().find(|b| b.leave_type == "annual").unwrap();
     assert_eq!(annual.used_days, dec!(2));
     assert_eq!(annual.remaining_days, dec!(4));
 
-    let requests = list_requests(&pool, tenant, my_emp, None).await.expect("requests");
+    let requests = list_requests(&pool, tenant, my_emp, None)
+        .await
+        .expect("requests");
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].id, req.id);
 
@@ -163,8 +167,13 @@ async fn linked_user_sees_only_own_balances_and_requests() {
         .await
         .expect("resolve employee")
         .expect("employee exists");
-    let other_balances = list_balances(&pool, tenant, other_emp, year).await.expect("balances");
-    let other_annual = other_balances.iter().find(|b| b.leave_type == "annual").unwrap();
+    let other_balances = list_balances(&pool, tenant, other_emp, year)
+        .await
+        .expect("balances");
+    let other_annual = other_balances
+        .iter()
+        .find(|b| b.leave_type == "annual")
+        .unwrap();
     assert_eq!(other_annual.used_days, dec!(0));
     assert_eq!(other_annual.remaining_days, dec!(6));
 
@@ -187,7 +196,9 @@ async fn unlinked_user_gets_empty_balances_and_requests() {
     let (tenant_id, _entities) = seed_tenant_entities(&raw, 1).await;
     let tenant = TenantId(tenant_id);
 
-    let linked = employee_of_user(&pool, tenant, Uuid::new_v4()).await.unwrap();
+    let linked = employee_of_user(&pool, tenant, Uuid::new_v4())
+        .await
+        .unwrap();
     assert!(linked.is_none());
 
     cleanup(&raw, tenant_id).await;
@@ -228,7 +239,9 @@ async fn cancel_pending_succeeds_and_restores_balance() {
         dec!(2)
     );
 
-    let status = cancel_request(&pool, tenant, user_id, req.id).await.expect("cancel");
+    let status = cancel_request(&pool, tenant, user_id, req.id)
+        .await
+        .expect("cancel");
     assert_eq!(status, "cancelled");
 
     let requests = list_requests(&pool, tenant, entities[0].1, Some("cancelled"))
@@ -273,8 +286,13 @@ async fn cancel_another_employees_request_returns_not_found() {
     .await
     .expect("create request");
 
-    let err = cancel_request(&pool, tenant, user1, req.id).await.unwrap_err();
-    assert!(matches!(err, talentos_hr_runner::leave::LeaveError::NotFound));
+    let err = cancel_request(&pool, tenant, user1, req.id)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        talentos_hr_runner::leave::LeaveError::NotFound
+    ));
 
     cleanup(&raw, tenant_id).await;
 }
@@ -319,7 +337,9 @@ async fn cancel_approved_request_returns_conflict() {
         .expect("approve");
     tx.commit().await.expect("commit");
 
-    let err = cancel_request(&pool, tenant, user_id, req.id).await.unwrap_err();
+    let err = cancel_request(&pool, tenant, user_id, req.id)
+        .await
+        .unwrap_err();
     assert!(matches!(
         err,
         talentos_hr_runner::leave::LeaveError::NotCancellable

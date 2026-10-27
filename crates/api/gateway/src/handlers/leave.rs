@@ -135,18 +135,28 @@ pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Res
         };
 
     let year = chrono::Utc::now().year();
-    let balances =
-        match talentos_hr_runner::list_balances(&state.pool, ctx.tenant_id, employee_id, year).await
-        {
-            Ok(list) => list,
-            Err(e) => return map_leave_error(e),
-        };
-    let requests =
-        match talentos_hr_runner::list_requests(&state.pool, ctx.tenant_id, employee_id, None).await
-        {
-            Ok(list) => list,
-            Err(e) => return map_leave_error(e),
-        };
+    let balances = match talentos_hr_runner::list_balances(
+        &state.pool,
+        ctx.tenant_id,
+        employee_id,
+        year,
+    )
+    .await
+    {
+        Ok(list) => list,
+        Err(e) => return map_leave_error(e),
+    };
+    let requests = match talentos_hr_runner::list_requests(
+        &state.pool,
+        ctx.tenant_id,
+        employee_id,
+        None,
+    )
+    .await
+    {
+        Ok(list) => list,
+        Err(e) => return map_leave_error(e),
+    };
 
     (
         StatusCode::OK,
@@ -184,11 +194,7 @@ pub async fn approvals(State(state): State<AppState>, Authed(ctx): Authed) -> Re
         return forbidden;
     }
     match talentos_hr_runner::pending_approvals(&state.pool, ctx.tenant_id).await {
-        Ok(requests) => (
-            StatusCode::OK,
-            Json(json!({ "requests": requests })),
-        )
-            .into_response(),
+        Ok(requests) => (StatusCode::OK, Json(json!({ "requests": requests }))).into_response(),
         Err(e) => map_leave_error(e),
     }
 }
@@ -217,8 +223,14 @@ pub async fn decide(
     if let Err(forbidden) = require(&ctx, "leave_request", "approve_team") {
         return forbidden;
     }
-    match talentos_hr_runner::decide_request(&state.pool, ctx.tenant_id, ctx.user_id.0, id, body.approve)
-        .await
+    match talentos_hr_runner::decide_request(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        body.approve,
+    )
+    .await
     {
         Ok(status) => (
             StatusCode::OK,
@@ -268,7 +280,8 @@ fn map_leave_error(e: talentos_hr_runner::LeaveError) -> Response {
         talentos_hr_runner::LeaveError::UnknownType
         | talentos_hr_runner::LeaveError::BadRange
         | talentos_hr_runner::LeaveError::TooLong => unprocessable(&e.to_string()),
-        talentos_hr_runner::LeaveError::EmployeeNotFound | talentos_hr_runner::LeaveError::NotActive => (
+        talentos_hr_runner::LeaveError::EmployeeNotFound
+        | talentos_hr_runner::LeaveError::NotActive => (
             StatusCode::FORBIDDEN,
             Json(envelope(
                 "forbidden",

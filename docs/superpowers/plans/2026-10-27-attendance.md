@@ -246,14 +246,14 @@ The domain crate must not depend on SQLx. The persistence/service error lives in
 `talentos-hr-runner` (Task 3): `AttendanceError::{NoGeofence, OutsideGeofence,
 EmployeeNotLinked, NoShift, NotFound, InvalidImport, Rule(#[from]
 AttendanceRuleError), Db(#[from] sqlx::Error)}`.
-- `create_shift(pool, tenant, ShiftInput) -> Result<ShiftView, AttendanceError>`
-- `assign_shift(pool, tenant, employee_id, shift_id, effective_from) -> Result<(), AttendanceError>`
-- `set_geofence(pool, tenant, lat: f64, lng: f64, radius_m: i32) -> Result<(), AttendanceError>`
+- `create_shift(pool, tenant, entity_id: Uuid, ShiftInput) -> Result<ShiftView, AttendanceError>`
+- `assign_shift(pool, tenant, employee_id, shift_id, effective_from) -> Result<(), AttendanceError>` (shift and employee must belong to the same entity)
+- `set_geofence(pool, tenant, entity_id: Uuid, lat: f64, lng: f64, radius_m: i32) -> Result<(), AttendanceError>` (one entity only)
 - `active_shift(pool, tenant, employee_id, work_date) -> Result<Option<ShiftView>, AttendanceError>` (assignment effective on the date, latest `effective_from` wins)
-- Routes: `GET/POST /api/v1/shifts`, `POST /api/v1/shifts/:id/assign`, `PUT /api/v1/settings/geofence`.
+- Routes: `GET/POST /api/v1/shifts` (body may carry `entity_id`; required when the token spans entities), `POST /api/v1/shifts/:id/assign`, `PUT /api/v1/settings/entities/:id/geofence`.
 - Permissions: `attendance.shifts` for create/assign/geofence; `attendance.read` for list.
 
-- [ ] **Step 1: Write failing DB tests** — create a shift, assign it, read it back under tenant A; tenant B sees none; invalid radius (0 or >5000) is rejected.
+- [ ] **Step 1: Write failing DB tests** — create a shift in entity A, assign it, read it back under tenant A; tenant B sees none; invalid radius (0 or >5000) is rejected; a second entity in the same tenant keeps its own geofence; assigning an employee to a shift from another entity is rejected.
 - [ ] **Step 2: Run, expect failure.**
 - [ ] **Step 3: Implement service + handlers** with validation (`break_minutes 0..=240`, `grace_minutes 0..=60`, `radius_m 50..=5000`) and audit entries `attendance.shift.create`, `attendance.shift.assign`.
 - [ ] **Step 4: Add RBAC tests** (`hr_admin` passes, `employee` denied) and run `cargo test -p talentos-hr-runner -p talentos-authz`.

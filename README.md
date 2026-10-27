@@ -158,6 +158,22 @@ pending rows created before the `balance_debited` flag was introduced are left
 untouched. The `/leave` page and the available leave types are driven by the
 employee's `leave_balances` for the current year.
 
+## OT self-service
+
+```
+GET  /api/v1/me/ot                       own requests
+POST /api/v1/me/ot                       {work_date, minutes, reason?}
+POST /api/v1/me/ot/:id/cancel            pending only
+GET  /api/v1/ot/approvals                HR/manager pending inbox
+POST /api/v1/ot/requests/:id/decision    {approve}
+```
+
+One live request per employee per date; rejected/cancelled frees the date.
+Minutes are 1..720 and the `/ot` page takes hours in 0.5 steps. **Approved OT is
+an authorization record only**: payroll continues to use attendance-derived OT,
+so the same minutes cannot be paid twice. A future slice can auto-apply an
+approved request to a pending attendance day.
+
 ## Custom payslip
 
 Tenants brand their own payslip (name, logo URL, accent colour, paper size,

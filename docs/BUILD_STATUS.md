@@ -8,8 +8,8 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **224 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 27 files apply cleanly (including `20261104000001_notifications.sql` for the notification outbox) |
+| Tests | `cargo test --workspace` | **234 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 28 files apply cleanly (including `20261105000001_ot_requests.sql` for OT self-service) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
@@ -29,8 +29,9 @@ punch/correct/approve; the rest seed approved records directly), attendance 30
 self-service 13 (me/leave, notification outbox, cancel, approvals, balance debit/restore, legacy
 pending isolation, RBAC; service-level DB + handler-helper units — cancel/reject
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
-purge, stats), notify 1 (payslip recipients and rendered body), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 224 passed, 1 ignored (`load.rs`).
+purge, stats), notify 1 (payslip recipients and rendered body), OT self-service 10
+(own create/list/cancel, duplicates, decisions, inbox, bounds), wasm-host 6 (real guest module: sandbox, capability refusal,
+tenant scoping). Total: 234 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -129,6 +130,9 @@ request → HR approval. Payroll load test: 500 employees in ~0.38 s locally
   with `balance_debited=false` are not retroactively debited. There are no
   email/push notifications for leave approvals yet, and OT self-service requests
   are still deferred.
+- OT requests are an authorization trail only; approved minutes are not added to
+  payroll. Payroll still uses attendance-derived OT, so actual punches remain the
+  single money source.
 - Notifications need `EMAIL_API_KEY`+`EMAIL_FROM` and/or `LINE_CHANNEL_TOKEN`;
   without them rows stay pending. Delivery is at-least-once and failed rows are
   terminal after 3 attempts. LINE needs a per-user id set on `/users`.

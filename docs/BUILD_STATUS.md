@@ -11,17 +11,23 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 | Tests | `cargo test --workspace` | **157 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
 | Migrations | `sqlx migrate run` on a fresh DB | 23 files apply cleanly |
 
-Tests by crate: kernel 5, authz 27, attendance 8 (shift derivation, overnight,
-holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7, agent 7,
-payroll-runner 10 integration (real PostgreSQL + Chromium: payslips, totals, state machine,
-template round-trip, PDF, stuck-run recovery, attendance+unpaid-leave feed,
-tenant policy overrides, 30-employee attendance scale), hr-runner 7 (leave day maths, attendance break/grace validation),
-wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
-db 5 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking),
-graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
-destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
-RLS isolation, layer filter, expiry purge, stats), gateway 12 (RBAC gate, tenant provisioning CLI, CSV escaping/totals, holiday
-classification, shift management, attendance import/punch/correction/approval).
+Unit tests by crate: kernel 5, authz 27, attendance 8 (shift derivation,
+overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
+agent 7, hr-runner 7 (leave day maths, attendance break/grace validation), db 5
+(PII cipher round-trip, wrong key, tamper, legacy plaintext, masking), graphql 3
+(schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
+destructive guard, notifications), memory 3 (layers, expiry), gateway 12 (RBAC
+gate, tenant provisioning CLI, CSV escaping/totals, holiday classification, shift
+management, attendance import/punch/correction/approval).
+
+Integration tests: payroll-runner 10 (real PostgreSQL + Chromium: payslips,
+totals, state machine, template round-trip, PDF, stuck-run recovery,
+attendance+unpaid-leave feed, tenant policy overrides, 30-employee attendance
+scale — the scale fixture seeds `ot_kind` explicitly; classification itself is
+unit/E2E-tested), attendance 26 (approve/correct, import, punch, schema
+isolation, self, shifts), memory 3 (recall, RLS isolation, layer filter, expiry
+purge, stats), wasm-host 6 (real guest module: sandbox, capability refusal,
+tenant scoping). Total: 157 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -164,6 +170,3 @@ phase boundary is already isolated, so the Temporal swap is a wiring change, not
 - Only one default template per tenant is editable through the API (no per-entity or multiple named templates in the UI).
 - In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
 - Single static HS256 signing key (no JWKS rotation yet).
-- Attendance GPS geofence deters but does not prove location; no face-recognition
-  or liveness check. No offline queue; employees must retry a failed punch.
-- Shift swaps and employee self-scheduling are not implemented.

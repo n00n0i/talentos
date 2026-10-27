@@ -278,7 +278,9 @@ explicit `sso_enrolled` flag, independent of provident fund.
 
 The OT class is automatic: a date in the tenant holiday calendar is `holiday`
 (3x), weekends are `weekend` (2x), everything else `weekday` (1.5x). HR can still
-override the class on a record.
+override the class on a record. The 30-employee acceptance fixture in
+`talentos-payroll-runner` seeds approved records directly to exercise the payroll
+boundary at scale; punching and classification are covered by unit and E2E tests.
 
 ### Attendance v1 limits
 
@@ -291,7 +293,7 @@ override the class on a record.
 - Holiday/weekend OT policy: all hours on a holiday or weekend are classified as
   OT (holiday 3x, weekend 2x). There is no separate "holiday pay" multiplier
   beyond the OT class.
-- Only approved days feed payroll; pending or rejected days are ignored.
+- Only approved days feed payroll; pending days are ignored.
 
 ## Settings (admin UI)
 

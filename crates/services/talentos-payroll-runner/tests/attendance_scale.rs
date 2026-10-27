@@ -2,6 +2,11 @@
 //!
 //! One tenant, two shifts, 30 employees, mixed weekday/weekend/holiday approved OT,
 //! plus one pending day that must be ignored. Runs in the normal suite.
+//!
+//! Scope note: this fixture seeds approved `attendance_records` rows directly to
+//! verify the payroll boundary at scale. Punching, geofence, and OT classification
+//! are covered in `attendance_punch.rs`, `attendance_shifts.rs`, and the Playwright
+//! E2E suite (test 8: employee clock punch).
 
 use rust_decimal::Decimal;
 use sqlx::{PgPool, Row};

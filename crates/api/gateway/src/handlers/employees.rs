@@ -49,6 +49,48 @@ pub struct EmployeeBody {
     pub user_id: Option<Uuid>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ImportEmployeeRow {
+    pub employee_code: String,
+    pub first_name_th: String,
+    pub last_name_th: String,
+    pub position_title: String,
+    pub base_salary: Decimal,
+    pub hire_date: NaiveDate,
+    pub first_name_en: Option<String>,
+    pub last_name_en: Option<String>,
+    pub department: Option<String>,
+    pub entity_id: Option<Uuid>,
+    pub tax_filing_status: Option<i16>,
+    pub pf_member: Option<bool>,
+    pub sso_enrolled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportBody {
+    #[serde(default)]
+    pub dry_run: bool,
+    pub rows: Vec<ImportEmployeeRow>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportRowResult {
+    pub row: usize,
+    pub employee_code: String,
+    pub status: String,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportReport {
+    pub dry_run: bool,
+    pub total: usize,
+    pub valid: usize,
+    pub invalid: usize,
+    pub created: usize,
+    pub rows: Vec<ImportRowResult>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct EmployeeDto {
     pub id: Uuid,
@@ -238,6 +280,162 @@ pub async fn create(
         Ok(None) => internal_err("employee not found after insert"),
         Err(e) => internal_err(&e),
     }
+}
+
+/// POST /api/v1/employees/import
+pub async fn import(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<ImportBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "create") {
+        return forbidden;
+    }
+
+    let mut results = validate_import_rows(&body.rows);
+    let (resolved, entity_errors) = match resolve_import_entities(&state, &ctx, &body.rows).await {
+        Ok(v) => v,
+        Err(response) => return response,
+    };
+
+    for (idx, error) in entity_errors.into_iter().enumerate() {
+        if let Some(message) = error {
+            results[idx].errors.push(message);
+            results[idx].status = "invalid".to_string();
+        }
+    }
+
+    let target_entities: Vec<Uuid> = resolved
+        .iter()
+        .filter_map(|id| *id)
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if !target_entities.is_empty() {
+        let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+            Ok(tx) => tx,
+            Err(e) => return internal_err(&e.to_string()),
+        };
+        let existing = sqlx::query(
+            "SELECT entity_id, employee_code FROM employees WHERE tenant_id = $1 AND entity_id = ANY($2)",
+        )
+        .bind(ctx.tenant_id.0)
+        .bind(&target_entities)
+        .fetch_all(&mut *tx)
+        .await;
+        let _ = tx.rollback().await;
+
+        let existing: Vec<(Uuid, String)> = match existing {
+            Ok(rows) => {
+                use sqlx::Row;
+                rows.iter()
+                    .map(|r| {
+                        let entity_id: Uuid = r.get("entity_id");
+                        let code: String = r.get("employee_code");
+                        (entity_id, code)
+                    })
+                    .collect()
+            }
+            Err(e) => return internal_err(&e.to_string()),
+        };
+
+        for (idx, row) in body.rows.iter().enumerate() {
+            if let Some(entity_id) = resolved[idx] {
+                if existing
+                    .iter()
+                    .any(|(e, c)| *e == entity_id && c == &row.employee_code)
+                {
+                    results[idx].errors.push(format!(
+                        "employee_code {} already exists",
+                        row.employee_code
+                    ));
+                    results[idx].status = "invalid".to_string();
+                }
+            }
+        }
+    }
+
+    let report = report_from_rows(body.dry_run, results);
+
+    if body.dry_run || report.invalid > 0 {
+        return (StatusCode::OK, Json(report)).into_response();
+    }
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+
+    for (idx, row) in body.rows.iter().enumerate() {
+        let Some(entity_id) = resolved[idx] else {
+            let _ = tx.rollback().await;
+            return internal_err("row without resolved entity reached commit");
+        };
+        let id = Uuid::new_v4();
+        let insert = sqlx::query(
+            r#"INSERT INTO employees
+             (id, tenant_id, entity_id, employee_code, first_name_th, last_name_th,
+              first_name_en, last_name_en, position_title, department, base_salary,
+              hire_date, tax_filing_status, pf_member, sso_enrolled,
+              bank_name, bank_account_number, national_id, sso_number, user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)"#,
+        )
+        .bind(id)
+        .bind(ctx.tenant_id.0)
+        .bind(entity_id)
+        .bind(row.employee_code.trim())
+        .bind(row.first_name_th.trim())
+        .bind(row.last_name_th.trim())
+        .bind(row.first_name_en.as_deref())
+        .bind(row.last_name_en.as_deref())
+        .bind(row.position_title.trim())
+        .bind(row.department.as_deref())
+        .bind(row.base_salary)
+        .bind(row.hire_date)
+        .bind(row.tax_filing_status.unwrap_or(1))
+        .bind(row.pf_member.unwrap_or(false))
+        .bind(row.sso_enrolled.unwrap_or(true))
+        .bind(None::<&str>)
+        .bind(None::<&str>)
+        .bind(None::<&str>)
+        .bind(None::<&str>)
+        .bind(None::<Uuid>)
+        .execute(&mut *tx)
+        .await;
+
+        if let Err(e) = insert {
+            let _ = tx.rollback().await;
+            if is_unique_violation(&e) {
+                return conflict("employee_code already exists for this entity");
+            }
+            return internal_err(&e.to_string());
+        }
+
+        let after = json!({ "employee_code": row.employee_code.trim() });
+        let audit = sqlx::query(
+            r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'employee.import', 'employee', $3, $4)"#,
+        )
+        .bind(ctx.tenant_id.0)
+        .bind(ctx.user_id.0.to_string())
+        .bind(id.to_string())
+        .bind(after)
+        .execute(&mut *tx)
+        .await;
+
+        if let Err(e) = audit {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_err(&e.to_string());
+    }
+
+    (StatusCode::OK, Json(report)).into_response()
 }
 
 /// PUT /api/v1/employees/:id — replaces the editable fields (entity is fixed).
@@ -443,6 +641,57 @@ async fn resolve_entity(
 
 // Same axum trade-off: a ready-to-send response is the error.
 #[allow(clippy::result_large_err)]
+async fn resolve_import_entities(
+    state: &AppState,
+    ctx: &talentos_kernel::TenantContext,
+    rows: &[ImportEmployeeRow],
+) -> Result<(Vec<Option<Uuid>>, Vec<Option<String>>), Response> {
+    let mut tx = state
+        .pool
+        .begin_tenant(ctx.tenant_id)
+        .await
+        .map_err(|e| internal_err(&e.to_string()))?;
+    let active_entities: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM entities WHERE tenant_id = $1 AND is_active")
+            .bind(ctx.tenant_id.0)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| internal_err(&e.to_string()))?;
+    let _ = tx.rollback().await;
+
+    let active_set: std::collections::HashSet<Uuid> = active_entities.iter().copied().collect();
+
+    let default_entity = if let Some(id) = ctx.entity_id {
+        Some(id.0)
+    } else if active_entities.len() == 1 {
+        Some(active_entities[0])
+    } else {
+        None
+    };
+
+    let mut resolved = Vec::with_capacity(rows.len());
+    let mut errors = Vec::with_capacity(rows.len());
+
+    for row in rows {
+        let entity_id = row.entity_id.or(default_entity);
+        let error = if let Some(id) = entity_id {
+            if active_set.contains(&id) {
+                None
+            } else {
+                Some("entity not in tenant".into())
+            }
+        } else {
+            Some("entity_id is required when the token spans multiple entities".into())
+        };
+        resolved.push(entity_id);
+        errors.push(error);
+    }
+
+    Ok((resolved, errors))
+}
+
+// Same axum trade-off: a ready-to-send response is the error.
+#[allow(clippy::result_large_err)]
 async fn ensure_user_in_tenant(
     state: &AppState,
     ctx: &talentos_kernel::TenantContext,
@@ -558,23 +807,104 @@ fn encrypt_field(
     }
 }
 
-fn validate(body: &EmployeeBody) -> Option<String> {
-    if body.employee_code.trim().is_empty() {
+fn validate_fields(
+    employee_code: &str,
+    first_name_th: &str,
+    last_name_th: &str,
+    position_title: &str,
+    base_salary: Decimal,
+    tax_filing_status: Option<i16>,
+) -> Option<String> {
+    if employee_code.trim().is_empty() {
         return Some("employee_code is required".into());
     }
-    if body.first_name_th.trim().is_empty() || body.last_name_th.trim().is_empty() {
+    if first_name_th.trim().is_empty() || last_name_th.trim().is_empty() {
         return Some("first_name_th and last_name_th are required".into());
     }
-    if body.position_title.trim().is_empty() {
+    if position_title.trim().is_empty() {
         return Some("position_title is required".into());
     }
-    if body.base_salary < Decimal::ZERO {
+    if base_salary < Decimal::ZERO {
         return Some("base_salary must be >= 0".into());
     }
-    if !(1..=5).contains(&body.tax_filing_status.unwrap_or(1)) {
+    if !(1..=5).contains(&tax_filing_status.unwrap_or(1)) {
         return Some("tax_filing_status must be 1..=5".into());
     }
     None
+}
+
+fn validate(body: &EmployeeBody) -> Option<String> {
+    validate_fields(
+        &body.employee_code,
+        &body.first_name_th,
+        &body.last_name_th,
+        &body.position_title,
+        body.base_salary,
+        body.tax_filing_status,
+    )
+}
+
+fn validate_import_row(row: &ImportEmployeeRow) -> Vec<String> {
+    let mut errors = Vec::new();
+    if let Some(e) = validate_fields(
+        &row.employee_code,
+        &row.first_name_th,
+        &row.last_name_th,
+        &row.position_title,
+        row.base_salary,
+        row.tax_filing_status,
+    ) {
+        errors.push(e);
+    }
+    errors
+}
+
+fn validate_import_rows(rows: &[ImportEmployeeRow]) -> Vec<ImportRowResult> {
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for row in rows {
+        if !row.employee_code.trim().is_empty() {
+            *counts.entry(row.employee_code.clone()).or_insert(0) += 1;
+        }
+    }
+
+    rows.iter()
+        .enumerate()
+        .map(|(idx, row)| {
+            let mut errors = validate_import_row(row);
+            if counts.get(&row.employee_code).copied().unwrap_or(0) > 1 {
+                errors.push(format!(
+                    "employee_code {} is duplicated in file",
+                    row.employee_code
+                ));
+            }
+            let status = if errors.is_empty() {
+                "valid".to_string()
+            } else {
+                "invalid".to_string()
+            };
+            ImportRowResult {
+                row: idx + 1,
+                employee_code: row.employee_code.clone(),
+                status,
+                errors,
+            }
+        })
+        .collect()
+}
+
+fn report_from_rows(dry_run: bool, rows: Vec<ImportRowResult>) -> ImportReport {
+    let total = rows.len();
+    let invalid = rows.iter().filter(|r| r.status == "invalid").count();
+    let valid = total - invalid;
+    let created = if dry_run || invalid > 0 { 0 } else { valid };
+    ImportReport {
+        dry_run,
+        total,
+        valid,
+        invalid,
+        created,
+        rows,
+    }
 }
 
 fn is_unique_violation(error: &sqlx::Error) -> bool {
@@ -617,4 +947,112 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(code: &str, salary: Decimal, tax: Option<i16>) -> ImportEmployeeRow {
+        ImportEmployeeRow {
+            employee_code: code.into(),
+            first_name_th: "สมชาย".into(),
+            last_name_th: "ใจดี".into(),
+            position_title: "Dev".into(),
+            base_salary: salary,
+            hire_date: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            first_name_en: None,
+            last_name_en: None,
+            department: None,
+            entity_id: None,
+            tax_filing_status: tax,
+            pf_member: None,
+            sso_enrolled: None,
+        }
+    }
+
+    #[test]
+    fn import_detects_duplicate_code_inside_file() {
+        let rows = vec![
+            row("E001", Decimal::ONE, None),
+            row("E001", Decimal::ONE, None),
+        ];
+        let results = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert_eq!(results[1].status, "invalid");
+        assert!(results[1].errors.iter().any(|e| e.contains("duplicated")));
+    }
+
+    #[test]
+    fn import_rejects_blank_employee_code() {
+        let rows = vec![row("  ", Decimal::ONE, None)];
+        let results = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("employee_code is required")));
+    }
+
+    #[test]
+    fn import_rejects_negative_salary() {
+        let rows = vec![row("E002", Decimal::NEGATIVE_ONE, None)];
+        let results = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0].errors.iter().any(|e| e.contains("base_salary")));
+    }
+
+    #[test]
+    fn import_rejects_bad_tax_filing_status() {
+        let rows = vec![row("E003", Decimal::ONE, Some(7))];
+        let results = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("tax_filing_status")));
+    }
+
+    #[test]
+    fn import_valid_rows_pass() {
+        let rows = vec![
+            row("E004", Decimal::ONE, Some(2)),
+            row("E005", Decimal::ZERO, None),
+        ];
+        let results = validate_import_rows(&rows);
+        assert!(results.iter().all(|r| r.status == "valid"));
+    }
+
+    #[test]
+    fn report_counts_are_correct() {
+        let rows = vec![
+            ImportRowResult {
+                row: 1,
+                employee_code: "A".into(),
+                status: "valid".into(),
+                errors: vec![],
+            },
+            ImportRowResult {
+                row: 2,
+                employee_code: "B".into(),
+                status: "invalid".into(),
+                errors: vec!["bad".into()],
+            },
+        ];
+        let report = report_from_rows(true, rows);
+        assert_eq!(report.total, 2);
+        assert_eq!(report.valid, 1);
+        assert_eq!(report.invalid, 1);
+        assert_eq!(report.created, 0);
+        assert!(report.dry_run);
+
+        let rows = vec![ImportRowResult {
+            row: 1,
+            employee_code: "A".into(),
+            status: "valid".into(),
+            errors: vec![],
+        }];
+        let report = report_from_rows(false, rows);
+        assert_eq!(report.created, 1);
+    }
 }

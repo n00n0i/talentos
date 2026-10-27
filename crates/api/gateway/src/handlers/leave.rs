@@ -7,8 +7,10 @@ use axum::{
     Json,
 };
 use chrono::{Datelike, NaiveDate};
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::json;
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
@@ -213,6 +215,158 @@ pub async fn me_cancel(
         )
             .into_response(),
         Err(e) => map_leave_error(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BalanceImportRequestRow {
+    pub employee_code: String,
+    pub leave_type: String,
+    pub year: String,
+    pub total_days: String,
+    pub used_days: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportBalancesBody {
+    #[serde(default)]
+    pub dry_run: bool,
+    pub rows: Vec<BalanceImportRequestRow>,
+}
+
+/// POST /api/v1/leave/balances/import
+pub async fn import_balances(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<ImportBalancesBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_balance", "manage") {
+        return forbidden;
+    }
+
+    let mut service_rows = Vec::with_capacity(body.rows.len());
+    let mut parse_results: Vec<Option<talentos_hr_runner::leave::BalanceImportRowResult>> =
+        Vec::with_capacity(body.rows.len());
+    let mut service_indices: Vec<usize> = Vec::with_capacity(body.rows.len());
+
+    for (idx, raw) in body.rows.iter().enumerate() {
+        let mut errors = Vec::new();
+        let code = raw.employee_code.trim().to_string();
+        let typ = raw.leave_type.trim().to_string();
+
+        if code.is_empty() {
+            errors.push("employee_code is required".into());
+        }
+        if typ.is_empty() {
+            errors.push("leave_type is required".into());
+        }
+
+        let year = match raw.year.trim() {
+            "" => {
+                errors.push("year is required".into());
+                None
+            }
+            s => match s.parse::<i32>() {
+                Ok(y) => Some(y),
+                Err(_) => {
+                    errors.push("year must be an integer".into());
+                    None
+                }
+            },
+        };
+
+        let total_days = parse_decimal_for_import(&raw.total_days, "total_days", &mut errors);
+        let used_days = match raw.used_days.as_deref().map(str::trim) {
+            None | Some("") => Some(Decimal::ZERO),
+            Some(s) => parse_decimal_for_import(s, "used_days", &mut errors),
+        };
+
+        if errors.is_empty() {
+            service_rows.push(talentos_hr_runner::leave::BalanceImportRow {
+                employee_code: code,
+                leave_type: typ,
+                year: year.unwrap_or(0),
+                total_days: total_days.unwrap_or(Decimal::ZERO),
+                used_days,
+            });
+            service_indices.push(idx);
+            parse_results.push(None);
+        } else {
+            parse_results.push(Some(talentos_hr_runner::leave::BalanceImportRowResult {
+                row: idx + 1,
+                employee_code: raw.employee_code.clone(),
+                leave_type: raw.leave_type.clone(),
+                year: year.unwrap_or(0),
+                status: "invalid".into(),
+                errors,
+            }));
+        }
+    }
+
+    let has_parse_errors = parse_results.iter().any(|r| r.is_some());
+    let service_report = if !has_parse_errors {
+        match talentos_hr_runner::leave::import_balances(
+            &state.pool,
+            ctx.tenant_id,
+            body.dry_run,
+            service_rows,
+        )
+        .await
+        {
+            Ok(report) => Some(report),
+            Err(e) => return internal_err(&e.to_string()),
+        }
+    } else {
+        None
+    };
+
+    let mut rows: Vec<talentos_hr_runner::leave::BalanceImportRowResult> =
+        Vec::with_capacity(body.rows.len());
+    let mut service_cursor = 0usize;
+    for parsed in parse_results.iter() {
+        if let Some(parsed) = parsed.clone() {
+            rows.push(parsed);
+        } else {
+            let report = service_report.as_ref().expect("service report available");
+            rows.push(report.rows[service_cursor].clone());
+            service_cursor += 1;
+        }
+    }
+
+    let total = rows.len();
+    let invalid = rows.iter().filter(|r| r.status == "invalid").count();
+    let valid = total - invalid;
+    let created = if body.dry_run || invalid > 0 {
+        0
+    } else {
+        valid
+    };
+
+    let report = talentos_hr_runner::leave::BalanceImportReport {
+        dry_run: body.dry_run,
+        total,
+        valid,
+        invalid,
+        created,
+        rows,
+    };
+
+    (StatusCode::OK, Json(report)).into_response()
+}
+
+fn parse_decimal_for_import(value: &str, field: &str, errors: &mut Vec<String>) -> Option<Decimal> {
+    match value.trim() {
+        "" => {
+            errors.push(format!("{field} is required"));
+            None
+        }
+        s => match Decimal::from_str(s) {
+            Ok(d) => Some(d),
+            Err(_) => {
+                errors.push(format!("{field} must be a number"));
+                None
+            }
+        },
     }
 }
 

@@ -471,3 +471,34 @@ test("multi-level leave approval chain", async ({ page }) => {
   await page.getByTestId("save-policy").click();
   await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
 });
+
+test("HR imports opening leave balance and employee sees quota", async ({ page }) => {
+  async function loginAs(email: string, password: string) {
+    await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
+    await page.getByLabel("องค์กร").fill("e2e");
+    await page.getByLabel("อีเมล").fill(email);
+    await page.getByLabel("รหัสผ่าน").fill(password);
+    await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+    await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+  }
+
+  await login(page);
+  await page.goto("/leave");
+
+  const csv =
+    "employee_code,leave_type,year,total_days,used_days\n" + "E2E001,annual,2026,10,0\n";
+  await page.getByTestId("import-balance-csv").setInputFiles({
+    name: "balances.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csv, "utf-8"),
+  });
+  await page.getByTestId("dry-run-balance-import").click();
+  await expect(page.getByTestId("import-summary")).toContainText("ถูกต้อง 1");
+  await page.getByTestId("confirm-balance-import").click();
+  await expect(page.getByText("นำเข้าโควตาการลา 1 รายการแล้ว")).toBeVisible();
+
+  await loginAs(invitedEmail, "ResetPass123!");
+  await page.goto("/leave");
+  await expect(page.getByText("10 / 10").first()).toBeVisible();
+});

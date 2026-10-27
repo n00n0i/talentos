@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{Datelike, NaiveDate};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -790,6 +792,242 @@ pub async fn employee_of_user(
         .await?;
     tx.commit().await?;
     Ok(row.map(|r| r.get("id")))
+}
+
+/// One row of an opening leave-balance import.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BalanceImportRow {
+    pub employee_code: String,
+    pub leave_type: String,
+    pub year: i32,
+    pub total_days: Decimal,
+    pub used_days: Option<Decimal>,
+}
+
+/// Per-row result for an import report.
+#[derive(Debug, Clone, Serialize)]
+pub struct BalanceImportRowResult {
+    pub row: usize,
+    pub employee_code: String,
+    pub leave_type: String,
+    pub year: i32,
+    pub status: String,
+    pub errors: Vec<String>,
+}
+
+/// Report returned by [`import_balances`].
+#[derive(Debug, Serialize)]
+pub struct BalanceImportReport {
+    pub dry_run: bool,
+    pub total: usize,
+    pub valid: usize,
+    pub invalid: usize,
+    pub created: usize,
+    pub rows: Vec<BalanceImportRowResult>,
+}
+
+/// Import (or dry-run) opening leave balances for a tenant.
+///
+/// Employee codes and leave types are resolved inside the tenant; global
+/// `tenant_id IS NULL` leave types are allowed. The whole file is all-or-nothing:
+/// any invalid row causes `created: 0` and leaves the database untouched.
+pub async fn import_balances(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    dry_run: bool,
+    rows: Vec<BalanceImportRow>,
+) -> Result<BalanceImportReport, LeaveError> {
+    let total = rows.len();
+
+    // Resolve employees and leave types in a single round-trip each.
+    let mut resolve_tx = pool.begin_tenant(tenant_id).await?;
+
+    let mut employee_map: HashMap<String, Uuid> = HashMap::new();
+    let codes: Vec<String> = rows
+        .iter()
+        .map(|r| r.employee_code.trim().to_string())
+        .filter(|c| !c.is_empty())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    if !codes.is_empty() {
+        let employees = sqlx::query(
+            "SELECT id, employee_code FROM employees WHERE tenant_id = $1 AND employee_code = ANY($2)",
+        )
+        .bind(tenant_id.0)
+        .bind(&codes)
+        .fetch_all(&mut *resolve_tx)
+        .await?;
+        for row in employees {
+            let code: String = row.try_get("employee_code")?;
+            let id: Uuid = row.try_get("id")?;
+            employee_map.insert(code, id);
+        }
+    }
+
+    let mut leave_type_map: HashMap<String, i32> = HashMap::new();
+    let type_names: Vec<String> = rows
+        .iter()
+        .map(|r| r.leave_type.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .collect();
+    if !type_names.is_empty() {
+        let types = sqlx::query(
+            "SELECT id, name, tenant_id FROM leave_types WHERE name = ANY($1) AND (tenant_id IS NULL OR tenant_id = $2)",
+        )
+        .bind(&type_names)
+        .bind(tenant_id.0)
+        .fetch_all(&mut *resolve_tx)
+        .await?;
+        // Prefer tenant-specific types over global defaults.
+        let mut chosen: HashMap<String, (bool, i32)> = HashMap::new();
+        for row in types {
+            let id: i32 = row.try_get("id")?;
+            let name: String = row.try_get("name")?;
+            let is_tenant: bool = row.try_get::<Option<Uuid>, _>("tenant_id")?.is_some();
+            let entry = chosen.entry(name).or_insert((false, id));
+            if is_tenant {
+                entry.0 = true;
+                entry.1 = id;
+            }
+        }
+        for (name, (_, id)) in chosen {
+            leave_type_map.insert(name, id);
+        }
+    }
+
+    let _ = resolve_tx.rollback().await;
+
+    // Detect duplicates by (employee_code, leave_type, year) inside the file.
+    let mut occurrences: HashMap<(String, String, i32), Vec<usize>> = HashMap::new();
+    for (idx, row) in rows.iter().enumerate() {
+        let code = row.employee_code.trim();
+        let typ = row.leave_type.trim();
+        if !code.is_empty() && !typ.is_empty() {
+            occurrences
+                .entry((code.to_string(), typ.to_string(), row.year))
+                .or_default()
+                .push(idx);
+        }
+    }
+    let duplicates: std::collections::HashSet<(String, String, i32)> = occurrences
+        .iter()
+        .filter(|(_, indices)| indices.len() > 1)
+        .map(|(key, _)| key.clone())
+        .collect();
+
+    let mut row_results = Vec::with_capacity(total);
+    let mut parsed: Vec<Option<(Uuid, i32, Decimal, Decimal)>> = Vec::with_capacity(total);
+    let mut invalid = 0usize;
+
+    for (idx, row) in rows.iter().enumerate() {
+        let mut errors = Vec::new();
+        let code = row.employee_code.trim();
+        let typ = row.leave_type.trim();
+
+        if code.is_empty() {
+            errors.push("employee_code is required".into());
+        }
+        if typ.is_empty() {
+            errors.push("leave_type is required".into());
+        }
+        if !(2000..=2100).contains(&row.year) {
+            errors.push("year must be between 2000 and 2100".into());
+        }
+        if row.total_days < Decimal::ZERO {
+            errors.push("total_days must be >= 0".into());
+        }
+        if row.total_days > Decimal::from(366) {
+            errors.push("total_days must be <= 366".into());
+        }
+        let used = row.used_days.unwrap_or(Decimal::ZERO);
+        if used < Decimal::ZERO {
+            errors.push("used_days must be >= 0".into());
+        }
+        if used > row.total_days {
+            errors.push("used_days must not exceed total_days".into());
+        }
+        if duplicates.contains(&(code.to_string(), typ.to_string(), row.year)) {
+            errors.push(format!(
+                "duplicate row for ({}, {}, {}) in file",
+                code, typ, row.year
+            ));
+        }
+        if !code.is_empty() && !employee_map.contains_key(code) {
+            errors.push(format!("employee_code {} not found", code));
+        }
+        if !typ.is_empty() && !leave_type_map.contains_key(typ) {
+            errors.push(format!("leave_type {} not found", typ));
+        }
+
+        let status = if errors.is_empty() {
+            "valid"
+        } else {
+            invalid += 1;
+            "invalid"
+        };
+
+        parsed.push(if errors.is_empty() {
+            Some((
+                employee_map[code],
+                leave_type_map[typ],
+                row.total_days,
+                used,
+            ))
+        } else {
+            None
+        });
+
+        row_results.push(BalanceImportRowResult {
+            row: idx + 1,
+            employee_code: row.employee_code.clone(),
+            leave_type: row.leave_type.clone(),
+            year: row.year,
+            status: status.into(),
+            errors,
+        });
+    }
+
+    let valid = total - invalid;
+    let created = if dry_run || invalid > 0 { 0 } else { valid };
+
+    if !dry_run && invalid == 0 && valid > 0 {
+        let mut tx = pool.begin_tenant(tenant_id).await?;
+        for (idx, maybe) in parsed.iter().enumerate() {
+            let Some((employee_id, leave_type_id, total_days, used_days)) = maybe else {
+                continue;
+            };
+            sqlx::query(
+                r#"INSERT INTO leave_balances
+                     (tenant_id, employee_id, leave_type_id, year, total_days, used_days)
+                   VALUES ($1, $2, $3, $4, $5, $6)
+                   ON CONFLICT (employee_id, leave_type_id, year)
+                   DO UPDATE SET total_days = EXCLUDED.total_days,
+                                 used_days = EXCLUDED.used_days,
+                                 updated_at = now()"#,
+            )
+            .bind(tenant_id.0)
+            .bind(employee_id)
+            .bind(leave_type_id)
+            .bind(rows[idx].year)
+            .bind(total_days)
+            .bind(used_days)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+    }
+
+    Ok(BalanceImportReport {
+        dry_run,
+        total,
+        valid,
+        invalid,
+        created,
+        rows: row_results,
+    })
 }
 
 /// Coerce a missing or invalid chain to the safe one-step HR default.

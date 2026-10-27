@@ -39,15 +39,41 @@ pub struct EmployeeQuery {
     pub status: Option<String>,
 }
 
+/// Employees may only submit for their own linked employee; submitting for
+/// another employee requires team/HR view permission.
+#[allow(clippy::result_large_err)]
+fn authorize_create_for_employee(
+    ctx: &talentos_kernel::TenantContext,
+    requested: Option<Uuid>,
+    own_employee: Option<Uuid>,
+) -> Result<(), Response> {
+    require(ctx, "leave_request", "submit_self")?;
+    if let Some(requested_employee) = requested {
+        let own_employee = own_employee.ok_or_else(forbidden_self_only)?;
+        if requested_employee != own_employee {
+            require(ctx, "leave_request", "view_team")?;
+        }
+    }
+    Ok(())
+}
+
 /// POST /api/v1/leave/requests — create a request for self (or a given employee).
 pub async fn create(
     State(state): State<AppState>,
     Authed(ctx): Authed,
     Json(body): Json<CreateLeaveBody>,
 ) -> Response {
-    if let Err(forbidden) = require(&ctx, "leave_request", "submit_self") {
+    let own_employee =
+        match talentos_hr_runner::employee_of_user(&state.pool, ctx.tenant_id, ctx.user_id.0).await
+        {
+            Ok(id) => id,
+            Err(e) => return internal_err(&e.to_string()),
+        };
+
+    if let Err(forbidden) = authorize_create_for_employee(&ctx, body.employee_id, own_employee) {
         return forbidden;
     }
+
     let input = talentos_hr_runner::LeaveInput {
         leave_type: body.leave_type,
         start_date: body.start_date,
@@ -134,7 +160,9 @@ pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Res
             Err(e) => return internal_err(&e.to_string()),
         };
 
-    let year = chrono::Utc::now().year();
+    let year = chrono::Utc::now()
+        .with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap())
+        .year();
     let balances = match talentos_hr_runner::list_balances(
         &state.pool,
         ctx.tenant_id,
@@ -245,6 +273,17 @@ pub async fn decide(
     }
 }
 
+fn forbidden_self_only() -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(envelope(
+            "forbidden",
+            "you can only submit leave for your own employee record",
+        )),
+    )
+        .into_response()
+}
+
 fn envelope(code: &str, message: &str) -> ErrorResponse {
     ErrorResponse {
         error: code.into(),
@@ -308,4 +347,51 @@ fn internal_err(message: &str) -> Response {
         Json(envelope("internal_error", "An unexpected error occurred")),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use talentos_kernel::{TenantContext, TenantId, UserId};
+    use uuid::Uuid;
+
+    fn ctx_with_roles(roles: &[&str]) -> TenantContext {
+        TenantContext {
+            tenant_id: TenantId(Uuid::new_v4()),
+            entity_id: None,
+            user_id: UserId(Uuid::new_v4()),
+            roles: roles.iter().map(|r| r.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn employee_can_create_for_self() {
+        let own = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["employee"]);
+        assert!(authorize_create_for_employee(&ctx, None, Some(own)).is_ok());
+        assert!(authorize_create_for_employee(&ctx, Some(own), Some(own)).is_ok());
+    }
+
+    #[test]
+    fn employee_cannot_create_for_another_employee() {
+        let own = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["employee"]);
+        assert!(authorize_create_for_employee(&ctx, Some(other), Some(own)).is_err());
+    }
+
+    #[test]
+    fn manager_can_create_for_another_employee() {
+        let own = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["manager"]);
+        assert!(authorize_create_for_employee(&ctx, Some(other), Some(own)).is_ok());
+    }
+
+    #[test]
+    fn unlinked_employee_cannot_create_for_another() {
+        let other = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["employee"]);
+        assert!(authorize_create_for_employee(&ctx, Some(other), None).is_err());
+    }
 }

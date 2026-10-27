@@ -154,6 +154,7 @@ async fn linked_user_sees_only_own_balances_and_requests() {
         .await
         .expect("balances");
     let annual = balances.iter().find(|b| b.leave_type == "annual").unwrap();
+    assert!(annual.provisioned);
     assert_eq!(annual.used_days, dec!(2));
     assert_eq!(annual.remaining_days, dec!(4));
 
@@ -174,6 +175,7 @@ async fn linked_user_sees_only_own_balances_and_requests() {
         .iter()
         .find(|b| b.leave_type == "annual")
         .unwrap();
+    assert!(other_annual.provisioned);
     assert_eq!(other_annual.used_days, dec!(0));
     assert_eq!(other_annual.remaining_days, dec!(6));
 
@@ -181,6 +183,60 @@ async fn linked_user_sees_only_own_balances_and_requests() {
         .await
         .expect("requests");
     assert!(other_requests.is_empty());
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn unprovisioned_balance_shows_default_total_and_not_provisioned() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+    let year = 2026;
+
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+
+    // No leave_balances row seeded: the view should report the default total
+    // from leave_types and provisioned=false.
+    let balances = list_balances(&pool, tenant, entities[0].1, year)
+        .await
+        .expect("balances");
+    let annual = balances.iter().find(|b| b.leave_type == "annual").unwrap();
+    assert!(!annual.provisioned);
+    assert_eq!(annual.total_days, dec!(6));
+    assert_eq!(annual.used_days, dec!(0));
+    assert_eq!(annual.remaining_days, dec!(6));
+
+    // Creating a request is still allowed and does not debit (no balance row).
+    create_request(
+        &pool,
+        tenant,
+        user_id,
+        LeaveInput {
+            leave_type: "annual".into(),
+            start_date: d(2026, 10, 5),
+            end_date: d(2026, 10, 6),
+            reason: Some("unprovisioned".into()),
+            employee_id: None,
+        },
+    )
+    .await
+    .expect("create request without balance row");
+
+    let balances_after = list_balances(&pool, tenant, entities[0].1, year)
+        .await
+        .expect("balances after");
+    let annual_after = balances_after
+        .iter()
+        .find(|b| b.leave_type == "annual")
+        .unwrap();
+    assert!(!annual_after.provisioned);
+    assert_eq!(annual_after.used_days, dec!(0));
 
     cleanup(&raw, tenant_id).await;
 }
@@ -200,6 +256,51 @@ async fn unlinked_user_gets_empty_balances_and_requests() {
         .await
         .unwrap();
     assert!(linked.is_none());
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn concurrent_create_prevents_overspending() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    // Two separate connections so the requests truly race.
+    let pool_a = TenantPool::connect(&url, 2).await.expect("tenant pool a");
+    let pool_b = TenantPool::connect(&url, 2).await.expect("tenant pool b");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+    let year = 2026;
+    let annual_id = leave_type_id(&raw, tenant_id, "annual").await;
+    seed_balance(&raw, tenant_id, entities[0].1, annual_id, year, dec!(2)).await;
+
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let input = LeaveInput {
+        leave_type: "annual".into(),
+        start_date: d(2026, 10, 10),
+        end_date: d(2026, 10, 11),
+        reason: None,
+        employee_id: None,
+    };
+
+    let (a, b) = tokio::join!(
+        create_request(&pool_a, tenant, user_id, input.clone()),
+        create_request(&pool_b, tenant, user_id, input.clone())
+    );
+
+    let successes = [a.is_ok(), b.is_ok()];
+    assert_eq!(
+        successes.iter().filter(|&&x| x).count(),
+        1,
+        "exactly one concurrent request should succeed"
+    );
+
+    assert_eq!(
+        used_days(&raw, tenant_id, entities[0].1, annual_id, year).await,
+        dec!(2)
+    );
 
     cleanup(&raw, tenant_id).await;
 }
@@ -544,6 +645,7 @@ async fn hr_inbox_lists_pending_with_code_and_name() {
     assert_eq!(inbox[0].employee_code, "EMP000");
     assert_eq!(inbox[0].employee_name, "ทดสอบ พนักงาน");
     assert_eq!(inbox[0].leave_type, "annual");
+    assert_eq!(inbox[0].label_th, "ลาพักร้อน");
     assert_eq!(inbox[0].days, dec!(2));
     assert_eq!(inbox[0].reason.as_deref(), Some("vacation"));
 

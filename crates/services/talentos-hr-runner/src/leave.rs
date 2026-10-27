@@ -45,7 +45,7 @@ pub enum LeaveError {
     Db(#[from] sqlx::Error),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct LeaveInput {
     pub leave_type: String,
     pub start_date: NaiveDate,
@@ -74,6 +74,8 @@ pub struct LeaveBalanceView {
     pub total_days: Decimal,
     pub used_days: Decimal,
     pub remaining_days: Decimal,
+    /// True when HR has provisioned a leave_balances row for this employee/year.
+    pub provisioned: bool,
 }
 
 /// Calendar days inclusive: 1 Oct → 3 Oct is 3 days.
@@ -102,11 +104,14 @@ pub async fn create_request(
     let mut tx = pool.begin_tenant(tenant_id).await?;
 
     // Resolve employee + ensure active in this tenant (RLS already scopes rows).
+    // Lock the row to serialize concurrent creates for the same employee and
+    // prevent double-spending the balance.
     let employee = sqlx::query(
         r#"SELECT id, entity_id, status FROM employees
            WHERE tenant_id = $1
              AND ($2::uuid IS NOT NULL AND id = $2::uuid OR $2::uuid IS NULL AND user_id = $3)
-           LIMIT 1"#,
+           LIMIT 1
+           FOR UPDATE"#,
     )
     .bind(tenant_id.0)
     .bind(input.employee_id)
@@ -245,7 +250,8 @@ pub async fn list_balances(
     let rows = sqlx::query(
         r#"SELECT lt.name AS leave_type, lt.label_th,
                   COALESCE(lb.total_days, lt.max_days_per_year) AS total_days,
-                  COALESCE(lb.used_days, 0) AS used_days
+                  COALESCE(lb.used_days, 0) AS used_days,
+                  (lb.id IS NOT NULL) AS provisioned
            FROM leave_types lt
            LEFT JOIN leave_balances lb
              ON lb.leave_type_id = lt.id AND lb.employee_id = $1 AND lb.year = $2
@@ -269,6 +275,7 @@ pub async fn list_balances(
                 total_days: total,
                 used_days: used,
                 remaining_days: total - used,
+                provisioned: row.try_get("provisioned")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()
@@ -323,6 +330,7 @@ pub struct PendingLeave {
     pub employee_code: String,
     pub employee_name: String,
     pub leave_type: String,
+    pub label_th: String,
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
     pub days: Decimal,
@@ -493,9 +501,11 @@ pub async fn pending_approvals(
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let rows = sqlx::query(
         r#"SELECT lr.id, lr.employee_id, e.employee_code, e.first_name_th, e.last_name_th,
-                  lr.leave_type, lr.start_date, lr.end_date, lr.days, lr.reason
+                  lr.leave_type, lt.label_th, lr.start_date, lr.end_date, lr.days, lr.reason
            FROM leave_requests lr
            JOIN employees e ON e.id = lr.employee_id
+           JOIN leave_types lt ON lt.name = lr.leave_type
+                              AND (lt.tenant_id IS NULL OR lt.tenant_id = lr.tenant_id)
            WHERE lr.tenant_id = $1 AND lr.status = 'pending'
            ORDER BY lr.created_at DESC
            LIMIT 200"#,
@@ -517,6 +527,7 @@ pub async fn pending_approvals(
                     row.try_get::<String, _>("last_name_th")?
                 ),
                 leave_type: row.try_get("leave_type")?,
+                label_th: row.try_get("label_th")?,
                 start_date: row.try_get("start_date")?,
                 end_date: row.try_get("end_date")?,
                 days: row.try_get("days")?,

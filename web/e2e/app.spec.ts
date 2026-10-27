@@ -292,3 +292,37 @@ test("employee requests leave, HR approves it", async ({ page }) => {
   await page.goto("/leave");
   await expect(page.getByTestId("leave-row").filter({ hasText: "ธ.ค. 2569" })).toContainText("อนุมัติแล้ว");
 });
+
+test("HR bulk-imports employees from a CSV", async ({ page }) => {
+  await login(page);
+  await page.goto("/employees");
+  const csv =
+    "employee_code,first_name_th,last_name_th,position_title,department,base_salary,hire_date\n" +
+    'E2E-IMP-1,นำเข้า,"ทดสอบ, ซีเอสวี",นักพัฒนา,ไอที,25000.00,2026-10-01\n';
+  await page.getByTestId("import-csv").setInputFiles({
+    name: "employees.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csv, "utf-8"),
+  });
+  await page.getByTestId("dry-run-import").click();
+  await expect(page.getByTestId("import-summary")).toContainText("ถูกต้อง 1");
+  await page.getByTestId("confirm-import").click();
+  await expect(page.getByText("นำเข้าพนักงาน 1 รายการแล้ว")).toBeVisible();
+  await expect(page.getByRole("row", { name: /E2E-IMP-1/ })).toBeVisible();
+
+  const bad =
+    "employee_code,first_name_th,last_name_th,position_title,base_salary,hire_date\n" +
+    "E2E-IMP-BAD,ผิด,พลาด,นักพัฒนา,abc,2026-10-01\n";
+  await page.getByTestId("import-csv").setInputFiles({
+    name: "bad.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(bad, "utf-8"),
+  });
+  await page.getByTestId("dry-run-import").click();
+  await expect(page.getByTestId("import-summary")).toContainText("ผิดพลาด 1");
+  await expect(page.getByTestId("import-row")).toContainText("base_salary ต้องเป็นตัวเลข");
+  await expect(page.getByTestId("confirm-import")).toBeDisabled();
+  await expect(
+    page.locator('tr:not([data-testid="import-row"])').filter({ hasText: "E2E-IMP-BAD" }),
+  ).toHaveCount(0);
+});

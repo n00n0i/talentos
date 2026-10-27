@@ -220,6 +220,7 @@ trusted network.
 
 ```
 GET/POST   /api/v1/employees            list / create
+POST       /api/v1/employees/import     CSV rows, {dry_run, rows} → per-row report
 GET/PUT/DELETE /api/v1/employees/:id    detail / update / soft-terminate
 GET        /api/v1/users                accounts + roles
 POST       /api/v1/users/invite         one-time invite link (no email service)
@@ -236,6 +237,15 @@ Invitations are hashed, single-use and expire in 7 days. HR copies
 Password resets work the same way: HR issues `/reset/<token>` (1 hour, single
 use) and the user sets a new password; every refresh token for that user is
 revoked.
+
+`POST /api/v1/employees/import` takes `{dry_run, rows}` where each row carries
+the CSV text fields (`employee_code`, Thai first/last name, position, salary,
+hire date, and optional department/English names/tax/SSO/PF flags). A dry run
+validates only; a commit inserts every row in one transaction or nothing when
+any row is invalid. The `/employees` page parses the CSV in the browser, shows
+the per-row report, and enables the commit only when the file is clean.
+Duplicate codes (in the file or per entity) and foreign entities are reported
+on the row. PII (national id, bank account, SSO number) is not imported in v1.
 
 An employee can be linked to a login account from the employee form. That user
 then sees only their own payslips at `/me/payslips`

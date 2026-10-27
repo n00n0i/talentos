@@ -42,6 +42,7 @@ pub fn build(state: AppState) -> Router {
                 .put(employees::update)
                 .delete(employees::terminate),
         )
+        .route("/api/v1/employees/import", post(employees::import))
         .route(
             "/api/v1/settings/payroll",
             get(settings::get_payroll).put(settings::put_payroll),

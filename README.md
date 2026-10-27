@@ -89,6 +89,25 @@ works); back it up with the database.
 
 Optional, for the AI surface: `HUAKATI_API_KEY`, `HUAKATI_API_BASE`.
 
+### Notifications
+
+Leave submissions/decisions and approved payroll runs write rows to the
+`notifications` outbox in the same transaction as the change. A gateway worker
+delivers them:
+
+```bash
+export EMAIL_API_KEY=...            # Resend-compatible HTTP API
+export EMAIL_FROM=hr@example.com
+export LINE_CHANNEL_TOKEN=...       # LINE Messaging API push
+# EMAIL_API_BASE / LINE_API_BASE override the provider host (tests use a stub).
+```
+
+Email always goes to the user's address; LINE only when the user has a
+`line_user_id` (set per user on `/users`). With no credentials the worker is
+idle and rows stay `pending`; a send failure is retried up to 3 times before
+`failed`. Delivery is at-least-once, so a crash after a send can duplicate one
+message. Invitations and password resets remain copy-the-link flows.
+
 Payslip PDFs need headless Chromium and a Thai font: set `CHROME_BIN`
 (default `chromium-browser`) and `PAYSLIP_STORE_DIR`. Without a renderer the
 `/pdf` endpoint returns 503 instead of producing a broken file.

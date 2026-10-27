@@ -61,7 +61,7 @@ pub enum AttendanceError {
     NoGeofence,
     #[error("outside geofence: {distance}m > {allowed}m")]
     OutsideGeofence { distance: f64, allowed: f64 },
-    #[error("employee not linked to this tenant")]
+    #[error("no employee is linked to this user")]
     EmployeeNotLinked,
     #[error("no shift assigned")]
     NoShift,
@@ -288,6 +288,10 @@ pub async fn punch_at(
     let employee = employee.ok_or(AttendanceError::EmployeeNotLinked)?;
     let employee_id: Uuid = employee.try_get("id")?;
     let entity_id: Uuid = employee.try_get("entity_id")?;
+
+    if input.accuracy_m.is_some_and(|a| a < 0.0) {
+        return Err(AttendanceError::InvalidImport);
+    }
 
     let (work_date, shift) = resolve_work_date(&mut tx, employee_id, occurred_at).await?;
     let shift = shift.ok_or(AttendanceError::NoShift)?;

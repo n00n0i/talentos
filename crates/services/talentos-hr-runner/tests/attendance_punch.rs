@@ -2,7 +2,7 @@
 //!
 //! Skips when DATABASE_URL is unset so `cargo test` passes offline.
 
-use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, TimeZone, Utc};
 use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
 use talentos_hr_runner::attendance::{
@@ -416,6 +416,104 @@ async fn holiday_punch_marks_day_holiday() {
 }
 
 #[tokio::test]
+async fn two_punches_same_second_stay_consistent() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
+        .await
+        .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(9, 0),
+        bkk_time(18, 0),
+    )
+    .await;
+
+    let same_time = utc(2026, 10, 27, 2, 0);
+    let input_in = PunchInput {
+        kind: talentos_attendance::PunchKind::In,
+        lat: OFFICE_LAT,
+        lng: OFFICE_LNG,
+        accuracy_m: Some(10.0),
+    };
+    let input_out = PunchInput {
+        kind: talentos_attendance::PunchKind::Out,
+        lat: OFFICE_LAT,
+        lng: OFFICE_LNG,
+        accuracy_m: Some(10.0),
+    };
+
+    let first = punch_at(&pool, TenantId(tenant_id), user_id, input_in, same_time)
+        .await
+        .expect("first same-second punch");
+    let second = punch_at(&pool, TenantId(tenant_id), user_id, input_out, same_time)
+        .await
+        .expect("second same-second punch");
+
+    // Both punches happened at the same instant; worked minutes should be 0
+    // (in and out at the same time) and the day must stay consistent.
+    assert_eq!(first.worked_minutes, 0);
+    assert_eq!(second.worked_minutes, 0);
+    assert_eq!(second.ot_kind, "weekday");
+
+    let count = event_count(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await;
+    assert_eq!(count, 2, "two distinct events should exist");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn negative_accuracy_is_rejected() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
+        .await
+        .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(9, 0),
+        bkk_time(18, 0),
+    )
+    .await;
+
+    let input = PunchInput {
+        kind: talentos_attendance::PunchKind::In,
+        lat: OFFICE_LAT,
+        lng: OFFICE_LNG,
+        accuracy_m: Some(-10.0),
+    };
+    let result = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 2, 0)).await;
+    assert!(
+        matches!(result, Err(AttendanceError::InvalidImport)),
+        "expected InvalidImport for negative accuracy, got {result:?}"
+    );
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
 async fn new_punch_resets_approved_day_to_pending() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
@@ -476,6 +574,38 @@ async fn new_punch_resets_approved_day_to_pending() {
     );
 
     cleanup(&raw, tenant_id).await;
+}
+
+async fn event_count(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid, date: NaiveDate) -> i64 {
+    let bkk = chrono::FixedOffset::east_opt(7 * 60 * 60).unwrap();
+    let start = bkk
+        .with_ymd_and_hms(date.year(), date.month(), date.day(), 0, 0, 0)
+        .unwrap()
+        .with_timezone(&Utc);
+    let end = bkk
+        .with_ymd_and_hms(date.year(), date.month(), date.day(), 23, 59, 59)
+        .unwrap()
+        .with_timezone(&Utc);
+
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query(
+        "SELECT count(*)::int8 FROM attendance_events
+          WHERE tenant_id = $1 AND employee_id = $2 AND occurred_at BETWEEN $3 AND $4",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .bind(start)
+    .bind(end)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("count events");
+    let _ = tx.rollback().await;
+    row.get::<i64, _>(0)
 }
 
 async fn user_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {

@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use rust_decimal::Decimal;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
 pub fn database_url() -> Option<String> {
@@ -12,6 +12,22 @@ pub fn database_url() -> Option<String> {
 
 pub fn admin_database_url() -> Option<String> {
     std::env::var("DATABASE_ADMIN_URL").ok()
+}
+
+pub async fn user_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query("SELECT user_id FROM employees WHERE id = $1")
+        .bind(employee_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("fetch user_id");
+    let _ = tx.rollback().await;
+    row.get("user_id")
 }
 
 /// Seed a tenant + entity + one employee using the tenant GUC.

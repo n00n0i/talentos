@@ -171,7 +171,7 @@ async fn main() {
                 .await
                 {
                     Ok(0) => {}
-                    Ok(n) => tracing::info!(count = n, "notifications delivered"),
+                    Ok(n) => tracing::info!(count = n, "notifications processed"),
                     Err(e) => tracing::warn!(error = %e, "notification delivery sweep failed"),
                 }
             }

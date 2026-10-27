@@ -15,26 +15,12 @@ use talentos_kernel::TenantId;
 use uuid::Uuid;
 
 mod common;
-use common::{cleanup, database_url, ensure_role, seed_tenant_entities, set_line_user_id};
+use common::{
+    cleanup, database_url, ensure_role, seed_tenant_entities, set_line_user_id, user_id_of,
+};
 
 fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
-}
-
-async fn user_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
-    let mut tx = pool.begin().await.expect("begin");
-    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
-        .bind(tenant_id.to_string())
-        .execute(&mut *tx)
-        .await
-        .expect("set tenant");
-    let row = sqlx::query("SELECT user_id FROM employees WHERE id = $1")
-        .bind(employee_id)
-        .fetch_one(&mut *tx)
-        .await
-        .expect("fetch user_id");
-    let _ = tx.rollback().await;
-    row.get("user_id")
 }
 
 async fn leave_type_id(pool: &PgPool, tenant_id: Uuid, name: &str) -> i32 {

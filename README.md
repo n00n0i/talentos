@@ -116,12 +116,28 @@ POST /api/v1/leave/requests              {leave_type, start_date, end_date, reas
 GET  /api/v1/leave/balances?employee_id= &year=
 GET  /api/v1/leave/requests?employee_id= &status=
 POST /api/v1/leave/requests/:id/decision {approve: bool, reason?}
+GET  /api/v1/me/leave
+POST /api/v1/me/leave/:id/cancel
+GET  /api/v1/leave/approvals
 ```
 
 Days are always computed server-side (calendar days inclusive). A request that
 overlaps an existing pending/approved leave is rejected with 409; exceeding the
 provisioned balance returns 422. `employee_id` defaults to the caller's own
 employee record.
+
+Employee self-service lives at `/leave`: `GET /api/v1/me/leave` returns the
+linked employee's current-year balances and request history, or an empty result
+when no employee is linked. Employees cancel their own pending request with
+`POST /api/v1/me/leave/:id/cancel`; only `pending` requests can be cancelled.
+HR/managers use `GET /api/v1/leave/approvals` as the pending inbox and
+`POST /api/v1/leave/requests/:id/decision` to approve or reject.
+
+Balance accounting is tied to status transitions: a pending request debits
+`used_days`, cancel or reject restores it, and approve keeps it debited. Legacy
+pending rows created before the `balance_debited` flag was introduced are left
+untouched. The `/leave` page and the available leave types are driven by the
+employee's `leave_balances` for the current year.
 
 ## Custom payslip
 

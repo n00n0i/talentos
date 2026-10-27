@@ -124,8 +124,11 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/settings/entities/:id/geofence",
             axum::routing::put(attendance::set_geofence),
         )
+        .route("/api/v1/me/leave", get(leave::me_leave))
+        .route("/api/v1/me/leave/:id/cancel", post(leave::me_cancel))
         .route("/api/v1/leave/balances", get(leave::balances))
         .route("/api/v1/leave/requests/:id/decision", post(leave::decide))
+        .route("/api/v1/leave/approvals", get(leave::approvals))
         .route("/api/v1/ai/tools", get(ai::list_tools))
         .route("/api/v1/graphql", post(graphql::execute))
         .route(

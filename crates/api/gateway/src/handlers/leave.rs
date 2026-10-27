@@ -8,6 +8,7 @@ use axum::{
 };
 use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
@@ -38,15 +39,42 @@ pub struct EmployeeQuery {
     pub status: Option<String>,
 }
 
+/// Employees may only submit for their own linked employee; submitting for
+/// another employee requires team/HR view permission.
+#[allow(clippy::result_large_err)]
+fn authorize_create_for_employee(
+    ctx: &talentos_kernel::TenantContext,
+    requested: Option<Uuid>,
+    own_employee: Option<Uuid>,
+) -> Result<(), Response> {
+    require(ctx, "leave_request", "submit_self")?;
+    // Submitting for someone else needs team/HR rights. An unlinked HR account
+    // has no own employee record and must still be allowed through view_team.
+    if let Some(requested_employee) = requested {
+        if own_employee != Some(requested_employee) {
+            require(ctx, "leave_request", "view_team")?;
+        }
+    }
+    Ok(())
+}
+
 /// POST /api/v1/leave/requests — create a request for self (or a given employee).
 pub async fn create(
     State(state): State<AppState>,
     Authed(ctx): Authed,
     Json(body): Json<CreateLeaveBody>,
 ) -> Response {
-    if let Err(forbidden) = require(&ctx, "leave_request", "submit_self") {
+    let own_employee =
+        match talentos_hr_runner::employee_of_user(&state.pool, ctx.tenant_id, ctx.user_id.0).await
+        {
+            Ok(id) => id,
+            Err(e) => return internal_err(&e.to_string()),
+        };
+
+    if let Err(forbidden) = authorize_create_for_employee(&ctx, body.employee_id, own_employee) {
         return forbidden;
     }
+
     let input = talentos_hr_runner::LeaveInput {
         leave_type: body.leave_type,
         start_date: body.start_date,
@@ -58,27 +86,7 @@ pub async fn create(
     match talentos_hr_runner::create_request(&state.pool, ctx.tenant_id, ctx.user_id.0, input).await
     {
         Ok(view) => (StatusCode::CREATED, Json(view)).into_response(),
-        Err(talentos_hr_runner::LeaveError::Overlap(s, e)) => {
-            conflict(&format!("overlaps an existing leave from {s} to {e}"))
-        }
-        Err(e @ talentos_hr_runner::LeaveError::InsufficientBalance { .. }) => {
-            unprocessable(&e.to_string())
-        }
-        Err(
-            e @ (talentos_hr_runner::LeaveError::UnknownType
-            | talentos_hr_runner::LeaveError::BadRange
-            | talentos_hr_runner::LeaveError::TooLong),
-        ) => unprocessable(&e.to_string()),
-        Err(talentos_hr_runner::LeaveError::EmployeeNotFound)
-        | Err(talentos_hr_runner::LeaveError::NotActive) => (
-            StatusCode::FORBIDDEN,
-            Json(envelope(
-                "forbidden",
-                "no active employee record for this account",
-            )),
-        )
-            .into_response(),
-        Err(e) => internal_err(&e.to_string()),
+        Err(e) => map_leave_error(e),
     }
 }
 
@@ -101,7 +109,7 @@ pub async fn balances(
 
     match talentos_hr_runner::list_balances(&state.pool, ctx.tenant_id, employee_id, year).await {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(e) => internal_err(&e.to_string()),
+        Err(e) => map_leave_error(e),
     }
 }
 
@@ -130,7 +138,92 @@ pub async fn list(
     .await
     {
         Ok(list) => (StatusCode::OK, Json(list)).into_response(),
-        Err(e) => internal_err(&e.to_string()),
+        Err(e) => map_leave_error(e),
+    }
+}
+
+/// GET /api/v1/me/leave
+pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_request", "view_self") {
+        return forbidden;
+    }
+    let employee_id =
+        match talentos_hr_runner::employee_of_user(&state.pool, ctx.tenant_id, ctx.user_id.0).await
+        {
+            Ok(Some(id)) => id,
+            Ok(None) => {
+                return (
+                    StatusCode::OK,
+                    Json(json!({ "employee_linked": false, "balances": [], "requests": [] })),
+                )
+                    .into_response()
+            }
+            Err(e) => return internal_err(&e.to_string()),
+        };
+
+    // Thai business year (UTC+7) without a panic-prone offset conversion.
+    let year = (chrono::Utc::now() + chrono::Duration::hours(7)).year();
+    let balances = match talentos_hr_runner::list_balances(
+        &state.pool,
+        ctx.tenant_id,
+        employee_id,
+        year,
+    )
+    .await
+    {
+        Ok(list) => list,
+        Err(e) => return map_leave_error(e),
+    };
+    let requests = match talentos_hr_runner::list_requests(
+        &state.pool,
+        ctx.tenant_id,
+        employee_id,
+        None,
+    )
+    .await
+    {
+        Ok(list) => list,
+        Err(e) => return map_leave_error(e),
+    };
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "employee_linked": true,
+            "balances": balances,
+            "requests": requests,
+        })),
+    )
+        .into_response()
+}
+
+/// POST /api/v1/me/leave/:id/cancel
+pub async fn me_cancel(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_request", "submit_self") {
+        return forbidden;
+    }
+    match talentos_hr_runner::cancel_request(&state.pool, ctx.tenant_id, ctx.user_id.0, id).await {
+        Ok(status) => (
+            StatusCode::OK,
+            Json(json!({ "request_id": id.to_string(), "status": status })),
+        )
+            .into_response(),
+        Err(e) => map_leave_error(e),
+    }
+}
+
+/// GET /api/v1/leave/approvals
+pub async fn approvals(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "leave_request", "view_team") {
+        return forbidden;
+    }
+    match talentos_hr_runner::pending_approvals(&state.pool, ctx.tenant_id).await {
+        Ok(requests) => (StatusCode::OK, Json(json!({ "requests": requests }))).into_response(),
+        Err(e) => map_leave_error(e),
     }
 }
 
@@ -158,48 +251,26 @@ pub async fn decide(
     if let Err(forbidden) = require(&ctx, "leave_request", "approve_team") {
         return forbidden;
     }
-    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
-        Ok(tx) => tx,
-        Err(e) => return internal_err(&e.to_string()),
-    };
-
-    // Only pending requests may be decided; the guard is in SQL so two approvers
-    // cannot both "win" a race.
-    let updated = sqlx::query_scalar::<_, String>(
-        r#"UPDATE leave_requests
-           SET status = $3, approver_id = $4, approved_at = now(), updated_at = now()
-           WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
-           RETURNING status"#,
+    match talentos_hr_runner::decide_request(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        body.approve,
     )
-    .bind(id)
-    .bind(ctx.tenant_id.0)
-    .bind(if body.approve { "approved" } else { "rejected" })
-    .bind(ctx.user_id.0)
-    .fetch_optional(&mut *tx)
-    .await;
-
-    let status = match updated {
-        Ok(Some(status)) => status,
-        Ok(None) => {
-            let _ = tx.rollback().await;
-            return not_found();
-        }
-        Err(e) => return internal_err(&e.to_string()),
-    };
-
-    if let Err(e) = tx.commit().await {
-        return internal_err(&e.to_string());
+    .await
+    {
+        Ok(status) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "request_id": id.to_string(),
+                "status": status,
+                "approver_id": ctx.user_id.to_string(),
+            })),
+        )
+            .into_response(),
+        Err(e) => map_leave_error(e),
     }
-
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "request_id": id.to_string(),
-            "status": status,
-            "approver_id": ctx.user_id.to_string(),
-        })),
-    )
-        .into_response()
 }
 
 fn envelope(code: &str, message: &str) -> ErrorResponse {
@@ -224,6 +295,32 @@ fn conflict(message: &str) -> Response {
     (StatusCode::CONFLICT, Json(envelope("conflict", message))).into_response()
 }
 
+fn map_leave_error(e: talentos_hr_runner::LeaveError) -> Response {
+    match e {
+        talentos_hr_runner::LeaveError::NotFound => not_found(),
+        talentos_hr_runner::LeaveError::NotCancellable => {
+            conflict("leave request cannot be cancelled in its current status")
+        }
+        talentos_hr_runner::LeaveError::Overlap(s, e) => {
+            conflict(&format!("overlaps an existing leave from {s} to {e}"))
+        }
+        talentos_hr_runner::LeaveError::InsufficientBalance { .. } => unprocessable(&e.to_string()),
+        talentos_hr_runner::LeaveError::UnknownType
+        | talentos_hr_runner::LeaveError::BadRange
+        | talentos_hr_runner::LeaveError::TooLong => unprocessable(&e.to_string()),
+        talentos_hr_runner::LeaveError::EmployeeNotFound
+        | talentos_hr_runner::LeaveError::NotActive => (
+            StatusCode::FORBIDDEN,
+            Json(envelope(
+                "forbidden",
+                "no active employee record for this account",
+            )),
+        )
+            .into_response(),
+        _ => internal_err(&e.to_string()),
+    }
+}
+
 fn not_found() -> Response {
     (
         StatusCode::NOT_FOUND,
@@ -239,4 +336,58 @@ fn internal_err(message: &str) -> Response {
         Json(envelope("internal_error", "An unexpected error occurred")),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use talentos_kernel::{TenantContext, TenantId, UserId};
+    use uuid::Uuid;
+
+    fn ctx_with_roles(roles: &[&str]) -> TenantContext {
+        TenantContext {
+            tenant_id: TenantId(Uuid::new_v4()),
+            entity_id: None,
+            user_id: UserId(Uuid::new_v4()),
+            roles: roles.iter().map(|r| r.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn employee_can_create_for_self() {
+        let own = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["employee"]);
+        assert!(authorize_create_for_employee(&ctx, None, Some(own)).is_ok());
+        assert!(authorize_create_for_employee(&ctx, Some(own), Some(own)).is_ok());
+    }
+
+    #[test]
+    fn employee_cannot_create_for_another_employee() {
+        let own = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["employee"]);
+        assert!(authorize_create_for_employee(&ctx, Some(other), Some(own)).is_err());
+    }
+
+    #[test]
+    fn manager_can_create_for_another_employee() {
+        let own = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["manager"]);
+        assert!(authorize_create_for_employee(&ctx, Some(other), Some(own)).is_ok());
+    }
+
+    #[test]
+    fn unlinked_hr_can_create_for_another() {
+        let ctx = ctx_with_roles(&["hr_admin"]);
+        let other = uuid::Uuid::new_v4();
+        assert!(authorize_create_for_employee(&ctx, Some(other), None).is_ok());
+    }
+
+    #[test]
+    fn unlinked_employee_cannot_create_for_another() {
+        let other = Uuid::new_v4();
+        let ctx = ctx_with_roles(&["employee"]);
+        assert!(authorize_create_for_employee(&ctx, Some(other), None).is_err());
+    }
 }

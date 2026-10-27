@@ -304,34 +304,37 @@ pub async fn import_balances(
     }
 
     let has_parse_errors = parse_results.iter().any(|r| r.is_some());
-    let service_report = if !has_parse_errors {
-        match talentos_hr_runner::leave::import_balances(
-            &state.pool,
-            ctx.tenant_id,
-            body.dry_run,
-            service_rows,
-        )
-        .await
-        {
-            Ok(report) => Some(report),
-            Err(e) => return internal_err(&e.to_string()),
-        }
-    } else {
-        None
+    // Even with parse errors, validate the clean rows so lookup errors surface in
+    // the preview. Force a dry run so a broken file can never write.
+    let service_report = match talentos_hr_runner::leave::import_balances(
+        &state.pool,
+        ctx.tenant_id,
+        body.dry_run || has_parse_errors,
+        service_rows,
+    )
+    .await
+    {
+        Ok(report) => report,
+        Err(e) => return internal_err(&e.to_string()),
     };
 
-    let mut rows: Vec<talentos_hr_runner::leave::BalanceImportRowResult> =
-        Vec::with_capacity(body.rows.len());
-    let mut service_cursor = 0usize;
-    for parsed in parse_results.iter() {
-        if let Some(parsed) = parsed.clone() {
-            rows.push(parsed);
-        } else {
-            let report = service_report.as_ref().expect("service report available");
-            rows.push(report.rows[service_cursor].clone());
-            service_cursor += 1;
-        }
-    }
+    let mut service_iter = service_report.rows.iter();
+    let rows: Vec<talentos_hr_runner::leave::BalanceImportRowResult> = parse_results
+        .into_iter()
+        .map(|parsed| match parsed {
+            Some(parsed) => parsed,
+            None => service_iter.next().cloned().unwrap_or(
+                talentos_hr_runner::leave::BalanceImportRowResult {
+                    row: 0,
+                    employee_code: String::new(),
+                    leave_type: String::new(),
+                    year: 0,
+                    status: "invalid".into(),
+                    errors: vec!["row could not be validated".into()],
+                },
+            ),
+        })
+        .collect();
 
     let total = rows.len();
     let invalid = rows.iter().filter(|r| r.status == "invalid").count();
@@ -352,6 +355,29 @@ pub async fn import_balances(
     };
 
     (StatusCode::OK, Json(report)).into_response()
+}
+
+fn merge_balance_import_rows(
+    parse_results: Vec<Option<talentos_hr_runner::leave::BalanceImportRowResult>>,
+    service_rows: &[talentos_hr_runner::leave::BalanceImportRowResult],
+) -> Vec<talentos_hr_runner::leave::BalanceImportRowResult> {
+    let mut service_iter = service_rows.iter();
+    parse_results
+        .into_iter()
+        .map(|parsed| match parsed {
+            Some(parsed) => parsed,
+            None => service_iter.next().cloned().unwrap_or(
+                talentos_hr_runner::leave::BalanceImportRowResult {
+                    row: 0,
+                    employee_code: String::new(),
+                    leave_type: String::new(),
+                    year: 0,
+                    status: "invalid".into(),
+                    errors: vec!["row could not be validated".into()],
+                },
+            ),
+        })
+        .collect()
 }
 
 fn parse_decimal_for_import(value: &str, field: &str, errors: &mut Vec<String>) -> Option<Decimal> {
@@ -554,5 +580,30 @@ mod tests {
         let other = Uuid::new_v4();
         let ctx = ctx_with_roles(&["employee"]);
         assert!(authorize_create_for_employee(&ctx, Some(other), None).is_err());
+    }
+}
+
+#[cfg(test)]
+mod balance_import_merge_tests {
+    use super::*;
+
+    fn result(row: usize, status: &str) -> talentos_hr_runner::leave::BalanceImportRowResult {
+        talentos_hr_runner::leave::BalanceImportRowResult {
+            row,
+            employee_code: format!("E{row}"),
+            leave_type: "annual".into(),
+            year: 2026,
+            status: status.into(),
+            errors: vec![],
+        }
+    }
+
+    #[test]
+    fn mixed_parse_and_service_rows_merge_without_panicking() {
+        let parsed = vec![Some(result(1, "invalid")), None];
+        let service = vec![result(2, "valid")];
+        let merged = merge_balance_import_rows(parsed, &service);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[1].status, "valid");
     }
 }

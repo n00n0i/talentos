@@ -437,6 +437,7 @@ test("multi-level leave approval chain", async ({ page }) => {
 
   await login(page);
   await page.goto("/settings");
+  await page.waitForLoadState("networkidle");
   await page.getByTestId("leave-chain").selectOption("manager,hr_admin");
   await page.getByTestId("save-policy").click();
   await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
@@ -467,6 +468,7 @@ test("multi-level leave approval chain", async ({ page }) => {
 
   await loginAs("e2e@example.com", "E2ePassword123!");
   await page.goto("/settings");
+  await page.waitForLoadState("networkidle");
   await page.getByTestId("leave-chain").selectOption("hr_admin");
   await page.getByTestId("save-policy").click();
   await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();

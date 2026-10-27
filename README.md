@@ -164,6 +164,14 @@ pending rows created before the `balance_debited` flag was introduced are left
 untouched. The `/leave` page and the available leave types are driven by the
 employee's `leave_balances` for the current year.
 
+### Opening balances
+
+HR imports opening leave balances from `/leave` or
+`POST /api/v1/leave/balances/import` with `{dry_run, rows}`:
+`employee_code, leave_type, year, total_days, used_days?`. Dry run reports
+per-row errors; a commit upserts every row in one transaction or writes nothing
+when any row is invalid. Re-importing the same key overwrites the quota.
+
 ## OT self-service
 
 ```

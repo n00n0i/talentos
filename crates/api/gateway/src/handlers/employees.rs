@@ -11,6 +11,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
@@ -51,19 +52,19 @@ pub struct EmployeeBody {
 
 #[derive(Debug, Deserialize)]
 pub struct ImportEmployeeRow {
-    pub employee_code: String,
-    pub first_name_th: String,
-    pub last_name_th: String,
-    pub position_title: String,
-    pub base_salary: Decimal,
-    pub hire_date: NaiveDate,
+    pub employee_code: Option<String>,
+    pub first_name_th: Option<String>,
+    pub last_name_th: Option<String>,
+    pub position_title: Option<String>,
+    pub base_salary: Option<String>,
+    pub hire_date: Option<String>,
     pub first_name_en: Option<String>,
     pub last_name_en: Option<String>,
     pub department: Option<String>,
     pub entity_id: Option<Uuid>,
-    pub tax_filing_status: Option<i16>,
-    pub pf_member: Option<bool>,
-    pub sso_enrolled: Option<bool>,
+    pub tax_filing_status: Option<String>,
+    pub pf_member: Option<String>,
+    pub sso_enrolled: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,6 +90,24 @@ pub struct ImportReport {
     pub invalid: usize,
     pub created: usize,
     pub rows: Vec<ImportRowResult>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParsedImportRow {
+    pub employee_code: String,
+    pub first_name_th: String,
+    pub last_name_th: String,
+    pub position_title: String,
+    pub base_salary: Decimal,
+    pub hire_date: NaiveDate,
+    pub first_name_en: Option<String>,
+    pub last_name_en: Option<String>,
+    pub department: Option<String>,
+    #[allow(dead_code)]
+    pub entity_id: Option<Uuid>,
+    pub tax_filing_status: i16,
+    pub pf_member: bool,
+    pub sso_enrolled: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -292,7 +311,7 @@ pub async fn import(
         return forbidden;
     }
 
-    let mut results = validate_import_rows(&body.rows);
+    let (mut results, parsed_rows) = validate_import_rows(&body.rows);
     let (resolved, entity_errors) = match resolve_import_entities(&state, &ctx, &body.rows).await {
         Ok(v) => v,
         Err(response) => return response,
@@ -340,17 +359,19 @@ pub async fn import(
             Err(e) => return internal_err(&e.to_string()),
         };
 
-        for (idx, row) in body.rows.iter().enumerate() {
-            if let Some(entity_id) = resolved[idx] {
-                if existing
-                    .iter()
-                    .any(|(e, c)| *e == entity_id && c == row.employee_code.trim())
-                {
-                    results[idx].errors.push(format!(
-                        "employee_code {} already exists",
-                        row.employee_code
-                    ));
-                    results[idx].status = "invalid".to_string();
+        for (idx, parsed) in parsed_rows.iter().enumerate() {
+            if let Some(parsed) = parsed {
+                if let Some(entity_id) = resolved[idx] {
+                    if existing
+                        .iter()
+                        .any(|(e, c)| *e == entity_id && c == &parsed.employee_code)
+                    {
+                        results[idx].errors.push(format!(
+                            "employee_code {} already exists",
+                            parsed.employee_code
+                        ));
+                        results[idx].status = "invalid".to_string();
+                    }
                 }
             }
         }
@@ -367,10 +388,14 @@ pub async fn import(
         Err(e) => return internal_err(&e.to_string()),
     };
 
-    for (idx, row) in body.rows.iter().enumerate() {
+    for (idx, parsed) in parsed_rows.iter().enumerate() {
         let Some(entity_id) = resolved[idx] else {
             let _ = tx.rollback().await;
             return internal_err("row without resolved entity reached commit");
+        };
+        let Some(parsed) = parsed else {
+            let _ = tx.rollback().await;
+            return internal_err("unparsed row reached commit");
         };
         let id = Uuid::new_v4();
         let insert = sqlx::query(
@@ -384,18 +409,18 @@ pub async fn import(
         .bind(id)
         .bind(ctx.tenant_id.0)
         .bind(entity_id)
-        .bind(row.employee_code.trim())
-        .bind(row.first_name_th.trim())
-        .bind(row.last_name_th.trim())
-        .bind(row.first_name_en.as_deref())
-        .bind(row.last_name_en.as_deref())
-        .bind(row.position_title.trim())
-        .bind(row.department.as_deref())
-        .bind(row.base_salary)
-        .bind(row.hire_date)
-        .bind(row.tax_filing_status.unwrap_or(1))
-        .bind(row.pf_member.unwrap_or(false))
-        .bind(row.sso_enrolled.unwrap_or(true))
+        .bind(&parsed.employee_code)
+        .bind(&parsed.first_name_th)
+        .bind(&parsed.last_name_th)
+        .bind(parsed.first_name_en.as_deref())
+        .bind(parsed.last_name_en.as_deref())
+        .bind(&parsed.position_title)
+        .bind(parsed.department.as_deref())
+        .bind(parsed.base_salary)
+        .bind(parsed.hire_date)
+        .bind(parsed.tax_filing_status)
+        .bind(parsed.pf_member)
+        .bind(parsed.sso_enrolled)
         .bind(None::<&str>)
         .bind(None::<&str>)
         .bind(None::<&str>)
@@ -412,7 +437,7 @@ pub async fn import(
             return internal_err(&e.to_string());
         }
 
-        let after = json!({ "employee_code": row.employee_code.trim() });
+        let after = json!({ "employee_code": parsed.employee_code });
         let audit = sqlx::query(
             r#"INSERT INTO audit_log
              (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
@@ -844,40 +869,186 @@ fn validate(body: &EmployeeBody) -> Option<String> {
     )
 }
 
-fn validate_import_row(row: &ImportEmployeeRow) -> Vec<String> {
-    let mut errors = Vec::new();
-    if let Some(e) = validate_fields(
-        &row.employee_code,
-        &row.first_name_th,
-        &row.last_name_th,
-        &row.position_title,
-        row.base_salary,
-        row.tax_filing_status,
-    ) {
-        errors.push(e);
+fn parse_bool(value: Option<&str>, default: bool) -> Result<bool, String> {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        None => Ok(default),
+        Some(v) => match v.to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" => Ok(true),
+            "false" | "0" | "no" => Ok(false),
+            _ => Err(format!("invalid boolean value: {v}")),
+        },
     }
-    errors
 }
 
-fn validate_import_rows(rows: &[ImportEmployeeRow]) -> Vec<ImportRowResult> {
-    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for row in rows {
-        if !row.employee_code.trim().is_empty() {
-            *counts
-                .entry(row.employee_code.trim().to_string())
-                .or_insert(0) += 1;
-        }
+fn parse_import_row(row: &ImportEmployeeRow) -> Result<ParsedImportRow, Vec<String>> {
+    let mut errors = Vec::new();
+
+    let required = |value: &Option<String>, _name: &str| -> Option<String> {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(|v| v.to_string())
+    };
+
+    let employee_code = required(&row.employee_code, "employee_code");
+    if employee_code.is_none() {
+        errors.push("employee_code is required".into());
     }
 
-    rows.iter()
+    let first_name_th = required(&row.first_name_th, "first_name_th");
+    if first_name_th.is_none() {
+        errors.push("first_name_th is required".into());
+    }
+
+    let last_name_th = required(&row.last_name_th, "last_name_th");
+    if last_name_th.is_none() {
+        errors.push("last_name_th is required".into());
+    }
+
+    let position_title = required(&row.position_title, "position_title");
+    if position_title.is_none() {
+        errors.push("position_title is required".into());
+    }
+
+    let base_salary = match row
+        .base_salary
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        Some(v) => match Decimal::from_str(v) {
+            Ok(d) if d >= Decimal::ZERO => Some(d),
+            Ok(_) => {
+                errors.push("base_salary must be >= 0".into());
+                None
+            }
+            Err(_) => {
+                errors.push("base_salary must be a number".into());
+                None
+            }
+        },
+        None => {
+            errors.push("base_salary is required".into());
+            None
+        }
+    };
+
+    let hire_date = match row
+        .hire_date
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        Some(v) => match NaiveDate::parse_from_str(v, "%Y-%m-%d") {
+            Ok(d) => Some(d),
+            Err(_) => {
+                errors.push("hire_date must be YYYY-MM-DD".into());
+                None
+            }
+        },
+        None => {
+            errors.push("hire_date is required".into());
+            None
+        }
+    };
+
+    let tax_filing_status = match row
+        .tax_filing_status
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    {
+        Some(v) => match v.parse::<i16>() {
+            Ok(n) if (1..=5).contains(&n) => Some(n),
+            Ok(_) => {
+                errors.push("tax_filing_status must be 1..=5".into());
+                None
+            }
+            Err(_) => {
+                errors.push("tax_filing_status must be a number".into());
+                None
+            }
+        },
+        None => Some(1),
+    };
+
+    let pf_member = match parse_bool(row.pf_member.as_deref(), false) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            errors.push(e);
+            None
+        }
+    };
+
+    let sso_enrolled = match parse_bool(row.sso_enrolled.as_deref(), true) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            errors.push(e);
+            None
+        }
+    };
+
+    let optional_text = |value: &Option<String>| {
+        value
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(|v| v.to_string())
+    };
+
+    let first_name_en = optional_text(&row.first_name_en);
+    let last_name_en = optional_text(&row.last_name_en);
+    let department = optional_text(&row.department);
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    Ok(ParsedImportRow {
+        employee_code: employee_code.unwrap(),
+        first_name_th: first_name_th.unwrap(),
+        last_name_th: last_name_th.unwrap(),
+        position_title: position_title.unwrap(),
+        base_salary: base_salary.unwrap(),
+        hire_date: hire_date.unwrap(),
+        first_name_en,
+        last_name_en,
+        department,
+        entity_id: row.entity_id,
+        tax_filing_status: tax_filing_status.unwrap(),
+        pf_member: pf_member.unwrap(),
+        sso_enrolled: sso_enrolled.unwrap(),
+    })
+}
+
+fn validate_import_rows(
+    rows: &[ImportEmployeeRow],
+) -> (Vec<ImportRowResult>, Vec<Option<ParsedImportRow>>) {
+    let parsed: Vec<Result<ParsedImportRow, Vec<String>>> =
+        rows.iter().map(parse_import_row).collect();
+
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for row in parsed.iter().flatten() {
+        *counts.entry(row.employee_code.clone()).or_insert(0) += 1;
+    }
+
+    let results = rows
+        .iter()
+        .zip(parsed.iter())
         .enumerate()
-        .map(|(idx, row)| {
-            let mut errors = validate_import_row(row);
-            if counts.get(row.employee_code.trim()).copied().unwrap_or(0) > 1 {
-                errors.push(format!(
-                    "employee_code {} is duplicated in file",
-                    row.employee_code
-                ));
+        .map(|(idx, (raw, parsed))| {
+            let mut errors = match parsed {
+                Err(e) => e.clone(),
+                Ok(_) => Vec::new(),
+            };
+            if let Ok(row) = parsed {
+                if counts.get(&row.employee_code).copied().unwrap_or(0) > 1 {
+                    errors.push(format!(
+                        "employee_code {} is duplicated in file",
+                        row.employee_code
+                    ));
+                }
             }
             let status = if errors.is_empty() {
                 "valid".to_string()
@@ -886,12 +1057,15 @@ fn validate_import_rows(rows: &[ImportEmployeeRow]) -> Vec<ImportRowResult> {
             };
             ImportRowResult {
                 row: idx + 1,
-                employee_code: row.employee_code.clone(),
+                employee_code: raw.employee_code.clone().unwrap_or_default(),
                 status,
                 errors,
             }
         })
-        .collect()
+        .collect();
+
+    let parsed_options = parsed.into_iter().map(Result::ok).collect();
+    (results, parsed_options)
 }
 
 fn report_from_rows(dry_run: bool, rows: Vec<ImportRowResult>) -> ImportReport {
@@ -955,19 +1129,19 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
 mod tests {
     use super::*;
 
-    fn row(code: &str, salary: Decimal, tax: Option<i16>) -> ImportEmployeeRow {
+    fn row(code: &str, salary: &str, hire_date: &str, tax: Option<&str>) -> ImportEmployeeRow {
         ImportEmployeeRow {
-            employee_code: code.into(),
-            first_name_th: "สมชาย".into(),
-            last_name_th: "ใจดี".into(),
-            position_title: "Dev".into(),
-            base_salary: salary,
-            hire_date: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            employee_code: Some(code.into()),
+            first_name_th: Some("สมชาย".into()),
+            last_name_th: Some("ใจดี".into()),
+            position_title: Some("Dev".into()),
+            base_salary: Some(salary.into()),
+            hire_date: Some(hire_date.into()),
             first_name_en: None,
             last_name_en: None,
             department: None,
             entity_id: None,
-            tax_filing_status: tax,
+            tax_filing_status: tax.map(|s| s.into()),
             pf_member: None,
             sso_enrolled: None,
         }
@@ -976,10 +1150,10 @@ mod tests {
     #[test]
     fn import_detects_duplicate_code_inside_file() {
         let rows = vec![
-            row("E001", Decimal::ONE, None),
-            row("E001", Decimal::ONE, None),
+            row("E001", "1", "2024-01-01", None),
+            row("E001", "1", "2024-01-01", None),
         ];
-        let results = validate_import_rows(&rows);
+        let (results, _) = validate_import_rows(&rows);
         assert_eq!(results[0].status, "invalid");
         assert_eq!(results[1].status, "invalid");
         assert!(results[1].errors.iter().any(|e| e.contains("duplicated")));
@@ -988,18 +1162,18 @@ mod tests {
     #[test]
     fn import_treats_whitespace_variants_as_duplicates() {
         let rows = vec![
-            row("E001", Decimal::ONE, None),
-            row(" E001 ", Decimal::ONE, None),
+            row("E001", "1", "2024-01-01", None),
+            row(" E001 ", "1", "2024-01-01", None),
         ];
-        let results = validate_import_rows(&rows);
+        let (results, _) = validate_import_rows(&rows);
         assert_eq!(results[0].status, "invalid");
         assert_eq!(results[1].status, "invalid");
     }
 
     #[test]
     fn import_rejects_blank_employee_code() {
-        let rows = vec![row("  ", Decimal::ONE, None)];
-        let results = validate_import_rows(&rows);
+        let rows = vec![row("  ", "1", "2024-01-01", None)];
+        let (results, _) = validate_import_rows(&rows);
         assert_eq!(results[0].status, "invalid");
         assert!(results[0]
             .errors
@@ -1008,17 +1182,64 @@ mod tests {
     }
 
     #[test]
+    fn import_rejects_blank_required_cell() {
+        let rows = vec![ImportEmployeeRow {
+            employee_code: Some("E002".into()),
+            first_name_th: None,
+            last_name_th: Some("ใจดี".into()),
+            position_title: Some("Dev".into()),
+            base_salary: Some("1".into()),
+            hire_date: Some("2024-01-01".into()),
+            first_name_en: None,
+            last_name_en: None,
+            department: None,
+            entity_id: None,
+            tax_filing_status: None,
+            pf_member: None,
+            sso_enrolled: None,
+        }];
+        let (results, _) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("first_name_th is required")));
+    }
+
+    #[test]
     fn import_rejects_negative_salary() {
-        let rows = vec![row("E002", Decimal::NEGATIVE_ONE, None)];
-        let results = validate_import_rows(&rows);
+        let rows = vec![row("E003", "-1", "2024-01-01", None)];
+        let (results, _) = validate_import_rows(&rows);
         assert_eq!(results[0].status, "invalid");
         assert!(results[0].errors.iter().any(|e| e.contains("base_salary")));
     }
 
     #[test]
-    fn import_rejects_bad_tax_filing_status() {
-        let rows = vec![row("E003", Decimal::ONE, Some(7))];
-        let results = validate_import_rows(&rows);
+    fn import_rejects_non_numeric_salary() {
+        let rows = vec![row("E004", "abc", "2024-01-01", None)];
+        let (results, _) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("base_salary must be a number")));
+    }
+
+    #[test]
+    fn import_rejects_bad_date() {
+        let rows = vec![row("E005", "1", "01-01-2024", None)];
+        let (results, _) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("hire_date must be YYYY-MM-DD")));
+    }
+
+    #[test]
+    fn import_rejects_bad_tax_filing_status_number() {
+        let rows = vec![row("E006", "1", "2024-01-01", Some("7"))];
+        let (results, _) = validate_import_rows(&rows);
         assert_eq!(results[0].status, "invalid");
         assert!(results[0]
             .errors
@@ -1027,12 +1248,87 @@ mod tests {
     }
 
     #[test]
+    fn import_rejects_non_numeric_tax_filing_status() {
+        let rows = vec![row("E007", "1", "2024-01-01", Some("abc"))];
+        let (results, _) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("tax_filing_status must be a number")));
+    }
+
+    #[test]
+    fn import_preserves_entity_id_in_parsed_row() {
+        let id = Uuid::new_v4();
+        let rows = vec![ImportEmployeeRow {
+            employee_code: Some("E012".into()),
+            first_name_th: Some("สมชาย".into()),
+            last_name_th: Some("ใจดี".into()),
+            position_title: Some("Dev".into()),
+            base_salary: Some("1".into()),
+            hire_date: Some("2024-01-01".into()),
+            first_name_en: None,
+            last_name_en: None,
+            department: None,
+            entity_id: Some(id),
+            tax_filing_status: None,
+            pf_member: None,
+            sso_enrolled: None,
+        }];
+        let (_, parsed) = validate_import_rows(&rows);
+        assert_eq!(parsed[0].as_ref().unwrap().entity_id, Some(id));
+    }
+
+    #[test]
+    fn import_accepts_common_boolean_strings() {
+        let rows = vec![
+            ImportEmployeeRow {
+                employee_code: Some("E008".into()),
+                first_name_th: Some("สมชาย".into()),
+                last_name_th: Some("ใจดี".into()),
+                position_title: Some("Dev".into()),
+                base_salary: Some("1".into()),
+                hire_date: Some("2024-01-01".into()),
+                first_name_en: None,
+                last_name_en: None,
+                department: None,
+                entity_id: None,
+                tax_filing_status: None,
+                pf_member: Some("yes".into()),
+                sso_enrolled: Some("1".into()),
+            },
+            ImportEmployeeRow {
+                employee_code: Some("E009".into()),
+                first_name_th: Some("สมชาย".into()),
+                last_name_th: Some("ใจดี".into()),
+                position_title: Some("Dev".into()),
+                base_salary: Some("1".into()),
+                hire_date: Some("2024-01-01".into()),
+                first_name_en: None,
+                last_name_en: None,
+                department: None,
+                entity_id: None,
+                tax_filing_status: None,
+                pf_member: Some("no".into()),
+                sso_enrolled: Some("0".into()),
+            },
+        ];
+        let (results, parsed) = validate_import_rows(&rows);
+        assert!(results.iter().all(|r| r.status == "valid"));
+        assert!(parsed[0].as_ref().unwrap().pf_member);
+        assert!(parsed[0].as_ref().unwrap().sso_enrolled);
+        assert!(!parsed[1].as_ref().unwrap().pf_member);
+        assert!(!parsed[1].as_ref().unwrap().sso_enrolled);
+    }
+
+    #[test]
     fn import_valid_rows_pass() {
         let rows = vec![
-            row("E004", Decimal::ONE, Some(2)),
-            row("E005", Decimal::ZERO, None),
+            row("E010", "1", "2024-01-01", Some("2")),
+            row("E011", "0", "2024-01-01", None),
         ];
-        let results = validate_import_rows(&rows);
+        let (results, _) = validate_import_rows(&rows);
         assert!(results.iter().all(|r| r.status == "valid"));
     }
 

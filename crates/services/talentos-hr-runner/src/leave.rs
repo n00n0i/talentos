@@ -733,9 +733,9 @@ pub async fn pending_approvals(
                         ORDER BY step_no LIMIT 1),
                       'hr_admin'
                   ) AS approver_role,
-                  COALESCE(
-                      (SELECT COUNT(*) FROM leave_approval_steps s2 WHERE s2.leave_request_id = lr.id),
-                      1
+                  GREATEST(
+                      1,
+                      (SELECT COUNT(*) FROM leave_approval_steps s2 WHERE s2.leave_request_id = lr.id)
                   ) AS total_steps
            FROM leave_requests lr
            JOIN employees e ON e.id = lr.employee_id

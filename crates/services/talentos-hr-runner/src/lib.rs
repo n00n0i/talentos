@@ -14,8 +14,8 @@ pub use attendance::{
 };
 pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,
-    list_balances, list_requests, pending_approvals, LeaveBalanceView, LeaveError, LeaveInput,
-    LeaveRequestView, PendingLeave,
+    list_balances, list_requests, pending_approvals, DecideOutcome, LeaveBalanceView, LeaveError,
+    LeaveInput, LeaveRequestView, PendingLeave,
 };
 pub use ot::{
     cancel_request as cancel_ot_request, create_request as create_ot_request,

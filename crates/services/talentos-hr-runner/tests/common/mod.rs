@@ -151,6 +151,28 @@ pub async fn set_line_user_id(pool: &PgPool, tenant_id: Uuid, user_id: Uuid, lin
     tx.commit().await.expect("commit line id");
 }
 
+pub async fn set_payroll_chain(pool: &PgPool, tenant_id: Uuid, chain: &[String]) {
+    let mut tx = pool.begin().await.expect("begin chain");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        r#"INSERT INTO tenant_payroll_settings
+             (tenant_id, unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate,
+              ot_holiday_rate, leave_approval_chain)
+           VALUES ($1, 30, 1.50, 2.00, 3.00, $2)
+           ON CONFLICT (tenant_id) DO UPDATE SET leave_approval_chain = EXCLUDED.leave_approval_chain"#,
+    )
+    .bind(tenant_id)
+    .bind(chain)
+    .execute(&mut *tx)
+    .await
+    .expect("set chain");
+    tx.commit().await.expect("commit chain");
+}
+
 pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
     let mut tx = pool.begin().await.expect("begin cleanup");
     sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
@@ -159,6 +181,9 @@ pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
         .await
         .expect("set tenant");
     for stmt in [
+        "DELETE FROM leave_approval_steps WHERE tenant_id = $1",
+        "DELETE FROM leave_requests WHERE tenant_id = $1",
+        "DELETE FROM leave_balances WHERE tenant_id = $1",
         "DELETE FROM ot_requests WHERE tenant_id = $1",
         "DELETE FROM notifications WHERE tenant_id = $1",
         "DELETE FROM attendance_days WHERE tenant_id = $1",
@@ -170,6 +195,7 @@ pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
         "DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1)",
         "DELETE FROM users WHERE tenant_id = $1",
         "DELETE FROM entities WHERE tenant_id = $1",
+        "DELETE FROM tenant_payroll_settings WHERE tenant_id = $1",
         "DELETE FROM tenants WHERE id = $1",
     ] {
         let _ = sqlx::query(stmt).bind(tenant_id).execute(&mut *tx).await;

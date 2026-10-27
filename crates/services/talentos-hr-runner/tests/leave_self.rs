@@ -9,7 +9,7 @@ use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
 use talentos_hr_runner::leave::{
     cancel_request, create_request, decide_request, employee_of_user, list_balances, list_requests,
-    pending_approvals, LeaveInput,
+    pending_approvals, DecideOutcome, LeaveInput,
 };
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -477,6 +477,7 @@ async fn approve_keeps_balance_debited_and_reject_restores() {
 
     let approver = user_id_of(&raw, tenant_id, entities[0].1).await;
     let requester = user_id_of(&raw, tenant_id, entities[1].1).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
     seed_balance(&raw, tenant_id, entities[1].1, annual_id, year, dec!(6)).await;
 
     let to_approve = create_request(
@@ -515,15 +516,43 @@ async fn approve_keeps_balance_debited_and_reject_restores() {
         dec!(4)
     );
 
-    let approved = decide_request(&pool, tenant, approver, to_approve.id, true)
-        .await
-        .expect("approve");
-    assert_eq!(approved, "approved");
+    let approved = decide_request(
+        &pool,
+        tenant,
+        approver,
+        &["hr_admin".into()],
+        to_approve.id,
+        true,
+    )
+    .await
+    .expect("approve");
+    assert_eq!(
+        approved,
+        DecideOutcome {
+            status: "approved".into(),
+            step: 1,
+            total_steps: 1,
+        }
+    );
 
-    let rejected = decide_request(&pool, tenant, approver, to_reject.id, false)
-        .await
-        .expect("reject");
-    assert_eq!(rejected, "rejected");
+    let rejected = decide_request(
+        &pool,
+        tenant,
+        approver,
+        &["hr_admin".into()],
+        to_reject.id,
+        false,
+    )
+    .await
+    .expect("reject");
+    assert_eq!(
+        rejected,
+        DecideOutcome {
+            status: "rejected".into(),
+            step: 1,
+            total_steps: 1,
+        }
+    );
 
     // Approved kept the debit, rejected restored it: net 2 used days.
     assert_eq!(
@@ -778,10 +807,10 @@ async fn decided_request_creates_notification_for_employee() {
         .expect("clear notifications");
     tx.commit().await.expect("commit clear");
 
-    let status = decide_request(&pool, tenant, approver, req.id, true)
+    let status = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, true)
         .await
         .expect("approve");
-    assert_eq!(status, "approved");
+    assert_eq!(status.status, "approved");
 
     let emails = pending_notifications(&raw, tenant_id, "email").await;
     assert_eq!(emails.len(), 1, "employee should receive decision email");

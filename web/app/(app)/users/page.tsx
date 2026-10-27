@@ -239,6 +239,9 @@ export default function UsersPage() {
       )}
 
       <div className="card">
+        <p className="hint" style={{ padding: "12px 16px 0" }}>
+          LINE ID ต้องเป็น user id จาก LINE Messaging API (U ตามด้วยตัวอักษร hex 32 ตัว) ไม่ใช่ id ของกลุ่มหรือห้องแชต
+        </p>
         {users === null ? (
           <div className="spinner">กำลังโหลด…</div>
         ) : (
@@ -284,12 +287,13 @@ export default function UsersPage() {
                     <input
                       data-testid="line-id"
                       aria-label={`LINE ID ของ ${u.email}`}
-                      placeholder="U…"
+                      placeholder="U0123…"
+                      title="LINE user id จาก Messaging API (U ตามด้วยตัวอักษร hex 32 ตัว) ไม่ใช่ id ของกลุ่ม"
                       value={lines[u.id] ?? u.line_user_id ?? ""}
                       onChange={(e) => setLines({ ...lines, [u.id]: e.target.value })}
                       maxLength={64}
                       className="compact-select"
-                      style={{ width: 120 }}
+                      style={{ width: 270 }}
                     />{" "}
                     <button
                       className="btn btn-sm"

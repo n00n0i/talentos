@@ -893,12 +893,10 @@ pub async fn set_line_id(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     if let Some(id) = line_id {
-        if id.len() > 64
-            || !id
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        {
-            return bad_request("line_user_id must be at most 64 characters of A-Z a-z 0-9 _ -");
+        if !is_line_user_id(id) {
+            return bad_request(
+                "line_user_id must look like U + 32 hex characters (a LINE user id, not a group id)",
+            );
         }
     }
 
@@ -946,6 +944,11 @@ pub async fn set_line_id(
     }
 
     (StatusCode::OK, Json(json!({ "line_user_id": line_id }))).into_response()
+}
+
+/// Messaging API user id: `U` + 32 hex. Group/room ids (`C…`/`R…`) would broadcast.
+fn is_line_user_id(id: &str) -> bool {
+    id.len() == 33 && id.starts_with('U') && id[1..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn password_problem(password: &str) -> Option<String> {
@@ -999,4 +1002,19 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_line_user_id;
+
+    #[test]
+    fn line_user_id_shape() {
+        assert!(is_line_user_id("U0123456789abcdef0123456789ABCDEF"));
+        assert!(!is_line_user_id("C0123456789abcdef0123456789abcdef"));
+        assert!(!is_line_user_id("R0123456789abcdef0123456789abcdef"));
+        assert!(!is_line_user_id("U0123456789abcdef0123456789abcde"));
+        assert!(!is_line_user_id("U0123456789abcdef0123456789abcdeg"));
+        assert!(!is_line_user_id("u0123456789abcdef0123456789abcdef"));
+    }
 }

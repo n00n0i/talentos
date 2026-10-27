@@ -373,12 +373,12 @@ test("HR saves a LINE id for the invited user", async ({ page }) => {
   await page.goto("/users");
 
   const row = page.getByRole("row", { name: new RegExp(invitedEmail) });
-  await row.getByTestId("line-id").fill("Ue2e1234567890");
+  await row.getByTestId("line-id").fill("U0123456789abcdef0123456789abcdef");
   await row.getByTestId("save-line").click();
   await expect(page.getByText("บันทึก LINE ID แล้ว")).toBeVisible();
 
   await page.reload();
   await expect(
     page.getByRole("row", { name: new RegExp(invitedEmail) }).getByTestId("line-id"),
-  ).toHaveValue("Ue2e1234567890");
+  ).toHaveValue("U0123456789abcdef0123456789abcdef");
 });

@@ -120,7 +120,8 @@ pub async fn approvals(
     if let Err(forbidden) = require(&ctx, "ot_request", "view_team") {
         return forbidden;
     }
-    let status = q.status.as_deref();
+    // Default to the pending inbox; `?status=approved` serves the audit trail.
+    let status = q.status.as_deref().or(Some("pending"));
     let limit = q.limit.unwrap_or(100);
     match talentos_hr_runner::ot_tenant_requests(
         &state.pool,

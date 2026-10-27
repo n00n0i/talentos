@@ -11,6 +11,7 @@ type User = {
   roles: string[];
   last_login_at: string | null;
   totp_enabled: boolean;
+  line_user_id: string | null;
 };
 
 type InviteResult = { invite_path: string; email: string; role: string; expires_at: string };
@@ -32,6 +33,7 @@ export default function UsersPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [lines, setLines] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const r = await gw<{ users: User[] }>("api/v1/users");
@@ -105,6 +107,24 @@ export default function UsersPage() {
     try {
       await gw(`api/v1/users/${user.id}/2fa/reset`, { method: "POST" });
       setNotice(`รีเซ็ต 2FA ของ ${user.email} แล้ว`);
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveLine(user: User, value: string) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(`api/v1/users/${user.id}/line`, {
+        method: "PUT",
+        body: JSON.stringify({ line_user_id: value.trim() || null }),
+      });
+      setNotice("บันทึก LINE ID แล้ว");
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -260,6 +280,24 @@ export default function UsersPage() {
                         </option>
                       ))}
                     </select>{" "}
+                    <input
+                      data-testid="line-id"
+                      aria-label={`LINE ID ของ ${u.email}`}
+                      placeholder="U…"
+                      value={lines[u.id] ?? u.line_user_id ?? ""}
+                      onChange={(e) => setLines({ ...lines, [u.id]: e.target.value })}
+                      maxLength={64}
+                      className="compact-select"
+                      style={{ width: 120 }}
+                    />{" "}
+                    <button
+                      className="btn btn-sm"
+                      data-testid="save-line"
+                      onClick={() => saveLine(u, lines[u.id] ?? u.line_user_id ?? "")}
+                      disabled={busy}
+                    >
+                      บันทึก LINE
+                    </button>{" "}
                     {u.is_active && (
                       <>
                         <button className="btn btn-sm" onClick={() => issueReset(u)} disabled={busy}>

@@ -1,5 +1,6 @@
 //! Employee self-service: a linked user can read and download only their own
-//! payslips. Tenant isolation is RLS; the employee link is the ownership check.
+//! payslips and clock in/out. Tenant isolation is RLS; the employee link is the
+//! ownership check.
 
 use axum::{
     extract::{Path, State},
@@ -7,10 +8,12 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
+use crate::handlers::attendance::map_attendance_error;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 
@@ -217,4 +220,79 @@ fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
         }),
     )
         .into_response()
+}
+
+/// Body for a mobile punch.
+#[derive(Debug, Deserialize)]
+pub struct PunchBody {
+    pub kind: String,
+    pub lat: f64,
+    pub lng: f64,
+    pub accuracy_m: Option<f64>,
+}
+
+/// Response for a mobile punch.
+#[derive(Debug, Serialize)]
+pub struct PunchResponse {
+    pub work_date: String,
+    pub worked_minutes: i32,
+    pub late_minutes: i32,
+    pub early_leave_minutes: i32,
+    pub ot_minutes: i32,
+    pub ot_kind: String,
+    pub incomplete: bool,
+}
+
+/// POST /api/v1/me/attendance/punch
+pub async fn punch(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<PunchBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "punch_self") {
+        return forbidden;
+    }
+
+    let kind = match body.kind.as_str() {
+        "in" => talentos_attendance::PunchKind::In,
+        "out" => talentos_attendance::PunchKind::Out,
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "bad_request".into(),
+                    message: "kind must be 'in' or 'out'".into(),
+                    details: vec![],
+                    request_id: Uuid::new_v4().to_string(),
+                    retry_after_seconds: None,
+                }),
+            )
+                .into_response()
+        }
+    };
+
+    let input = talentos_hr_runner::attendance::PunchInput {
+        kind,
+        lat: body.lat,
+        lng: body.lng,
+        accuracy_m: body.accuracy_m,
+    };
+
+    match talentos_hr_runner::attendance::punch(&state.pool, ctx.tenant_id, ctx.user_id.0, input).await
+    {
+        Ok(day) => (
+            StatusCode::OK,
+            Json(PunchResponse {
+                work_date: day.work_date.to_string(),
+                worked_minutes: day.worked_minutes,
+                late_minutes: day.late_minutes,
+                early_leave_minutes: day.early_leave_minutes,
+                ot_minutes: day.ot_minutes,
+                ot_kind: day.ot_kind,
+                incomplete: day.incomplete,
+            }),
+        )
+            .into_response(),
+        Err(e) => map_attendance_error(e),
+    }
 }

@@ -572,7 +572,7 @@ pub async fn set_geofence(
     StatusCode::NO_CONTENT.into_response()
 }
 
-fn map_attendance_error(e: AttendanceError) -> Response {
+pub(crate) fn map_attendance_error(e: AttendanceError) -> Response {
     match e {
         AttendanceError::InvalidImport | AttendanceError::EmployeeNotLinked => {
             unprocessable(&e.to_string())
@@ -580,7 +580,7 @@ fn map_attendance_error(e: AttendanceError) -> Response {
         AttendanceError::NotFound | AttendanceError::NoShift | AttendanceError::NoGeofence => {
             not_found_message(&e.to_string())
         }
-        AttendanceError::OutsideGeofence => bad_request(&e.to_string()),
+        AttendanceError::OutsideGeofence { .. } => bad_request(&e.to_string()),
         AttendanceError::Rule(_) | AttendanceError::Db(_) => internal_err(&e.to_string()),
     }
 }

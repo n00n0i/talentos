@@ -64,13 +64,14 @@ pub async fn seed_tenant_entities(pool: &PgPool, n: usize) -> (Uuid, Vec<(Uuid, 
 
         sqlx::query(
             "INSERT INTO employees
-               (id, tenant_id, entity_id, employee_code, first_name_th, last_name_th,
+               (id, tenant_id, entity_id, user_id, employee_code, first_name_th, last_name_th,
                 hire_date, position_title, base_salary, tax_filing_status, pf_member, status)
-             VALUES ($1,$2,$3,$4,'ทดสอบ','พนักงาน','2024-01-01','Engineer',$5,1,false,'active')",
+             VALUES ($1,$2,$3,$4,$5,'ทดสอบ','พนักงาน','2024-01-01','Engineer',$6,1,false,'active')",
         )
         .bind(employee_id)
         .bind(tenant_id)
         .bind(entity_id)
+        .bind(user_id)
         .bind(format!("EMP{idx:03}"))
         .bind(Decimal::new(30_000, 0))
         .execute(&mut *tx)
@@ -92,6 +93,9 @@ pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
         .await
         .expect("set tenant");
     for stmt in [
+        "DELETE FROM attendance_days WHERE tenant_id = $1",
+        "DELETE FROM attendance_events WHERE tenant_id = $1",
+        "DELETE FROM tenant_holidays WHERE tenant_id = $1",
         "DELETE FROM shift_assignments WHERE tenant_id = $1",
         "DELETE FROM work_shifts WHERE tenant_id = $1",
         "DELETE FROM employees WHERE tenant_id = $1",

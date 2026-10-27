@@ -36,7 +36,9 @@ Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → log
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
 2 payslips, total gross ฿99,000, SSO ฿1,450, PND ฿9,416.67 (hand-verified).
 Payslip PDF: 77 KB, `%PDF-1.4`, Thai text round-trips through `pdftotext`.
-Leave: create (3 days computed server-side) → overlap 409 → bad type 422 → balances → list. Leave self-service flows (`me/leave`, cancel, approvals, decision) are covered by the `leave_self` integration tests and the Playwright E2E suite.
+Leave: create (3 days computed server-side) → overlap 409 → bad type 422 → balances → list. Leave self-service flows are covered by the `leave_self` service tests (including
+cancel/reject balance restore and decision) and the Playwright E2E suite
+(request → HR approve); cancel and reject have no browser E2E.
 
 ## Compiling workspace members
 

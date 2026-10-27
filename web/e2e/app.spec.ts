@@ -10,7 +10,7 @@ async function login(page: Page) {
   await page.getByLabel("อีเมล").fill("e2e@example.com");
   await page.getByLabel("รหัสผ่าน").fill("E2ePassword123!");
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
-  await expect(page.getByRole("link", { name: "ภาพรวม" })).toBeVisible();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
 }
 
 test("accepts the invite and logs in", async ({ page }) => {
@@ -42,6 +42,10 @@ test("settings persist across reload", async ({ page }) => {
   await page.getByTestId("divisor").fill("30");
   await page.getByTestId("save-policy").click();
   await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
+
+  await page.goto("/audit");
+  await expect(page.getByRole("heading", { name: "ประวัติการใช้งาน" })).toBeVisible();
+  await expect(page.getByText("settings.payroll").first()).toBeVisible();
 });
 
 test("creates an employee, records OT, runs and approves payroll", async ({ page }) => {
@@ -146,5 +150,24 @@ test("resets the invited user's password with an HR link", async ({ page }) => {
   await page.getByLabel("อีเมล").fill(invitedEmail);
   await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
-  await expect(page.getByRole("link", { name: "ภาพรวม" })).toBeVisible();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+});
+
+test("links an employee account and shows self-service payslips", async ({ page }) => {
+  await login(page);
+  await page.goto("/employees");
+  const row = page.getByRole("row", { name: /E2E001/ });
+  await row.getByRole("button", { name: "แก้ไข" }).click();
+  await page.getByTestId("employee-user").selectOption({ label: `${invitedEmail} · ผู้ถูกเชิญ` });
+  await page.getByTestId("save-employee").click();
+  await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
+
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill(invitedEmail);
+  await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+
+  await expect(page.getByRole("heading", { name: "สลิปของฉัน" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "PDF" }).first()).toBeVisible();
 });

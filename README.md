@@ -19,8 +19,8 @@ for exactly what compiles, what is tested, and what is deferred.
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
 - **API**: `/health`, `/api/v1/auth/*`, `/api/v1/employees*`, `/api/v1/users*`,
   `/api/v1/attendance*`, `/api/v1/payroll/*`, `/api/v1/leave/*`,
-  `/api/v1/settings/*`, `/api/v1/ai/*`, `/api/v1/plugins*`, `/api/v1/graphql`,
-  `/api/v1/mcp`
+  `/api/v1/settings/*`, `/api/v1/me/*`, `/api/v1/audit`,
+  `/api/v1/ai/*`, `/api/v1/plugins*`, `/api/v1/graphql`, `/api/v1/mcp`
 
 ## Quick start
 
@@ -219,6 +219,15 @@ Password resets work the same way: HR issues `/reset/<token>` (1 hour, single
 use) and the user sets a new password; every refresh token for that user is
 revoked.
 
+An employee can be linked to a login account from the employee form. That user
+then sees only their own payslips at `/me/payslips`
+(`GET /api/v1/me/payslips`, plus `/render` and `/pdf`); ownership is checked
+against `employees.user_id`, so `payslip.view_self` never exposes a colleague's
+slip.
+
+`GET /api/v1/audit` (permission `audit_log.read`) lists the tenant audit trail;
+the admin UI is at `/audit`.
+
 ## Attendance → payroll
 
 ```
@@ -262,8 +271,17 @@ role, which is the one misconfiguration that silently disables tenant isolation.
 ## E2E
 
 Browser tests (Playwright) live in `web/e2e` and run in CI against a real
-gateway + Postgres + Redis. They cover invite acceptance/login, settings
-persistence, employee creation, attendance → payroll → approval, and user invite.
+gateway + Postgres + Redis. They cover invite acceptance/login, settings and
+audit, employee creation, attendance → payroll → approval, holiday OT
+classification, user invite, password reset, and self-service payslips.
+
+Payroll throughput check (not in the normal suite):
+
+```bash
+LOAD_EMPLOYEES=500 cargo test -p talentos-payroll-runner --test load \
+  -- --ignored --nocapture
+# local: 500 employees in ~0.38s (~1,300 employees/s)
+```
 
 ```bash
 docker compose exec -T -e PGPASSWORD=talentos_dev_secret postgres \

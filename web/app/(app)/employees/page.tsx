@@ -23,6 +23,7 @@ type Employee = {
   bank_account_number_masked: string | null;
   national_id_masked: string | null;
   sso_number_masked: string | null;
+  user_id: string | null;
 };
 
 type FormState = {
@@ -39,6 +40,7 @@ type FormState = {
   bank_account_number: string;
   national_id: string;
   sso_number: string;
+  user_id: string;
 };
 
 const EMPTY: FormState = {
@@ -55,6 +57,7 @@ const EMPTY: FormState = {
   bank_account_number: "",
   national_id: "",
   sso_number: "",
+  user_id: "",
 };
 
 export default function EmployeesPage() {
@@ -64,6 +67,7 @@ export default function EmployeesPage() {
   const [editing, setEditing] = useState<Employee | "new" | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [users, setUsers] = useState<{ id: string; email: string; full_name_th: string | null }[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -77,6 +81,12 @@ export default function EmployeesPage() {
   useEffect(() => {
     load(showTerminated).catch((e) => handleApiError(e, setError));
   }, [load, showTerminated]);
+
+  useEffect(() => {
+    gw<{ users: { id: string; email: string; full_name_th: string | null }[] }>("api/v1/users")
+      .then((r) => setUsers(r.users))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!editing || editing === "new") {
@@ -98,6 +108,7 @@ export default function EmployeesPage() {
       bank_account_number: "",
       national_id: "",
       sso_number: "",
+      user_id: editing.user_id ?? "",
     });
   }, [editing]);
 
@@ -118,6 +129,7 @@ export default function EmployeesPage() {
         bank_account_number: form.bank_account_number.trim() || null,
         national_id: form.national_id.trim() || null,
         sso_number: form.sso_number.trim() || null,
+        user_id: form.user_id || null,
       };
       if (editing === "new") {
         await gw("api/v1/employees", { method: "POST", body: JSON.stringify(body) });
@@ -274,7 +286,23 @@ export default function EmployeesPage() {
               />
               <span className="hint">เว้นว่างเพื่อคงเดิม</span>
             </div>
-            <div />
+            <div className="field">
+              <label>ผูกบัญชีผู้ใช้</label>
+              <select
+                data-testid="employee-user"
+                value={form.user_id}
+                onChange={(e) => set("user_id", e.target.value)}
+              >
+                <option value="">ไม่ผูก</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.email}
+                    {u.full_name_th ? ` · ${u.full_name_th}` : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="hint">ให้พนักงานดูสลิปของตัวเองได้</span>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
             <label className="check">

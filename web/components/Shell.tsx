@@ -12,11 +12,13 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
   { href: "/payroll", label: "รอบเงินเดือน", icon: "wallet" },
   { href: "/payslip", label: "แบบฟอร์มสลิป", icon: "file" },
+  { href: "/me/payslips", label: "สลิปของฉัน", icon: "file" },
 ];
 
 const ADMIN_NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/users", label: "ผู้ใช้", icon: "user" },
   { href: "/settings", label: "ตั้งค่า", icon: "settings" },
+  { href: "/audit", label: "ประวัติ", icon: "file" },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -63,9 +65,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }
 
   const isAdmin = me?.roles.includes("hr_admin") ?? false;
+  const canHr = me?.permissions.includes("employee.read_all") ?? true;
   const displayName = me?.full_name_th || me?.email || "TalentOS";
   const roleLabel = me?.roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ") || "";
-  const items = isAdmin ? [...NAV, ...ADMIN_NAV] : NAV;
+  const items = !me
+    ? NAV
+    : canHr
+      ? [...NAV, ...(isAdmin ? ADMIN_NAV : [])]
+      : [{ href: "/me/payslips", label: "สลิปของฉัน", icon: "file" as IconName }];
 
   return (
     <div className="shell">

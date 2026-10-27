@@ -7,8 +7,8 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, auth, employees, graphql, health, leave, mcp, memory, payroll, plugins,
-    settings, users,
+    ai, attendance, audit, auth, employees, graphql, health, leave, mcp, me, memory, payroll,
+    plugins, settings, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -26,6 +26,9 @@ pub fn build(state: AppState) -> Router {
 
     let protected = Router::new()
         .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/me/payslips", get(me::payslips))
+        .route("/api/v1/me/payslips/:id/render", get(me::render))
+        .route("/api/v1/me/payslips/:id/pdf", get(me::pdf))
         .route("/api/v1/auth/change-password", post(users::change_password))
         .route(
             "/api/v1/employees",
@@ -54,6 +57,7 @@ pub fn build(state: AppState) -> Router {
             axum::routing::put(settings::put_entity),
         )
         .route("/api/v1/settings/system", get(settings::system))
+        .route("/api/v1/audit", get(audit::list))
         .route("/api/v1/users", get(users::list))
         .route("/api/v1/users/invite", post(users::invite))
         .route(

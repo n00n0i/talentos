@@ -73,12 +73,16 @@ against a live gateway.
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings) and `/users` (invite, roles, deactivate, HR-issued password reset).
 Payroll runs export a UTF-8 CSV register (formula-injection safe) with totals.
+Employees can be linked to a login and see only their own payslips
+(`/me/payslips`). The audit trail has a read API and `/audit` page.
 Attendance has a tenant holiday calendar; OT is classified holiday > weekend >
 weekday automatically. HTTPS is a compose overlay (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout. Browser E2E (`web/e2e`, Playwright) passes 4/4
-locally and runs in CI: invite acceptance → login, settings persistence,
-employee → attendance → payroll → approval, user invite.
+locally (7 scenarios) and runs in CI: invite acceptance → login, settings +
+audit, employee → attendance → payroll → approval, holiday OT, user invite,
+password reset, self-service payslips. Payroll load test: 500 employees in
+~0.38 s locally (~1,300/s).
 
 ## Known risks
 

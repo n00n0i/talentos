@@ -45,6 +45,8 @@ pub struct EmployeeBody {
     pub bank_account_number: Option<String>,
     pub national_id: Option<String>,
     pub sso_number: Option<String>,
+    /// Link to a login account so the employee can see their own payslips.
+    pub user_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,6 +71,7 @@ pub struct EmployeeDto {
     pub bank_account_number_masked: Option<String>,
     pub national_id_masked: Option<String>,
     pub sso_number_masked: Option<String>,
+    pub user_id: Option<Uuid>,
 }
 
 /// GET /api/v1/employees?q=&status=&limit=
@@ -92,7 +95,7 @@ pub async fn list(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
                   first_name_en, last_name_en, position_title, department,
                   base_salary, hire_date, termination_date, status, pf_member,
-                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number
+                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number, user_id
              FROM employees
             WHERE tenant_id = $1
               AND ($2 = 'all' OR status = $2)
@@ -151,6 +154,11 @@ pub async fn create(
         Ok(id) => id,
         Err(response) => return response,
     };
+    if let Some(user_id) = body.user_id {
+        if let Err(response) = ensure_user_in_tenant(&state, &ctx, user_id).await {
+            return response;
+        }
+    }
     let bank = match encrypt_field(&state.pii, body.bank_account_number.as_deref()) {
         Ok(v) => v,
         Err(response) => return response,
@@ -174,8 +182,8 @@ pub async fn create(
              (id, tenant_id, entity_id, employee_code, first_name_th, last_name_th,
               first_name_en, last_name_en, position_title, department, base_salary,
               hire_date, tax_filing_status, pf_member, sso_enrolled,
-              bank_name, bank_account_number, national_id, sso_number)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)"#,
+              bank_name, bank_account_number, national_id, sso_number, user_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)"#,
     )
     .bind(id)
     .bind(ctx.tenant_id.0)
@@ -196,6 +204,7 @@ pub async fn create(
     .bind(bank.as_deref())
     .bind(national.as_deref())
     .bind(sso.as_deref())
+    .bind(body.user_id)
     .execute(&mut *tx)
     .await;
 
@@ -244,6 +253,11 @@ pub async fn update(
     if let Some(message) = validate(&body) {
         return bad_request(&message);
     }
+    if let Some(user_id) = body.user_id {
+        if let Err(response) = ensure_user_in_tenant(&state, &ctx, user_id).await {
+            return response;
+        }
+    }
     let bank = match encrypt_field(&state.pii, body.bank_account_number.as_deref()) {
         Ok(v) => v,
         Err(response) => return response,
@@ -271,6 +285,7 @@ pub async fn update(
              bank_account_number = COALESCE($16, bank_account_number),
              national_id = COALESCE($17, national_id),
              sso_number = COALESCE($18, sso_number),
+             user_id = $19,
              updated_at = now()
            WHERE id = $1 AND tenant_id = $2"#,
     )
@@ -292,6 +307,7 @@ pub async fn update(
     .bind(bank.as_deref())
     .bind(national.as_deref())
     .bind(sso.as_deref())
+    .bind(body.user_id)
     .execute(&mut *tx)
     .await;
 
@@ -425,6 +441,32 @@ async fn resolve_entity(
     }
 }
 
+// Same axum trade-off: a ready-to-send response is the error.
+#[allow(clippy::result_large_err)]
+async fn ensure_user_in_tenant(
+    state: &AppState,
+    ctx: &talentos_kernel::TenantContext,
+    user_id: Uuid,
+) -> Result<(), Response> {
+    let mut tx = state
+        .pool
+        .begin_tenant(ctx.tenant_id)
+        .await
+        .map_err(|e| internal_err(&e.to_string()))?;
+    let found: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM users WHERE id = $1 AND tenant_id = $2 AND is_active")
+            .bind(user_id)
+            .bind(ctx.tenant_id.0)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| internal_err(&e.to_string()))?;
+    let _ = tx.rollback().await;
+    if found.is_none() {
+        return Err(bad_request("user_id does not belong to this tenant"));
+    }
+    Ok(())
+}
+
 async fn fetch_one(
     state: &AppState,
     tenant_id: Uuid,
@@ -439,7 +481,7 @@ async fn fetch_one(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
                   first_name_en, last_name_en, position_title, department,
                   base_salary, hire_date, termination_date, status, pf_member,
-                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number
+                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number, user_id
              FROM employees WHERE id = $1 AND tenant_id = $2"#,
     )
     .bind(id)
@@ -479,6 +521,7 @@ fn row_to_dto(
         bank_account_number_masked: mask_value(pii, row.get("bank_account_number")),
         national_id_masked: mask_value(pii, row.get("national_id")),
         sso_number_masked: mask_value(pii, row.get("sso_number")),
+        user_id: row.get("user_id"),
     }
 }
 

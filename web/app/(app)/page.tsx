@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import {
@@ -32,6 +33,7 @@ export default function DashboardPage() {
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [greeting, setGreeting] = useState("สวัสดี");
   const [error, setError] = useState("");
+  const router = useRouter();
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -39,15 +41,25 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    gw<Me>("api/v1/auth/me")
+      .then((profile) => {
+        setMe(profile);
+        if (!profile.permissions.includes("employee.read_all")) {
+          router.replace("/me/payslips");
+        }
+      })
+      .catch((e) => handleApiError(e, setError));
+  }, [router]);
+
+  useEffect(() => {
+    if (!me?.permissions.includes("employee.read_all")) return;
     (async () => {
-      const [profile, runData, employees] = await Promise.all([
-        gw<Me>("api/v1/auth/me"),
+      const [runData, employees] = await Promise.all([
         gql<{ payrollRuns: PayrollRun[] }>(
           "{ payrollRuns(limit: 6) { id periodStart periodEnd paymentDate status totalEmployees totalGross totalNet totalTax totalSso totalPf } }",
         ),
         gql<{ employees: Employee[] }>("{ employees(limit: 200) { employeeCode } }"),
       ]);
-      setMe(profile);
       setRuns(runData.payrollRuns);
       setHeadcount(employees.employees.length);
 
@@ -63,7 +75,7 @@ export default function DashboardPage() {
         }
       }
     })().catch((e) => handleApiError(e, setError));
-  }, []);
+  }, [me]);
 
   const latest = runs?.[0];
   const firstName = me?.full_name_th?.split(/\s+/)[0] || "";

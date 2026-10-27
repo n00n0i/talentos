@@ -62,6 +62,10 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 ("attendance", "read"),
                 &["hr_admin", "payroll_manager", "manager"][..],
             ),
+            (
+                ("attendance", "shifts"),
+                &["hr_admin", "payroll_manager"][..],
+            ),
             (("settings", "manage_company"), &["hr_admin"][..]),
             (
                 ("settings", "view_company"),
@@ -178,5 +182,25 @@ mod tests {
         assert!(perms.contains(&"leave_request.submit_self".to_string()));
         assert!(!perms.contains(&"employee.create".to_string()));
         assert_eq!(perms.len(), 3); // update_self + view_self + submit_self
+    }
+
+    #[test]
+    fn hr_admin_and_payroll_manager_can_manage_shifts() {
+        for role in ["hr_admin", "payroll_manager"] {
+            assert!(
+                has_permission(&[role.into()], "attendance", "shifts"),
+                "{role} should manage shifts"
+            );
+        }
+    }
+
+    #[test]
+    fn employee_and_manager_cannot_manage_shifts() {
+        for role in ["employee", "manager"] {
+            assert!(
+                !has_permission(&[role.into()], "attendance", "shifts"),
+                "{role} should not manage shifts"
+            );
+        }
     }
 }

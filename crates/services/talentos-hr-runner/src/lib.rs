@@ -3,8 +3,12 @@
 //! Leave days are always computed server-side (calendar days inclusive) — a client
 //! never gets to declare how many days it is taking.
 
+pub mod attendance;
 pub mod leave;
 
+pub use attendance::{
+    active_shift, assign_shift, create_shift, set_geofence, AttendanceError, ShiftInput, ShiftView,
+};
 pub use leave::{
     count_leave_days, create_request, employee_of_user, list_balances, list_requests, LeaveError,
     LeaveInput,

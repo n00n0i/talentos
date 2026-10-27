@@ -191,7 +191,7 @@ mod tests {
             grace_minutes: 0,
         };
         let punches = vec![
-            punch_in(utc(2026, 10, 27, 2, 0)),  // 09:00 Bangkok
+            punch_in(utc(2026, 10, 27, 2, 0)),   // 09:00 Bangkok
             punch_out(utc(2026, 10, 27, 11, 0)), // 18:00 Bangkok
         ];
         let summary = derive_day(&shift, &punches, date(2026, 10, 27), false, false).unwrap();

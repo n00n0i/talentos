@@ -7,10 +7,11 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, NaiveTime};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use talentos_hr_runner::attendance::{AttendanceError, ShiftInput};
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
@@ -46,6 +47,28 @@ pub struct HolidayBody {
 #[derive(Debug, Deserialize)]
 pub struct HolidayQuery {
     pub year: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ShiftCreateBody {
+    pub name: String,
+    pub start: String,
+    pub end: String,
+    pub break_minutes: i32,
+    pub grace_minutes: i32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ShiftAssignBody {
+    pub employee_id: Uuid,
+    pub effective_from: NaiveDate,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GeofenceBody {
+    pub lat: f64,
+    pub lng: f64,
+    pub radius_m: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -351,6 +374,205 @@ pub async fn delete_holiday(
     StatusCode::NO_CONTENT.into_response()
 }
 
+/// GET /api/v1/shifts
+pub async fn list_shifts(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "read") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let rows = sqlx::query(
+        "SELECT id, name, start_time, end_time, break_minutes, grace_minutes
+           FROM work_shifts
+          WHERE tenant_id = $1
+          ORDER BY name",
+    )
+    .bind(ctx.tenant_id.0)
+    .fetch_all(&mut *tx)
+    .await;
+    let _ = tx.rollback().await;
+
+    match rows {
+        Ok(rows) => {
+            use sqlx::Row;
+            let shifts: Vec<talentos_hr_runner::attendance::ShiftView> = rows
+                .into_iter()
+                .map(|row| talentos_hr_runner::attendance::ShiftView {
+                    id: row.get("id"),
+                    name: row.get("name"),
+                    start: row.get("start_time"),
+                    end: row.get("end_time"),
+                    break_minutes: row.get("break_minutes"),
+                    grace_minutes: row.get("grace_minutes"),
+                })
+                .collect();
+            (StatusCode::OK, Json(json!({ "shifts": shifts }))).into_response()
+        }
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+/// POST /api/v1/shifts
+pub async fn create_shift(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<ShiftCreateBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "shifts") {
+        return forbidden;
+    }
+    let start = match parse_time(&body.start) {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
+    let end = match parse_time(&body.end) {
+        Ok(t) => t,
+        Err(resp) => return resp,
+    };
+
+    let input = ShiftInput {
+        name: body.name,
+        start,
+        end,
+        break_minutes: body.break_minutes,
+        grace_minutes: body.grace_minutes,
+    };
+
+    let shift =
+        match talentos_hr_runner::attendance::create_shift(&state.pool, ctx.tenant_id, input).await
+        {
+            Ok(shift) => shift,
+            Err(e) => return map_attendance_error(e),
+        };
+
+    let audit = async {
+        let mut tx = state.pool.begin_tenant(ctx.tenant_id).await.ok()?;
+        sqlx::query(
+            r#"INSERT INTO audit_log
+                 (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+               VALUES ($1, 'user', $2, 'attendance.shift.create', 'work_shift', $3, $4)"#,
+        )
+        .bind(ctx.tenant_id.0)
+        .bind(ctx.user_id.0.to_string())
+        .bind(shift.id.to_string())
+        .bind(json!({"name": &shift.name}))
+        .execute(&mut *tx)
+        .await
+        .ok()?;
+        tx.commit().await.ok()
+    };
+    let _ = audit.await;
+
+    (StatusCode::CREATED, Json(shift)).into_response()
+}
+
+/// POST /api/v1/shifts/:id/assign
+pub async fn assign_shift(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ShiftAssignBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "shifts") {
+        return forbidden;
+    }
+    if let Err(e) = talentos_hr_runner::attendance::assign_shift(
+        &state.pool,
+        ctx.tenant_id,
+        body.employee_id,
+        id,
+        body.effective_from,
+    )
+    .await
+    {
+        return map_attendance_error(e);
+    }
+
+    let audit = async {
+        let mut tx = state.pool.begin_tenant(ctx.tenant_id).await.ok()?;
+        sqlx::query(
+            r#"INSERT INTO audit_log
+                 (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+               VALUES ($1, 'user', $2, 'attendance.shift.assign', 'shift_assignment', $3, $4)"#,
+        )
+        .bind(ctx.tenant_id.0)
+        .bind(ctx.user_id.0.to_string())
+        .bind(id.to_string())
+        .bind(json!({"employee_id": body.employee_id, "effective_from": body.effective_from}))
+        .execute(&mut *tx)
+        .await
+        .ok()?;
+        tx.commit().await.ok()
+    };
+    let _ = audit.await;
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// PUT /api/v1/settings/geofence
+pub async fn set_geofence(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<GeofenceBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "attendance", "shifts") {
+        return forbidden;
+    }
+    if let Err(e) = talentos_hr_runner::attendance::set_geofence(
+        &state.pool,
+        ctx.tenant_id,
+        body.lat,
+        body.lng,
+        body.radius_m,
+    )
+    .await
+    {
+        return map_attendance_error(e);
+    }
+
+    let audit = async {
+        let mut tx = state.pool.begin_tenant(ctx.tenant_id).await.ok()?;
+        sqlx::query(
+            r#"INSERT INTO audit_log
+                 (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+               VALUES ($1, 'user', $2, 'attendance.geofence.update', 'entity', $3, $4)"#,
+        )
+        .bind(ctx.tenant_id.0)
+        .bind(ctx.user_id.0.to_string())
+        .bind(ctx.tenant_id.0.to_string())
+        .bind(json!({"lat": body.lat, "lng": body.lng, "radius_m": body.radius_m}))
+        .execute(&mut *tx)
+        .await
+        .ok()?;
+        tx.commit().await.ok()
+    };
+    let _ = audit.await;
+
+    StatusCode::NO_CONTENT.into_response()
+}
+
+fn map_attendance_error(e: AttendanceError) -> Response {
+    match e {
+        AttendanceError::InvalidImport | AttendanceError::EmployeeNotLinked => {
+            unprocessable(&e.to_string())
+        }
+        AttendanceError::NotFound | AttendanceError::NoShift | AttendanceError::NoGeofence => {
+            not_found_message(&e.to_string())
+        }
+        AttendanceError::OutsideGeofence => bad_request(&e.to_string()),
+        AttendanceError::Rule(_) | AttendanceError::Db(_) => internal_err(&e.to_string()),
+    }
+}
+
+#[allow(clippy::result_large_err)]
+fn parse_time(value: &str) -> Result<NaiveTime, Response> {
+    NaiveTime::parse_from_str(value, "%H:%M")
+        .or_else(|_| NaiveTime::parse_from_str(value, "%H:%M:%S"))
+        .map_err(|_| unprocessable("start/end must be HH:MM or HH:MM:SS"))
+}
+
 fn classify_day(date: NaiveDate, is_holiday: bool) -> &'static str {
     if is_holiday {
         return "holiday";
@@ -401,7 +623,15 @@ fn bad_request(message: &str) -> Response {
 }
 
 fn not_found() -> Response {
-    error_response(StatusCode::NOT_FOUND, "attendance record not found")
+    not_found_message("attendance record not found")
+}
+
+fn not_found_message(message: &str) -> Response {
+    error_response(StatusCode::NOT_FOUND, message)
+}
+
+fn unprocessable(message: &str) -> Response {
+    error_response(StatusCode::UNPROCESSABLE_ENTITY, message)
 }
 
 fn internal_err(message: &str) -> Response {
@@ -445,5 +675,24 @@ mod tests {
         assert_eq!(classify_day(date(2026, 10, 3), false), "weekend");
         assert_eq!(classify_day(date(2026, 10, 4), false), "weekend");
         assert_eq!(classify_day(date(2026, 10, 5), false), "weekday");
+    }
+
+    #[test]
+    fn parses_hhmm_and_hhmmss_time_strings() {
+        assert_eq!(
+            parse_time("08:30").unwrap(),
+            NaiveTime::from_hms_opt(8, 30, 0).unwrap()
+        );
+        assert_eq!(
+            parse_time("08:30:45").unwrap(),
+            NaiveTime::from_hms_opt(8, 30, 45).unwrap()
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_time_strings() {
+        assert!(parse_time("25:00").is_err());
+        assert!(parse_time("08:30:99").is_err());
+        assert!(parse_time("not-a-time").is_err());
     }
 }

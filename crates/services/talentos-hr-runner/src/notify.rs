@@ -103,7 +103,7 @@ pub async fn enqueue_leave_decided(
         r#"SELECT u.id, u.email, u.line_user_id
            FROM users u
            JOIN employees e ON e.user_id = u.id
-           WHERE e.id = $1 AND e.tenant_id = $2"#,
+           WHERE e.id = $1 AND e.tenant_id = $2 AND u.is_active = TRUE"#,
     )
     .bind(employee_id)
     .bind(tenant_id)
@@ -161,7 +161,7 @@ pub async fn enqueue_payslip_ready(
            FROM users u
            JOIN employees e ON e.user_id = u.id
            JOIN payslips p ON p.employee_id = e.id AND p.tenant_id = e.tenant_id
-           WHERE p.payroll_run_id = $1 AND p.tenant_id = $2"#,
+           WHERE p.payroll_run_id = $1 AND p.tenant_id = $2 AND u.is_active = TRUE"#,
     )
     .bind(run_id)
     .bind(tenant_id)

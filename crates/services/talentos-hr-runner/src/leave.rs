@@ -228,12 +228,13 @@ pub async fn create_request(
     .await?;
 
     let label_th: String = sqlx::query_scalar(
-        "SELECT label_th FROM leave_types WHERE name = $1 AND (tenant_id IS NULL OR tenant_id = $2) LIMIT 1"
+        "SELECT label_th FROM leave_types WHERE name = $1 AND (tenant_id IS NULL OR tenant_id = $2) ORDER BY (tenant_id IS NOT NULL) DESC, label_th LIMIT 1"
     )
     .bind(&input.leave_type)
     .bind(tenant_id.0)
-    .fetch_one(&mut *tx)
-    .await?;
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or_else(|| input.leave_type.clone());
 
     enqueue_leave_submitted(
         &mut tx,
@@ -515,12 +516,13 @@ pub async fn decide_request(
 
     let employee_id: Uuid = row.try_get("employee_id")?;
     let label_th: String = sqlx::query_scalar(
-        "SELECT label_th FROM leave_types WHERE name = $1 AND (tenant_id IS NULL OR tenant_id = $2) LIMIT 1"
+        "SELECT label_th FROM leave_types WHERE name = $1 AND (tenant_id IS NULL OR tenant_id = $2) ORDER BY (tenant_id IS NOT NULL) DESC, label_th LIMIT 1"
     )
     .bind(&leave_type)
     .bind(tenant_id.0)
-    .fetch_one(&mut *tx)
-    .await?;
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or_else(|| leave_type.clone());
 
     enqueue_leave_decided(
         &mut tx,

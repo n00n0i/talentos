@@ -203,20 +203,34 @@ async fn mobile_punched_day_is_skipped() {
     .await
     .expect("mobile punch");
 
-    let rows = vec![ImportRow {
-        employee_code: "EMP000".into(),
-        date: "2026-10-27".into(),
-        in_time: "09:00".into(),
-        out_time: "18:00".into(),
-    }];
+    let rows = vec![
+        ImportRow {
+            employee_code: "EMP000".into(),
+            date: "2026-10-28".into(),
+            in_time: "09:00".into(),
+            out_time: "18:00".into(),
+        },
+        ImportRow {
+            employee_code: "EMP000".into(),
+            date: "2026-10-27".into(),
+            in_time: "09:00".into(),
+            out_time: "18:00".into(),
+        },
+    ];
 
     let result = import_device_rows(&pool, TenantId(tenant_id), Uuid::new_v4(), rows)
         .await
         .expect("import should succeed");
 
-    assert_eq!(result.imported, 0);
+    assert_eq!(result.imported, 1);
     assert_eq!(result.skipped, 1);
-    assert!(result.errors.is_empty());
+    assert_eq!(result.errors.len(), 1);
+    assert_eq!(result.errors[0].row, 2);
+    assert!(
+        result.errors[0].message.contains("mobile"),
+        "skip message should mention mobile: {}",
+        result.errors[0].message
+    );
 
     // Mobile event must remain, no import events added.
     assert_eq!(

@@ -879,7 +879,10 @@ pub async fn import_device_rows(
             }
             Ok(ImportRowOutcome::Skipped { reason }) => {
                 result.skipped += 1;
-                tracing::debug!(row = row_num, reason, "import row skipped");
+                result.errors.push(ImportErrorRow {
+                    row: row_num,
+                    message: reason.clone(),
+                });
             }
             Err(ImportRowError::Business(message)) => {
                 result.errors.push(ImportErrorRow {

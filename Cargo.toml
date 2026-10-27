@@ -11,6 +11,7 @@ members = [
     # Re-enable once rewritten against the real crate APIs (see docs/qa/final-report.md).
     "crates/api/graphql",
     "crates/domain/talentos-compliance",
+    "crates/domain/talentos-attendance",
     "crates/domain/talentos-payroll",
     "crates/services/talentos-payroll-runner",
     "crates/services/talentos-hr-runner",

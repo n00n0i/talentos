@@ -1,0 +1,8 @@
+[package]
+name = "talentos-attendance"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+thiserror = { workspace = true }

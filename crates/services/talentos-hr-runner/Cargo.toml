@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 talentos-kernel = { path = "../../core/kernel" }
 talentos-db = { path = "../../infra/db" }
+talentos-attendance = { path = "../../domain/talentos-attendance" }
 sqlx = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

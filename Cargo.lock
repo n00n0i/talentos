@@ -3924,6 +3924,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "talentos-attendance"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "talentos-authz"
 version = "0.1.0"
 dependencies = [
@@ -4038,6 +4046,7 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "sqlx",
+ "talentos-attendance",
  "talentos-db",
  "talentos-kernel",
  "thiserror 2.0.21",

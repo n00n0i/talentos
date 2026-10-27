@@ -70,6 +70,8 @@ pub struct ImportResult {
 /// Derived attendance state for a work date.
 #[derive(Debug, Serialize)]
 pub struct DayView {
+    pub id: Uuid,
+    pub employee_id: Uuid,
     pub work_date: NaiveDate,
     pub worked_minutes: i32,
     pub late_minutes: i32,
@@ -555,7 +557,7 @@ async fn recompute_day(
         OtKind::Holiday => "holiday",
     };
 
-    sqlx::query(
+    let id: Uuid = sqlx::query_scalar(
         r#"INSERT INTO attendance_days
              (tenant_id, employee_id, work_date, shift_id,
               worked_minutes, late_minutes, early_leave_minutes,
@@ -571,7 +573,8 @@ async fn recompute_day(
                incomplete = EXCLUDED.incomplete,
                status = 'pending',
                computed_at = now(),
-               updated_at = now()"#,
+               updated_at = now()
+           RETURNING id"#,
     )
     .bind(employee_id)
     .bind(work_date)
@@ -582,10 +585,12 @@ async fn recompute_day(
     .bind(summary.ot_minutes)
     .bind(ot_kind_str)
     .bind(summary.incomplete)
-    .execute(&mut **tx)
+    .fetch_one(&mut **tx)
     .await?;
 
     Ok(DayView {
+        id,
+        employee_id,
         work_date,
         worked_minutes: summary.worked_minutes,
         late_minutes: summary.late_minutes,
@@ -609,7 +614,7 @@ pub async fn list_days(
 ) -> Result<Vec<DayView>, AttendanceError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let rows = sqlx::query(
-        r#"SELECT work_date, worked_minutes, late_minutes, early_leave_minutes,
+        r#"SELECT id, employee_id, work_date, worked_minutes, late_minutes, early_leave_minutes,
                   ot_minutes, ot_kind, incomplete, status
              FROM attendance_days
             WHERE tenant_id = current_tenant_id()
@@ -654,7 +659,7 @@ pub async fn list_my_days(
     let employee_id = employee_id.ok_or(AttendanceError::EmployeeNotLinked)?;
 
     let rows = sqlx::query(
-        r#"SELECT work_date, worked_minutes, late_minutes, early_leave_minutes,
+        r#"SELECT id, employee_id, work_date, worked_minutes, late_minutes, early_leave_minutes,
                   ot_minutes, ot_kind, incomplete, status
              FROM attendance_days
             WHERE tenant_id = $1 AND employee_id = $2
@@ -1122,6 +1127,8 @@ async fn shift_by_id_in_tx(
 
 fn map_day(row: sqlx::postgres::PgRow) -> Result<DayView, sqlx::Error> {
     Ok(DayView {
+        id: row.try_get("id")?,
+        employee_id: row.try_get("employee_id")?,
         work_date: row.try_get("work_date")?,
         worked_minutes: row.try_get("worked_minutes")?,
         late_minutes: row.try_get("late_minutes")?,

@@ -201,3 +201,33 @@ test("employee punches in and out from the clock page", async ({ page, context }
   await page.getByRole("button", { name: "ออกงาน" }).click();
   await expect(page.getByTestId("day-row").first()).toBeVisible();
 });
+
+test("HR creates a shift, corrects and approves a derived day", async ({ page }) => {
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+  await login(page);
+  await page.goto("/attendance/shifts");
+  await page.getByTestId("shift-name").fill("E2E UI");
+  await page.getByTestId("shift-start").fill("09:00");
+  await page.getByTestId("shift-end").fill("18:00");
+  await page.getByTestId("save-shift").click();
+  await expect(page.getByText("สร้างกะแล้ว")).toBeVisible();
+
+  const employeeId = await page
+    .getByTestId("shift-employee")
+    .locator("option", { hasText: "E2E001" })
+    .getAttribute("value");
+  await page.getByTestId("shift-employee").selectOption(employeeId!);
+  await page.getByTestId("assign-shift").click();
+  await expect(page.getByText("มอบหมายกะแล้ว")).toBeVisible();
+
+  await page.goto("/attendance");
+  const row = page.getByTestId("day-row").filter({ hasText: today }).filter({ hasText: "E2E001" });
+  await row.getByTestId("correct-day").click();
+  await page.getByTestId("correct-in").fill(`${today}T09:00`);
+  await page.getByTestId("correct-out").fill(`${today}T18:00`);
+  await page.getByTestId("save-correction").click();
+  await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
+
+  await row.getByTestId("approve-day").click();
+  await expect(row).toContainText("อนุมัติแล้ว");
+});

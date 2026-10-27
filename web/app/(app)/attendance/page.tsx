@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
 
@@ -15,6 +16,24 @@ type Record = {
   ot_kind: string;
   note: string | null;
 };
+
+type Day = {
+  id: string;
+  employee_id: string;
+  work_date: string;
+  worked_minutes: number;
+  late_minutes: number;
+  ot_minutes: number;
+  incomplete: boolean;
+  status: string;
+};
+
+const STATUS: { [k: string]: { label: string; tone: string } } = {
+  pending: { label: "รออนุมัติ", tone: "warning" },
+  approved: { label: "อนุมัติแล้ว", tone: "success" },
+};
+
+const hm = (min: number) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}`;
 
 const KINDS = [
   { value: "", label: "อัตโนมัติ (ตามวัน/ปฏิทิน)" },
@@ -34,6 +53,10 @@ function monthRange() {
 export default function AttendancePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [records, setRecords] = useState<Record[] | null>(null);
+  const [days, setDays] = useState<Day[] | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [inAt, setInAt] = useState("");
+  const [outAt, setOutAt] = useState("");
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [holidayDate, setHolidayDate] = useState("");
   const [holidayName, setHolidayName] = useState("");
@@ -49,11 +72,13 @@ export default function AttendancePage() {
 
   const load = useCallback(async () => {
     const year = range.from.slice(0, 4);
-    const [emps, recs, hols] = await Promise.all([
+    const [emps, recs, hols, derived] = await Promise.all([
       gw<{ employees: Employee[] }>("api/v1/employees?status=active&limit=500"),
       gw<{ records: Record[] }>(`api/v1/attendance?from=${range.from}&to=${range.to}`),
       gw<{ holidays: Holiday[] }>(`api/v1/attendance/holidays?year=${year}`),
+      gw<{ days: Day[] }>(`api/v1/attendance/days?from=${range.from}&to=${range.to}`),
     ]);
+    setDays(derived.days);
     setEmployees(emps.employees);
     setRecords(recs.records);
     setHolidays(hols.holidays);
@@ -91,6 +116,35 @@ export default function AttendancePage() {
       setBusy(false);
     }
   }
+
+  function startCorrection(day: Day) {
+    setEditing(day.id);
+    setInAt(`${day.work_date}T09:00`);
+    setOutAt(`${day.work_date}T18:00`);
+  }
+
+  async function dayAction(done: string, path: string, body?: object) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(path, { method: "POST", body: body && JSON.stringify(body) });
+      setNotice(done);
+      setEditing(null);
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const correct = (day: Day) =>
+    dayAction("บันทึกการแก้ไขแล้ว", `api/v1/attendance/days/${day.id}/correct`, {
+      in_at: `${inAt}:00+07:00`,
+      out_at: `${outAt}:00+07:00`,
+      note: "HR correction",
+    });
 
   async function addHoliday(e: React.FormEvent) {
     e.preventDefault();
@@ -144,13 +198,100 @@ export default function AttendancePage() {
           <h1>เวลาและ OT</h1>
           <p className="page-sub">บันทึก OT เพื่อให้รอบเงินเดือนคำนวณอัตราตามกฎหมาย</p>
         </div>
-        <span className="hint">
-          {range.from} – {range.to}
-        </span>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span className="hint">
+            {range.from} – {range.to}
+          </span>
+          <Link className="btn btn-sm" href="/attendance/shifts">
+            จัดการกะ
+          </Link>
+        </div>
       </div>
 
       {error && <p className="error">{error}</p>}
       {notice && <p className="badge success">{notice}</p>}
+
+      <div className="card">
+        <div className="card-head">
+          <h2>วันทำงาน (derived)</h2>
+          <span className="hint">คำนวณจากการลงเวลาและกะ</span>
+        </div>
+        {days === null ? (
+          <div className="spinner">กำลังโหลด…</div>
+        ) : days.length === 0 ? (
+          <div className="empty">ยังไม่มีวันทำงานในเดือนนี้</div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>วันที่</th>
+                  <th>พนักงาน</th>
+                  <th className="num">ทำงาน</th>
+                  <th className="num">สาย (นาที)</th>
+                  <th className="num">OT</th>
+                  <th>สถานะ</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {days.map((d) => {
+                  const st = STATUS[d.status] ?? { label: d.status, tone: "" };
+                  return (
+                    <tr key={d.id} data-testid="day-row">
+                      <td>{d.work_date}</td>
+                      <td>{employees.find((e) => e.id === d.employee_id)?.employee_code ?? "—"}</td>
+                      <td className="num">{hm(d.worked_minutes)}</td>
+                      <td className="num">{d.late_minutes}</td>
+                      <td className="num">{hm(d.ot_minutes)}</td>
+                      <td>
+                        <span className={`badge ${st.tone}`}>{st.label}</span>
+                        {d.incomplete && <span className="hint"> · ไม่ครบ</span>}
+                      </td>
+                      <td className="num">
+                        {d.status === "approved" ? null : editing === d.id ? (
+                          <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
+                            <input data-testid="correct-in" type="datetime-local" value={inAt} onChange={(e) => setInAt(e.target.value)} />
+                            <input data-testid="correct-out" type="datetime-local" value={outAt} onChange={(e) => setOutAt(e.target.value)} />
+                            <span className="hint">เวลาไทย (UTC+7)</span>
+                            <span style={{ display: "flex", gap: 6 }}>
+                              <button className="btn btn-sm" onClick={() => setEditing(null)} disabled={busy}>
+                                ยกเลิก
+                              </button>
+                              <button
+                                className="btn btn-sm btn-primary"
+                                data-testid="save-correction"
+                                onClick={() => correct(d)}
+                                disabled={busy || !inAt || !outAt}
+                              >
+                                บันทึก
+                              </button>
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                            <button className="btn btn-sm" data-testid="correct-day" onClick={() => startCorrection(d)} disabled={busy}>
+                              แก้ไข
+                            </button>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              data-testid="approve-day"
+                              onClick={() => dayAction("อนุมัติวันทำงานแล้ว", `api/v1/attendance/days/${d.id}/approve`)}
+                              disabled={busy}
+                            >
+                              อนุมัติ
+                            </button>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <form className="card card-pad" onSubmit={submit}>
         <h2 style={{ marginBottom: 14 }}>บันทึกเวลา</h2>

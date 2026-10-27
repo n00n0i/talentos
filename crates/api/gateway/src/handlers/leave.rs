@@ -48,9 +48,10 @@ fn authorize_create_for_employee(
     own_employee: Option<Uuid>,
 ) -> Result<(), Response> {
     require(ctx, "leave_request", "submit_self")?;
+    // Submitting for someone else needs team/HR rights. An unlinked HR account
+    // has no own employee record and must still be allowed through view_team.
     if let Some(requested_employee) = requested {
-        let own_employee = own_employee.ok_or_else(forbidden_self_only)?;
-        if requested_employee != own_employee {
+        if own_employee != Some(requested_employee) {
             require(ctx, "leave_request", "view_team")?;
         }
     }
@@ -160,9 +161,8 @@ pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Res
             Err(e) => return internal_err(&e.to_string()),
         };
 
-    let year = chrono::Utc::now()
-        .with_timezone(&chrono::FixedOffset::east_opt(7 * 3600).unwrap())
-        .year();
+    // Thai business year (UTC+7) without a panic-prone offset conversion.
+    let year = (chrono::Utc::now() + chrono::Duration::hours(7)).year();
     let balances = match talentos_hr_runner::list_balances(
         &state.pool,
         ctx.tenant_id,
@@ -273,17 +273,6 @@ pub async fn decide(
     }
 }
 
-fn forbidden_self_only() -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(envelope(
-            "forbidden",
-            "you can only submit leave for your own employee record",
-        )),
-    )
-        .into_response()
-}
-
 fn envelope(code: &str, message: &str) -> ErrorResponse {
     ErrorResponse {
         error: code.into(),
@@ -386,6 +375,13 @@ mod tests {
         let other = Uuid::new_v4();
         let ctx = ctx_with_roles(&["manager"]);
         assert!(authorize_create_for_employee(&ctx, Some(other), Some(own)).is_ok());
+    }
+
+    #[test]
+    fn unlinked_hr_can_create_for_another() {
+        let ctx = ctx_with_roles(&["hr_admin"]);
+        let other = uuid::Uuid::new_v4();
+        assert!(authorize_create_for_employee(&ctx, Some(other), None).is_ok());
     }
 
     #[test]

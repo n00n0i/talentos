@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { gw, handleApiError, Me } from "@/lib/api";
+import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
 type Balance = {
   leave_type: string;
@@ -9,6 +9,7 @@ type Balance = {
   total_days: string;
   used_days: string;
   remaining_days: string;
+  provisioned: boolean;
 };
 type LeaveRequest = {
   id: string;
@@ -19,7 +20,11 @@ type LeaveRequest = {
   status: string;
   reason: string | null;
 };
-type Pending = LeaveRequest & { employee_code: string; employee_name: string };
+type Pending = LeaveRequest & {
+  employee_code: string;
+  employee_name: string;
+  label_th: string;
+};
 
 const STATUS: { [k: string]: { label: string; tone: string } } = {
   pending: { label: "รออนุมัติ", tone: "warning" },
@@ -139,9 +144,9 @@ export default function LeavePage() {
                       <td>
                         {r.employee_code} · {r.employee_name}
                       </td>
-                      <td>{typeLabel(r.leave_type)}</td>
+                      <td>{r.label_th || typeLabel(r.leave_type)}</td>
                       <td>
-                        {r.start_date} – {r.end_date}
+                        {thDate(r.start_date)} – {thDate(r.end_date)}
                       </td>
                       <td className="num">{num(r.days)}</td>
                       <td>{r.reason ?? "—"}</td>
@@ -192,10 +197,19 @@ export default function LeavePage() {
             {balances.map((b) => (
               <div key={b.leave_type} className="card card-pad">
                 <div className="stat-label">{b.label_th}</div>
-                <div className="stat-value">
-                  {num(b.remaining_days)} / {num(b.total_days)}
-                </div>
-                <div className="stat-hint">วันคงเหลือ / วันทั้งหมด</div>
+                {b.provisioned ? (
+                  <>
+                    <div className="stat-value">
+                      {num(b.remaining_days)} / {num(b.total_days)}
+                    </div>
+                    <div className="stat-hint">วันคงเหลือ / วันทั้งหมด</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="stat-value" style={{ fontSize: 18 }}>ยังไม่ตั้งโควตา</div>
+                    <div className="stat-hint">ให้ HR ตั้งโควตาก่อน เพื่อติดตามวันคงเหลือ</div>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -257,7 +271,7 @@ export default function LeavePage() {
                       <tr key={r.id} data-testid="leave-row">
                         <td>{typeLabel(r.leave_type)}</td>
                         <td>
-                          {r.start_date} – {r.end_date}
+                          {thDate(r.start_date)} – {thDate(r.end_date)}
                         </td>
                         <td className="num">{num(r.days)}</td>
                         <td>{r.reason ?? "—"}</td>

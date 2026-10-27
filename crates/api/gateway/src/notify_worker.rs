@@ -150,7 +150,7 @@ pub async fn deliver_pending(
                 Some(uid) => {
                     validate_recipient(&mut tx, tenant_id, uid, &channel, &recipient).await?
                 }
-                None => true,
+                None => false,
             };
 
             if !recipient_ok {
@@ -649,14 +649,14 @@ mod tests {
         let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
         cleanup_registered_notifications(&admin).await;
         let app = TenantPool::connect(&url, 2).await.unwrap();
-        let (tenant_id, _user_id) = seed_tenant(&admin, &app).await;
+        let (tenant_id, user_id) = seed_tenant(&admin, &app).await;
 
         let id = insert_notification(
             &app,
             tenant_id,
-            None,
+            Some(user_id),
             "email",
-            "employee@example.com",
+            "test@example.com",
             "หัวข้อทดสอบ",
             "เนื้อหาทดสอบ",
         )
@@ -692,7 +692,7 @@ mod tests {
             assert!(auth.starts_with("Bearer "));
             assert!(auth.contains("test-key"));
             assert_eq!(payload.from, "noreply@example.com");
-            assert_eq!(payload.to, "employee@example.com");
+            assert_eq!(payload.to, "test@example.com");
             assert_eq!(payload.subject, "หัวข้อทดสอบ");
             assert_eq!(payload.text, "เนื้อหาทดสอบ");
         }
@@ -715,14 +715,14 @@ mod tests {
         let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
         cleanup_registered_notifications(&admin).await;
         let app = TenantPool::connect(&url, 2).await.unwrap();
-        let (tenant_id, _user_id) = seed_tenant(&admin, &app).await;
+        let (tenant_id, user_id) = seed_tenant(&admin, &app).await;
 
         let id = insert_notification(
             &app,
             tenant_id,
-            None,
+            Some(user_id),
             "line",
-            "U_TEST_EMP",
+            "U_LINE",
             "สลิปพร้อม",
             "เนื้อหา LINE",
         )
@@ -757,7 +757,7 @@ mod tests {
                 .unwrap_or("");
             assert!(auth.starts_with("Bearer "));
             assert!(auth.contains("line-token"));
-            assert_eq!(payload.to, "U_TEST_EMP");
+            assert_eq!(payload.to, "U_LINE");
             assert_eq!(
                 payload.messages,
                 vec![json!({"type": "text", "text": "เนื้อหา LINE"})]
@@ -782,14 +782,14 @@ mod tests {
         let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
         cleanup_registered_notifications(&admin).await;
         let app = TenantPool::connect(&url, 2).await.unwrap();
-        let (tenant_id, _user_id) = seed_tenant(&admin, &app).await;
+        let (tenant_id, user_id) = seed_tenant(&admin, &app).await;
 
         let id = insert_notification(
             &app,
             tenant_id,
-            None,
+            Some(user_id),
             "email",
-            "employee@example.com",
+            "test@example.com",
             "sub",
             "body",
         )
@@ -858,6 +858,69 @@ mod tests {
             .unwrap();
         sqlx::query("UPDATE users SET is_active = false WHERE id = $1")
             .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+
+        let state = Arc::new(Mutex::new(Received::default()));
+        let (http, addr) = stub_server(state.clone()).await;
+        let config = NotifyConfig {
+            email_api_key: Some("test-key".into()),
+            email_from: Some("noreply@example.com".into()),
+            email_api_base: format!("http://{addr}"),
+            line_channel_token: None,
+            line_api_base: DEFAULT_LINE_BASE.to_string(),
+        };
+
+        let count = deliver_pending(&app, &admin, &http, &config)
+            .await
+            .expect("deliver");
+        assert_eq!(count, 1);
+        assert_eq!(
+            notification_status(&app, tenant_id, id).await.as_deref(),
+            Some("failed")
+        );
+        assert_eq!(state.lock().unwrap().email.len(), 0);
+
+        cleanup_tenant(&admin, tenant_id).await;
+    }
+
+    #[tokio::test]
+    async fn null_user_id_is_marked_failed_without_sending() {
+        let _guard = WORKER_TEST_LOCK.lock().await;
+        let Some(url) = db_url() else {
+            eprintln!("SKIP: DATABASE_URL not set");
+            return;
+        };
+        let Some(admin_url) = admin_db_url() else {
+            eprintln!("SKIP: DATABASE_ADMIN_URL not set");
+            return;
+        };
+
+        let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
+        cleanup_registered_notifications(&admin).await;
+        let app = TenantPool::connect(&url, 2).await.unwrap();
+        let (tenant_id, user_id) = seed_tenant(&admin, &app).await;
+
+        let id = insert_notification(
+            &app,
+            tenant_id,
+            Some(user_id),
+            "email",
+            "test@example.com",
+            "sub",
+            "body",
+        )
+        .await;
+
+        // Simulate the FK ON DELETE SET NULL by clearing the referenced user.
+        let mut tx = app
+            .begin_tenant(talentos_kernel::TenantId(tenant_id))
+            .await
+            .unwrap();
+        sqlx::query("UPDATE notifications SET user_id = NULL WHERE id = $1")
+            .bind(id)
             .execute(&mut *tx)
             .await
             .unwrap();

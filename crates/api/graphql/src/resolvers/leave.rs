@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::context::{pool, tenant_ctx};
 use crate::directives::require_permission;
-use crate::error::{gql_error, codes};
+use crate::error::{codes, gql_error};
 use crate::types::leave::*;
 use crate::types::pagination::{decode_cursor, encode_cursor, PageInfo, PaginationInput};
 use crate::types::User;
@@ -252,205 +252,43 @@ pub struct LeaveMutations;
 impl LeaveMutations {
     async fn request_leave(
         &self,
-        ctx: &Context<'_>,
-        input: RequestLeaveInput,
+        _ctx: &Context<'_>,
+        _input: RequestLeaveInput,
     ) -> async_graphql::Result<LeaveRequest> {
-        let tc = tenant_ctx(ctx)?;
-        require_permission(&tc.roles, "leave_request", "submit_self")?;
-        let p = pool(ctx)?;
-
-        // Validate dates
-        if input.end_date < input.start_date {
-            return Err(async_graphql::Error::new("end_date must be on or after start_date"));
-        }
-
-        // Find employee for current user
-        let employee_id = p
-            .with_tenant_tx(tc, |tx| {
-                Box::pin(async move {
-                    sqlx::query!(
-                        "SELECT id FROM employees WHERE user_id = $1",
-                        tc.user_id.0
-                    )
-                    .fetch_optional(&mut **tx)
-                    .await
-                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
-                })
-            })
-            .await
-            .map_err(|e| gql_error(codes::INTERNAL_ERROR, &e.to_string()))?;
-
-        let employee_id = match employee_id {
-            Some(row) => row.id,
-            None => return Err(async_graphql::Error::new("employee not found for current user")),
-        };
-
-        let days = (input.end_date - input.start_date).num_days() as i64 + 1;
-
-        let row = p
-            .with_tenant_tx(tc, |tx| {
-                Box::pin(async move {
-                    sqlx::query_as!(
-                        LeaveRequestRow,
-                        r#"INSERT INTO leave_requests (
-                                tenant_id, entity_id, employee_id, leave_type, start_date, end_date,
-                                days, reason, status, requested_by
-                            ) VALUES ($1, (SELECT entity_id FROM employees WHERE id = $2), $2, $3, $4, $5, $6, $7, 'pending', $8)
-                            RETURNING lr.id, lr.employee_id, lr.leave_type, lr.start_date, lr.end_date,
-                                      lr.days, lr.reason, lr.status, lr.approver_id, lr.approved_at,
-                                      lr.created_at, lr.updated_at,
-                                      e.employee_code, e.first_name_th, e.last_name_th,
-                                      e.first_name_en, e.last_name_en, e.position_title, e.department,
-                                      u.email, u.full_name_th, u.full_name_en
-                           FROM leave_requests lr
-                           JOIN employees e ON e.id = lr.employee_id
-                           LEFT JOIN users u ON u.id = lr.approver_id
-                           WHERE lr.id = (SELECT id FROM leave_requests ORDER BY created_at DESC LIMIT 1)"#,
-                        tc.tenant_id.0,
-                        employee_id,
-                        input.leave_type.to_string(),
-                        input.start_date,
-                        input.end_date,
-                        days,
-                        input.reason,
-                        tc.user_id.0
-                    )
-                    .fetch_one(&mut **tx)
-                    .await
-                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
-                })
-            })
-            .await
-            .map_err(|e| gql_error(codes::INTERNAL_ERROR, &e.to_string()))?;
-
-        Ok(row.into())
+        Err(async_graphql::Error::new(
+            "Leave requests must be created via the REST API: POST /api/v1/leave/requests",
+        ))
     }
 
     async fn approve_leave_request(
         &self,
-        ctx: &Context<'_>,
-        id: ID,
+        _ctx: &Context<'_>,
+        _id: ID,
     ) -> async_graphql::Result<LeaveRequest> {
-        let tc = tenant_ctx(ctx)?;
-        require_permission(&tc.roles, "leave_request", "approve_team")?;
-        let p = pool(ctx)?;
-        let uid = parse_uuid(&id)?;
-
-        let row = p
-            .with_tenant_tx(tc, |tx| {
-                Box::pin(async move {
-                    sqlx::query_as!(
-                        LeaveRequestRow,
-                        r#"UPDATE leave_requests
-                           SET status = 'approved', approver_id = $2, approved_at = now(), updated_at = now()
-                           WHERE id = $1 AND status = 'pending'
-                           RETURNING lr.id, lr.employee_id, lr.leave_type, lr.start_date, lr.end_date,
-                                     lr.days, lr.reason, lr.status, lr.approver_id, lr.approved_at,
-                                     lr.created_at, lr.updated_at,
-                                     e.employee_code, e.first_name_th, e.last_name_th,
-                                     e.first_name_en, e.last_name_en, e.position_title, e.department,
-                                     u.email, u.full_name_th, u.full_name_en
-                            FROM leave_requests lr
-                            JOIN employees e ON e.id = lr.employee_id
-                            LEFT JOIN users u ON u.id = lr.approver_id
-                            WHERE lr.id = $1"#,
-                        uid,
-                        tc.user_id.0
-                    )
-                    .fetch_one(&mut **tx)
-                    .await
-                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
-                })
-            })
-            .await
-            .map_err(|e| gql_error(codes::INTERNAL_ERROR, &e.to_string()))?;
-
-        Ok(row.into())
+        Err(async_graphql::Error::new(
+            "Leave approvals must be performed via the REST API: POST /api/v1/leave/requests/:id/decision",
+        ))
     }
 
     async fn reject_leave_request(
         &self,
-        ctx: &Context<'_>,
-        id: ID,
-        reason: String,
+        _ctx: &Context<'_>,
+        _id: ID,
+        _reason: String,
     ) -> async_graphql::Result<LeaveRequest> {
-        let tc = tenant_ctx(ctx)?;
-        require_permission(&tc.roles, "leave_request", "approve_team")?;
-        let p = pool(ctx)?;
-        let uid = parse_uuid(&id)?;
-
-        let row = p
-            .with_tenant_tx(tc, |tx| {
-                Box::pin(async move {
-                    sqlx::query_as!(
-                        LeaveRequestRow,
-                        r#"UPDATE leave_requests
-                           SET status = 'rejected', approver_id = $2, reason = $3, updated_at = now()
-                           WHERE id = $1 AND status = 'pending'
-                           RETURNING lr.id, lr.employee_id, lr.leave_type, lr.start_date, lr.end_date,
-                                     lr.days, lr.reason, lr.status, lr.approver_id, lr.approved_at,
-                                     lr.created_at, lr.updated_at,
-                                     e.employee_code, e.first_name_th, e.last_name_th,
-                                     e.first_name_en, e.last_name_en, e.position_title, e.department,
-                                     u.email, u.full_name_th, u.full_name_en
-                            FROM leave_requests lr
-                            JOIN employees e ON e.id = lr.employee_id
-                            LEFT JOIN users u ON u.id = lr.approver_id
-                            WHERE lr.id = $1"#,
-                        uid,
-                        tc.user_id.0,
-                        reason
-                    )
-                    .fetch_one(&mut **tx)
-                    .await
-                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
-                })
-            })
-            .await
-            .map_err(|e| gql_error(codes::INTERNAL_ERROR, &e.to_string()))?;
-
-        Ok(row.into())
+        Err(async_graphql::Error::new(
+            "Leave rejections must be performed via the REST API: POST /api/v1/leave/requests/:id/decision",
+        ))
     }
 
     async fn cancel_leave_request(
         &self,
-        ctx: &Context<'_>,
-        id: ID,
+        _ctx: &Context<'_>,
+        _id: ID,
     ) -> async_graphql::Result<LeaveRequest> {
-        let tc = tenant_ctx(ctx)?;
-        require_permission(&tc.roles, "leave_request", "submit_self")?;
-        let p = pool(ctx)?;
-        let uid = parse_uuid(&id)?;
-
-        let row = p
-            .with_tenant_tx(tc, |tx| {
-                Box::pin(async move {
-                    sqlx::query_as!(
-                        LeaveRequestRow,
-                        r#"UPDATE leave_requests
-                           SET status = 'cancelled', updated_at = now()
-                           WHERE id = $1 AND status = 'pending'
-                           RETURNING lr.id, lr.employee_id, lr.leave_type, lr.start_date, lr.end_date,
-                                     lr.days, lr.reason, lr.status, lr.approver_id, lr.approved_at,
-                                     lr.created_at, lr.updated_at,
-                                     e.employee_code, e.first_name_th, e.last_name_th,
-                                     e.first_name_en, e.last_name_en, e.position_title, e.department,
-                                     u.email, u.full_name_th, u.full_name_en
-                            FROM leave_requests lr
-                            JOIN employees e ON e.id = lr.employee_id
-                            LEFT JOIN users u ON u.id = lr.approver_id
-                            WHERE lr.id = $1"#,
-                        uid
-                    )
-                    .fetch_one(&mut **tx)
-                    .await
-                    .map_err(|e| talentos_authz::AuthError::Internal(e.to_string()))
-                })
-            })
-            .await
-            .map_err(|e| gql_error(codes::INTERNAL_ERROR, &e.to_string()))?;
-
-        Ok(row.into())
+        Err(async_graphql::Error::new(
+            "Leave cancellations must be performed via the REST API: POST /api/v1/me/leave/:id/cancel",
+        ))
     }
 }
 

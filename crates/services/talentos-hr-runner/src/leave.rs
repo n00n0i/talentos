@@ -540,7 +540,7 @@ pub async fn decide_request(
     .fetch_optional(&mut *tx)
     .await?;
 
-    let (step_id, _step_no, approver_role) = match step {
+    let (step_id, step_no, approver_role) = match step {
         Some(row) => {
             let id: Uuid = row.try_get("id")?;
             let no: i32 = row.try_get("step_no")?;
@@ -574,6 +574,9 @@ pub async fn decide_request(
             .bind(request_id)
             .fetch_one(&mut *tx)
             .await?;
+
+    let final_status: &'static str;
+    let outcome_step: i32;
 
     if approve {
         sqlx::query(
@@ -614,6 +617,9 @@ pub async fn decide_request(
         .bind(request_id)
         .execute(&mut *tx)
         .await?;
+
+        final_status = "approved";
+        outcome_step = total_steps as i32;
     } else {
         sqlx::query(
             r#"UPDATE leave_approval_steps
@@ -674,12 +680,8 @@ pub async fn decide_request(
             .await?;
         }
 
-        tx.commit().await?;
-        return Ok(DecideOutcome {
-            status: "rejected".to_string(),
-            step: total_steps as i32,
-            total_steps,
-        });
+        final_status = "rejected";
+        outcome_step = step_no;
     }
 
     let label_th: String = sqlx::query_scalar(
@@ -695,7 +697,7 @@ pub async fn decide_request(
         &mut tx,
         tenant_id.0,
         employee_id,
-        "approved",
+        final_status,
         &label_th,
         start_date,
         end_date,
@@ -704,8 +706,8 @@ pub async fn decide_request(
 
     tx.commit().await?;
     Ok(DecideOutcome {
-        status: "approved".to_string(),
-        step: total_steps as i32,
+        status: final_status.to_string(),
+        step: outcome_step,
         total_steps,
     })
 }
@@ -719,13 +721,17 @@ pub async fn pending_approvals(
     let rows = sqlx::query(
         r#"SELECT lr.id, lr.employee_id, e.employee_code, e.first_name_th, e.last_name_th,
                   lr.leave_type, lt.label_th, lr.start_date, lr.end_date, lr.days, lr.reason,
-                  las.step_no, las.approver_role,
-                  (SELECT COUNT(*) FROM leave_approval_steps s2 WHERE s2.leave_request_id = lr.id) AS total_steps
+                  COALESCE(las.step_no, 1) AS step_no,
+                  COALESCE(las.approver_role, 'hr_admin') AS approver_role,
+                  COALESCE(
+                      (SELECT COUNT(*) FROM leave_approval_steps s2 WHERE s2.leave_request_id = lr.id),
+                      1
+                  ) AS total_steps
            FROM leave_requests lr
            JOIN employees e ON e.id = lr.employee_id
            JOIN leave_types lt ON lt.name = lr.leave_type
                                AND (lt.tenant_id IS NULL OR lt.tenant_id = lr.tenant_id)
-           JOIN leave_approval_steps las
+           LEFT JOIN leave_approval_steps las
              ON las.leave_request_id = lr.id AND las.status = 'pending'
            WHERE lr.tenant_id = $1 AND lr.status = 'pending'
            ORDER BY lr.created_at DESC
@@ -785,7 +791,12 @@ fn normalise_chain(chain: Vec<String>) -> Vec<String> {
         .into_iter()
         .filter(|r| valid.contains(&r.as_str()))
         .collect();
-    if chain.is_empty() || chain.len() > 3 || chain.last().map(String::as_str) != Some("hr_admin") {
+    let unique: std::collections::HashSet<_> = chain.iter().collect();
+    if chain.is_empty()
+        || chain.len() > 3
+        || unique.len() != chain.len()
+        || chain.last().map(String::as_str) != Some("hr_admin")
+    {
         vec!["hr_admin".to_string()]
     } else {
         chain
@@ -856,6 +867,11 @@ mod tests {
                 "hr_admin".into()
             ]),
             vec!["hr_admin"]
+        );
+        assert_eq!(
+            normalise_chain(vec!["manager".into(), "manager".into(), "hr_admin".into()]),
+            vec!["hr_admin"],
+            "duplicate roles should normalise to default"
         );
     }
 }

@@ -50,8 +50,10 @@ impl PayrollSettings {
     pub fn leave_approval_chain_is_valid(&self) -> bool {
         let n = self.leave_approval_chain.len();
         let valid_roles = ["manager", "hr_admin"];
+        let unique: std::collections::HashSet<_> = self.leave_approval_chain.iter().collect();
         n > 0
             && n <= 3
+            && unique.len() == n
             && self
                 .leave_approval_chain
                 .iter()
@@ -92,8 +94,8 @@ mod tests {
         assert!(!s.is_valid());
         s.leave_approval_chain = vec!["manager".into()];
         assert!(!s.is_valid());
-        s.leave_approval_chain = vec!["manager".into(), "manager".into()];
-        assert!(!s.is_valid());
+        s.leave_approval_chain = vec!["manager".into(), "manager".into(), "hr_admin".into()];
+        assert!(!s.is_valid(), "duplicate roles should be rejected");
         s.leave_approval_chain = vec!["manager".into(), "hr_admin".into(), "manager".into()];
         assert!(!s.is_valid());
         s.leave_approval_chain = vec!["manager".into(), "hr_admin".into()];

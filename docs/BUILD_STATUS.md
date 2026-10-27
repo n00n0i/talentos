@@ -8,7 +8,7 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **191 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Tests | `cargo test --workspace` | **197 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
 | Migrations | `sqlx migrate run` on a fresh DB | 25 files apply cleanly (including `20261102000003_leave_balance_debited.sql` for pending-request balance debits) |
 
 Unit tests by crate: kernel 5, authz 27, attendance 10 (shift derivation,
@@ -16,7 +16,7 @@ overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
 agent 7, hr-runner 7 (leave day maths, attendance break/grace validation), db 5
 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking), graphql 3
 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
-destructive guard, notifications), memory 3 (layers, expiry), gateway 30 (RBAC
+destructive guard, notifications), memory 3 (layers, expiry), gateway 36 (RBAC
 gate, tenant provisioning CLI, CSV escaping/totals, holiday classification, shift
 management, attendance import/punch/correction/approval, bulk employee import dry-run/duplicate/parse rules).
 
@@ -30,7 +30,7 @@ self-service 10 (me/leave, cancel, approvals, balance debit/restore, legacy
 pending isolation, RBAC; service-level DB + handler-helper units — cancel/reject
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
 purge, stats), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 191 passed, 1 ignored (`load.rs`).
+tenant scoping). Total: 197 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with

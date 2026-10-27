@@ -369,11 +369,19 @@ pub async fn seed_attendance_day(pool: &sqlx::PgPool, tenant_id: Uuid, employee_
 
 **Files:**
 - Create: `web/app/(app)/clock/page.tsx`
-- Modify: `web/components/Shell.tsx` (nav: clock for all employee-linked roles; hide HR pages for non-HR)
+- Create: `web/app/manifest.ts` (PWA metadata)
+- Modify: `web/app/layout.tsx` (manifest link)
+- Modify: `web/components/Shell.tsx` (nav: clock for all; hide HR pages for non-HR)
 - Modify: `web/app/(app)/attendance/page.tsx` (link to shifts)
+- Modify: `crates/services/talentos-hr-runner/src/attendance.rs` (`list_my_days`)
+- Modify: `crates/api/gateway/src/handlers/me.rs` (`GET /api/v1/me/attendance?month=`)
+- Modify: `crates/api/gateway/src/router.rs`
+- Test: `crates/services/talentos-hr-runner/tests/attendance_self.rs`
 - Test: `web/e2e/app.spec.ts` (serial)
 
-**Interfaces:** consumes `POST /api/v1/me/attendance/punch`, `GET /api/v1/me/attendance?month=`.
+**Interfaces:**
+- Consumes `POST /api/v1/me/attendance/punch`.
+- Adds `list_my_days(pool, tenant, user_id, from, to) -> Result<Vec<DayView>, AttendanceError>` and `GET /api/v1/me/attendance?month=YYYY-MM`, permission `attendance.punch_self`. A linked user sees only days whose `employee.user_id` matches; an unlinked user gets an empty list + `employee_linked: false`.
 
 UI states: permission denied, outside geofence (show distance), inside (show In/Out buttons), today summary, this month's days. Use `navigator.geolocation.getCurrentPosition` with `enableHighAccuracy: true`; show `accuracy` metres. No client timestamp sent. Add `web/app/manifest.ts` (name, theme colour, standalone) and link it from the root layout.
 

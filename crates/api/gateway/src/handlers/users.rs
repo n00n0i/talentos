@@ -788,6 +788,67 @@ pub async fn deactivate(
     StatusCode::NO_CONTENT.into_response()
 }
 
+/// POST /api/v1/users/:id/2fa/reset — HR admin clears the target user's 2FA.
+pub async fn reset_2fa(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(user_id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "user_management", "reset_2fa") {
+        return forbidden;
+    }
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+
+    let done = sqlx::query(
+        "UPDATE users SET totp_secret = NULL, totp_enabled = FALSE, totp_enabled_at = NULL \
+         WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(user_id)
+    .bind(ctx.tenant_id.0)
+    .execute(&mut *tx)
+    .await;
+
+    match done {
+        Ok(done) if done.rows_affected() == 0 => {
+            let _ = tx.rollback().await;
+            return error_response(StatusCode::NOT_FOUND, "not_found", "user not found");
+        }
+        Ok(_) => {}
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    }
+
+    let _ = sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'user.2fa_reset', 'user', $3, '{}'::jsonb)"#,
+    )
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0.to_string())
+    .bind(user_id.to_string())
+    .execute(&mut *tx)
+    .await;
+
+    if let Err(e) = tx.commit().await {
+        return internal_err(&e.to_string());
+    }
+
+    let _ = sqlx::query(
+        "UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL",
+    )
+    .bind(user_id)
+    .execute(&state.auth_pool)
+    .await;
+
+    (StatusCode::OK, Json(json!({ "totp_enabled": false }))).into_response()
+}
+
 fn password_problem(password: &str) -> Option<String> {
     let len = password.chars().count();
     if len < PASSWORD_MIN {

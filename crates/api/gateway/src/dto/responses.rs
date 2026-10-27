@@ -20,6 +20,7 @@ pub struct MeResponse {
     pub roles: Vec<String>,
     pub permissions: Vec<String>,
     pub last_login_at: Option<String>,
+    pub totp_enabled: bool,
 }
 
 #[derive(Serialize)]

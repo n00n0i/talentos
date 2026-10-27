@@ -8,15 +8,15 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **197 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 25 files apply cleanly (including `20261102000003_leave_balance_debited.sql` for pending-request balance debits) |
+| Tests | `cargo test --workspace` | **208 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 26 files apply cleanly (including `20261103000001_user_totp.sql` for encrypted TOTP secrets) |
 
-Unit tests by crate: kernel 5, authz 27, attendance 10 (shift derivation,
+Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
 agent 7, hr-runner 7 (leave day maths, attendance break/grace validation), db 5
 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking), graphql 3
 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
-destructive guard, notifications), memory 3 (layers, expiry), gateway 36 (RBAC
+destructive guard, notifications), memory 3 (layers, expiry), gateway 39 (RBAC
 gate, tenant provisioning CLI, CSV escaping/totals, holiday classification, shift
 management, attendance import/punch/correction/approval, bulk employee import dry-run/duplicate/parse rules).
 
@@ -30,7 +30,7 @@ self-service 10 (me/leave, cancel, approvals, balance debit/restore, legacy
 pending isolation, RBAC; service-level DB + handler-helper units — cancel/reject
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
 purge, stats), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 197 passed, 1 ignored (`load.rs`).
+tenant scoping). Total: 208 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -92,7 +92,8 @@ service. This task did not re-run the compose/TLS verification; the new leave
 self-service was verified via API/DB tests and the 10/10 Playwright E2E suite.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
-PII warnings) and `/users` (invite, roles, deactivate, HR-issued password reset).
+PII warnings, TOTP 2FA enrollment) and `/users` (invite, roles, deactivate,
+HR-issued password reset, 2FA reset).
 Payroll runs export a UTF-8 CSV register (formula-injection safe) with totals.
 Employees can be linked to a login and see only their own payslips
 (`/me/payslips`) and request leave self-service (`/leave`). The audit trail has a
@@ -128,6 +129,10 @@ request → HR approval. Payroll load test: 500 employees in ~0.38 s locally
   with `balance_debited=false` are not retroactively debited. There are no
   email/push notifications for leave approvals yet, and OT self-service requests
   are still deferred.
+- TOTP 2FA covers HR admins; there are no backup codes, so recovery is an HR
+  admin reset that clears the secret and revokes that user's refresh tokens.
+  Codes are not single-use: a code can be replayed inside the ±1 step window.
+  Enrollment requires `PII_ENCRYPTION_KEY`; setup returns 503 without it.
 - Bulk employee import enforces the 2 MB / 1000-row limits in the browser only;
   direct API callers can send larger batches. PII fields are not part of the CSV
   and are added on the employee page after import.

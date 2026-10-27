@@ -8,7 +8,7 @@ for exactly what compiles, what is tested, and what is deferred.
 
 ## What works today
 
-- **Auth**: login / refresh with rotating refresh tokens, Argon2id, JWT (HS256), RBAC matrix (4 roles, 20 permissions)
+- **Auth**: login / refresh with rotating refresh tokens, Argon2id, JWT (HS256), optional TOTP 2FA for HR admins, RBAC matrix (4 roles)
 - **Tenancy**: PostgreSQL RLS (`FORCE`) on every tenant table; runtime uses a `NOBYPASSRLS` role
 - **PII**: AES-256-GCM for national id / SSO number / bank account; API returns only last 4 digits
 - **Onboarding**: `talentos-gateway provision` creates a tenant, entity and first `hr_admin`
@@ -226,6 +226,10 @@ GET        /api/v1/users                accounts + roles
 POST       /api/v1/users/invite         one-time invite link (no email service)
 POST       /api/v1/auth/accept-invite   public: token + new password
 POST       /api/v1/auth/change-password own password, revokes refresh tokens
+POST       /api/v1/auth/2fa/setup       issue a TOTP secret (needs PII key)
+POST       /api/v1/auth/2fa/enable      {code} confirm and enable
+POST       /api/v1/auth/2fa/disable     {code} turn off, revokes refresh tokens
+POST       /api/v1/users/:id/2fa/reset  hr_admin: recover a locked-out user
 POST       /api/v1/users/:id/roles      add a role
 POST       /api/v1/users/:id/reset-password  issue a 1-hour reset link
 POST       /api/v1/auth/reset-password  public: token + new password
@@ -246,6 +250,13 @@ any row is invalid. The `/employees` page parses the CSV in the browser, shows
 the per-row report, and enables the commit only when the file is clean.
 Duplicate codes (in the file or per entity) and foreign entities are reported
 on the row. PII (national id, bank account, SSO number) is not imported in v1.
+
+HR admins can enroll an authenticator app from `/settings` (RFC 6238, 6 digits,
+30 s, ±1 step). The secret is shown once and stored AES-256-GCM-encrypted; logins
+for an enabled user require `totp_code` and return `totp_required` /
+`invalid_totp` otherwise. There are no backup codes in v1: another HR admin can
+reset a lost device from `/users`, which clears 2FA and revokes that user's refresh
+tokens.
 
 An employee can be linked to a login account from the employee form. That user
 then sees only their own payslips at `/me/payslips`

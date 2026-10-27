@@ -278,17 +278,17 @@ test("employee requests leave, HR approves it", async ({ page }) => {
   await page.getByTestId("leave-end").fill("2026-12-02");
   await page.getByTestId("leave-reason").fill("E2E");
   await page.getByTestId("request-leave").click();
-  const mine = page.getByTestId("leave-row").filter({ hasText: "2026-12-01" });
+  const mine = page.getByTestId("leave-row").filter({ hasText: "ธ.ค. 2569" });
   await expect(mine).toContainText("รออนุมัติ");
 
   await loginAs("e2e@example.com", "E2ePassword123!");
   await page.goto("/leave");
-  const inbox = page.getByTestId("approval-row").filter({ hasText: "E2E001" }).filter({ hasText: "2026-12-01" });
+  const inbox = page.getByTestId("approval-row").filter({ hasText: "E2E001" }).filter({ hasText: "ธ.ค. 2569" });
   await expect(inbox).toBeVisible();
   await inbox.getByTestId("approve-leave").click();
   await expect(inbox).toHaveCount(0);
 
   await loginAs(invitedEmail, "ResetPass123!");
   await page.goto("/leave");
-  await expect(page.getByTestId("leave-row").filter({ hasText: "2026-12-01" })).toContainText("อนุมัติแล้ว");
+  await expect(page.getByTestId("leave-row").filter({ hasText: "ธ.ค. 2569" })).toContainText("อนุมัติแล้ว");
 });

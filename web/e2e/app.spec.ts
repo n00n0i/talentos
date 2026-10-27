@@ -408,6 +408,9 @@ test("employee requests OT, HR approves it", async ({ page }) => {
   await expect(inbox).toBeVisible();
   await inbox.getByTestId("approve-ot").click();
   await expect(inbox).toHaveCount(0);
+  await expect(
+    page.getByTestId("ot-history-row").filter({ hasText: "E2E001" }).filter({ hasText: "3 ธ.ค. 2569" }),
+  ).toContainText("อนุมัติแล้ว");
 
   await loginAs(invitedEmail, "ResetPass123!");
   await page.goto("/ot");

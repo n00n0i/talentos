@@ -8,7 +8,7 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **178 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Tests | `cargo test --workspace` | **191 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
 | Migrations | `sqlx migrate run` on a fresh DB | 25 files apply cleanly (including `20261102000003_leave_balance_debited.sql` for pending-request balance debits) |
 
 Unit tests by crate: kernel 5, authz 27, attendance 10 (shift derivation,
@@ -16,9 +16,9 @@ overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
 agent 7, hr-runner 7 (leave day maths, attendance break/grace validation), db 5
 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking), graphql 3
 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
-destructive guard, notifications), memory 3 (layers, expiry), gateway 17 (RBAC
+destructive guard, notifications), memory 3 (layers, expiry), gateway 30 (RBAC
 gate, tenant provisioning CLI, CSV escaping/totals, holiday classification, shift
-management, attendance import/punch/correction/approval).
+management, attendance import/punch/correction/approval, bulk employee import dry-run/duplicate/parse rules).
 
 Integration tests: payroll-runner 10 (`execute_run` 9 + `attendance_scale` 1;
 real PostgreSQL + Chromium: payslips, totals, state machine, template round-trip,
@@ -30,7 +30,7 @@ self-service 10 (me/leave, cancel, approvals, balance debit/restore, legacy
 pending isolation, RBAC; service-level DB + handler-helper units — cancel/reject
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
 purge, stats), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 178 passed, 1 ignored (`load.rs`).
+tenant scoping). Total: 191 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -128,6 +128,9 @@ request → HR approval. Payroll load test: 500 employees in ~0.38 s locally
   with `balance_debited=false` are not retroactively debited. There are no
   email/push notifications for leave approvals yet, and OT self-service requests
   are still deferred.
+- Bulk employee import enforces the 2 MB / 1000-row limits in the browser only;
+  direct API callers can send larger batches. PII fields are not part of the CSV
+  and are added on the employee page after import.
 
 ## Deferred — not wired
 

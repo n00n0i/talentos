@@ -24,6 +24,9 @@ type Pending = LeaveRequest & {
   employee_code: string;
   employee_name: string;
   label_th: string;
+  step_no: number;
+  total_steps: number;
+  approver_role: string;
 };
 
 const STATUS: { [k: string]: { label: string; tone: string } } = {
@@ -34,6 +37,11 @@ const STATUS: { [k: string]: { label: string; tone: string } } = {
 };
 
 const num = (v: string) => Number(v).toString();
+
+const ROLE_LABEL: { [k: string]: string } = {
+  manager: "หัวหน้างาน",
+  hr_admin: "HR",
+};
 
 export default function LeavePage() {
   const [isHr, setIsHr] = useState(false);
@@ -135,6 +143,7 @@ export default function LeavePage() {
                     <th>วันที่</th>
                     <th className="num">วัน</th>
                     <th>เหตุผล</th>
+                    <th>ขั้นตอน</th>
                     <th />
                   </tr>
                 </thead>
@@ -150,6 +159,9 @@ export default function LeavePage() {
                       </td>
                       <td className="num">{num(r.days)}</td>
                       <td>{r.reason ?? "—"}</td>
+                      <td data-testid="leave-step">
+                        ขั้น {r.step_no}/{r.total_steps} · {ROLE_LABEL[r.approver_role] ?? r.approver_role}
+                      </td>
                       <td className="num">
                         <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                           <button

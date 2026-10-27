@@ -721,8 +721,18 @@ pub async fn pending_approvals(
     let rows = sqlx::query(
         r#"SELECT lr.id, lr.employee_id, e.employee_code, e.first_name_th, e.last_name_th,
                   lr.leave_type, lt.label_th, lr.start_date, lr.end_date, lr.days, lr.reason,
-                  COALESCE(las.step_no, 1) AS step_no,
-                  COALESCE(las.approver_role, 'hr_admin') AS approver_role,
+                  COALESCE(
+                      (SELECT step_no FROM leave_approval_steps
+                        WHERE leave_request_id = lr.id AND status = 'pending'
+                        ORDER BY step_no LIMIT 1),
+                      1
+                  ) AS step_no,
+                  COALESCE(
+                      (SELECT approver_role FROM leave_approval_steps
+                        WHERE leave_request_id = lr.id AND status = 'pending'
+                        ORDER BY step_no LIMIT 1),
+                      'hr_admin'
+                  ) AS approver_role,
                   COALESCE(
                       (SELECT COUNT(*) FROM leave_approval_steps s2 WHERE s2.leave_request_id = lr.id),
                       1
@@ -731,8 +741,6 @@ pub async fn pending_approvals(
            JOIN employees e ON e.id = lr.employee_id
            JOIN leave_types lt ON lt.name = lr.leave_type
                                AND (lt.tenant_id IS NULL OR lt.tenant_id = lr.tenant_id)
-           LEFT JOIN leave_approval_steps las
-             ON las.leave_request_id = lr.id AND las.status = 'pending'
            WHERE lr.tenant_id = $1 AND lr.status = 'pending'
            ORDER BY lr.created_at DESC
            LIMIT 200"#,

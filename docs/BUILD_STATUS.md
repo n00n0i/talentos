@@ -9,7 +9,7 @@ Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
 | Tests | `cargo test --workspace` | **171 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 25 files apply cleanly |
+| Migrations | `sqlx migrate run` on a fresh DB | 25 files apply cleanly (including `20261102000003_leave_balance_debited.sql` for pending-request balance debits) |
 
 Unit tests by crate: kernel 5, authz 27, attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7,
@@ -20,22 +20,22 @@ destructive guard, notifications), memory 3 (layers, expiry), gateway 12 (RBAC
 gate, tenant provisioning CLI, CSV escaping/totals, holiday classification, shift
 management, attendance import/punch/correction/approval).
 
-Integration tests: payroll-runner 10 (real PostgreSQL + Chromium: payslips,
-totals, state machine, template round-trip, PDF, stuck-run recovery,
-attendance+unpaid-leave feed, tenant policy overrides, 30-employee attendance
-scale — 3 of the 30 employees are driven through punch/correct/approve; the
-rest seed approved records directly), attendance 30 (approve/correct, import, punch, schema
-isolation, self, shifts), leave self-service 8 (me/leave, cancel, approvals,
-balance debit/restore, legacy pending isolation, RBAC), memory 3 (recall, RLS
-isolation, layer filter, expiry purge, stats), wasm-host 6 (real guest module:
-sandbox, capability refusal, tenant scoping). Total: 171 passed, 1 ignored
-(`load.rs`).
+Integration tests: payroll-runner 10 (`execute_run` 9 + `attendance_scale` 1;
+real PostgreSQL + Chromium: payslips, totals, state machine, template round-trip,
+PDF, stuck-run recovery, attendance+unpaid-leave feed, tenant policy overrides,
+30-employee attendance scale — 3 of the 30 employees are driven through
+punch/correct/approve; the rest seed approved records directly), attendance 30
+(approve/correct, import, punch, schema isolation, self, shifts), leave
+self-service 8 (me/leave, cancel, approvals, balance debit/restore, legacy
+pending isolation, RBAC), memory 3 (recall, RLS isolation, layer filter, expiry
+purge, stats), wasm-host 6 (real guest module: sandbox, capability refusal,
+tenant scoping). Total: 171 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
 2 payslips, total gross ฿99,000, SSO ฿1,450, PND ฿9,416.67 (hand-verified).
 Payslip PDF: 77 KB, `%PDF-1.4`, Thai text round-trips through `pdftotext`.
-Leave: create (3 days computed server-side) → overlap 409 → bad type 422 → balances → list → me/leave → cancel restores balance → approvals inbox → decision.
+Leave: create (3 days computed server-side) → overlap 409 → bad type 422 → balances → list. Leave self-service flows (`me/leave`, cancel, approvals, decision) are covered by the `leave_self` integration tests and the Playwright E2E suite.
 
 ## Compiling workspace members
 
@@ -80,11 +80,13 @@ on the next request (old refresh token then 401, as designed). The standalone
 image (`web/Dockerfile`) was built and served `login` → session login → `/me`
 against a live gateway.
 
-Full compose stack verified separately (isolated project + volume): migrate →
-gateway → web → nginx with the TLS overlay. HTTPS `/health` 200, HTTP→HTTPS 301,
-web session login and `/api/gw/auth/me` 200, RLS enforced (`talentos_app`),
-PII configured, 25 migrations tracked, and `talentos-gateway provision` created
-the first tenant through the compose service.
+Full compose stack was previously verified separately (isolated project +
+volume): migrate → gateway → web → nginx with the TLS overlay. HTTPS `/health`
+200, HTTP→HTTPS 301, web session login and `/api/gw/auth/me` 200, RLS enforced
+(`talentos_app`), PII configured, 23 migrations tracked at that time, and
+`talentos-gateway provision` created the first tenant through the compose
+service. This task did not re-run the compose/TLS verification; the new leave
+self-service was verified via API/DB tests and the 10/10 Playwright E2E suite.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings) and `/users` (invite, roles, deactivate, HR-issued password reset).
@@ -179,5 +181,3 @@ phase boundary is already isolated, so the Temporal swap is a wiring change, not
 - Only one default template per tenant is editable through the API (no per-entity or multiple named templates in the UI).
 - In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
 - Single static HS256 signing key (no JWKS rotation yet).
-- OT self-service requests are deferred to the next slice; leave has no email/push
-  notifications yet.

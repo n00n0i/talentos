@@ -1,6 +1,6 @@
 # Build status — verified locally
 
-Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, PostgreSQL 16 + pgvector.
+Last verified: 2026-10-27 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, PostgreSQL 16 + pgvector.
 
 ## Gate results
 
@@ -8,20 +8,20 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **110 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 20 files apply cleanly |
+| Tests | `cargo test --workspace` | **157 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 23 files apply cleanly |
 
-Tests by crate: kernel 5, authz 22, compliance 6, payroll 17, rag 7, agent 7,
-payroll-runner 8 (real PostgreSQL + Chromium: payslips, totals, state machine,
+Tests by crate: kernel 5, authz 27, attendance 8 (shift derivation, overnight,
+holiday/weekend OT, timezone), compliance 6, payroll 17, rag 7, agent 7,
+payroll-runner 10 integration (real PostgreSQL + Chromium: payslips, totals, state machine,
 template round-trip, PDF, stuck-run recovery, attendance+unpaid-leave feed,
-tenant policy overrides), hr-runner 5 (leave day maths),
+tenant policy overrides, 30-employee attendance scale), hr-runner 7 (leave day maths, attendance break/grace validation),
 wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
 db 5 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking),
 graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
 destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
-RLS isolation, layer filter, expiry purge, stats), gateway 8 (RBAC gate, tenant provisioning CLI, CSV escaping/totals, holiday
-classification: hr_admin allowed, employee refused, manager cannot approve
-payroll).
+RLS isolation, layer filter, expiry purge, stats), gateway 12 (RBAC gate, tenant provisioning CLI, CSV escaping/totals, holiday
+classification, shift management, attendance import/punch/correction/approval).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -64,7 +64,7 @@ crates/api/mcp              MCP JSON-RPC over streamable HTTP (stateless, JWT pe
 `web/` — Next.js 15.5.28 + React 19, TypeScript strict, no UI dependency beyond
 React. `npm audit` reports 0 vulnerabilities; CI fails on high/critical in
 production deps.
-`npm run build` passes (10 routes). Browser never holds a token: `/api/session/login`
+`npm run build` passes (20 routes). Browser never holds a token: `/api/session/login`
 sets `HttpOnly` cookies and `/api/gw/*` proxies with a bearer header, refreshing
 single-flight. Verified against the real gateway: login → `/auth/me` → GraphQL →
 payslip template → HTML render → 77 KB PDF, and an expired access token rotates
@@ -75,7 +75,7 @@ against a live gateway.
 Full compose stack verified separately (isolated project + volume): migrate →
 gateway → web → nginx with the TLS overlay. HTTPS `/health` 200, HTTP→HTTPS 301,
 web session login and `/api/gw/auth/me` 200, RLS enforced (`talentos_app`),
-PII configured, 20 migrations tracked, and `talentos-gateway provision` created
+PII configured, 23 migrations tracked, and `talentos-gateway provision` created
 the first tenant through the compose service.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
@@ -86,10 +86,11 @@ Employees can be linked to a login and see only their own payslips
 Attendance has a tenant holiday calendar; OT is classified holiday > weekend >
 weekday automatically. HTTPS is a compose overlay (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
-cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout. Browser E2E (`web/e2e`, Playwright) passes 4/4
-locally (7 scenarios) and runs in CI: invite acceptance → login, settings +
+cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout. Browser E2E (`web/e2e`, Playwright) passes 9/9
+locally and runs in CI: invite acceptance → login, settings +
 audit, employee → attendance → payroll → approval, holiday OT, user invite,
-password reset, self-service payslips. Payroll load test: 500 employees in
+password reset, self-service payslips, employee clock punch with GPS, HR shift
+creation and day correction/approval. Payroll load test: 500 employees in
 ~0.38 s locally (~1,300/s).
 
 ## Known risks
@@ -104,6 +105,9 @@ password reset, self-service payslips. Payroll load test: 500 employees in
   Statutory SSO/tax remain in code.
 - Holiday dates are tenant-managed (the cabinet announces them yearly); there is
   no bundled national calendar to go stale.
+- Attendance GPS geofencing deters but does not cryptographically prove location;
+  no face recognition / liveness check. No offline queue; punches require a live
+  connection. Shift swaps and self-scheduling are not implemented.
 
 ## Deferred — not wired
 
@@ -160,3 +164,6 @@ phase boundary is already isolated, so the Temporal swap is a wiring change, not
 - Only one default template per tenant is editable through the API (no per-entity or multiple named templates in the UI).
 - In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
 - Single static HS256 signing key (no JWKS rotation yet).
+- Attendance GPS geofence deters but does not prove location; no face-recognition
+  or liveness check. No offline queue; employees must retry a failed punch.
+- Shift swaps and employee self-scheduling are not implemented.

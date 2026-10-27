@@ -15,6 +15,7 @@ for exactly what compiles, what is tested, and what is deferred.
 - **Deploy**: one-command compose stack (migrate + gateway + web + nginx), backup/restore scripts
 - **Payroll**: deterministic DAG (gross → OT → SSO → PND tax → PF → net → payslip) with a per-step audit trace
 - **Thai compliance**: PND 2567 progressive brackets, SSO 5% capped at ฿15,000, PF, LPA §118 severance, OT 1.5×/2×/3×
+- **Attendance**: mobile clock page with GPS geofence, shifts + assignments, device CSV import, HR corrections/approval, holiday/weekend/weekday OT classification
 - **Agent**: Observe → Plan → Act → Reflect loop over the HR/memory tools (runs in-process; Temporal pending)
 - **RAG**: chunker, embedder, hybrid search (pgvector + tsvector, RRF fusion)
 - **API**: `/health`, `/api/v1/auth/*`, `/api/v1/employees*`, `/api/v1/users*`,
@@ -229,25 +230,68 @@ slip.
 `GET /api/v1/audit` (permission `audit_log.read`) lists the tenant audit trail;
 the admin UI is at `/audit`.
 
-## Attendance → payroll
+## Attendance
+
+Clock in/out from the mobile-friendly `/clock` page. The browser records GPS at
+punch time and rejects the punch when the device is outside the entity geofence.
+Because the browser can only read location over a secure origin, geofencing
+requires HTTPS in production (use the TLS compose overlay or terminate TLS in
+front of nginx).
 
 ```
-POST /api/v1/attendance      {employee_id, work_date, ot_hours, ot_kind}
-GET  /api/v1/attendance?from=&to=&employee_id=
+POST /api/v1/me/attendance/punch   {kind: in|out, lat?, lng?, accuracy_m?}
+GET  /api/v1/me/attendance?month=  own derived days (clock + shift summary)
+GET  /api/v1/attendance            HR list derived days
 ```
+
+Shifts define the expected window and break. Assign a shift to an employee from
+`/attendance/shifts` or via `POST /api/v1/shifts/:id/assign`.
+
+```
+GET/POST   /api/v1/shifts
+POST       /api/v1/shifts/:id/assign
+GET/POST   /api/v1/attendance/holidays
+DELETE     /api/v1/attendance/holidays/:id
+```
+
+HR can correct a derived day (in/out times and OT minutes) on `/attendance`; the
+correction creates a pending revision that must be approved before it reaches
+payroll. `POST /api/v1/attendance/:id/approve` moves the day to `approved` and
+writes the matching `attendance_records` row.
+
+Device CSV import is available for bulk clock punches:
+
+```
+POST /api/v1/attendance/import      multipart/form-data with device CSV
+```
+
+The import maps employee code → `employee_id`, validates timestamps, and creates
+`attendance_events` rows that feed the same derived-day pipeline as manual clock
+punches.
+
+### Attendance → payroll
+
+Payroll reads approved `attendance_records` OT hours by class inside the period,
+plus approved `unpaid` leave. Unpaid leave deducts `base_salary / 30` per day; OT
+is priced on `base_salary / 30 / 8`, unaffected by that deduction. SSO follows the
+explicit `sso_enrolled` flag, independent of provident fund.
 
 The OT class is automatic: a date in the tenant holiday calendar is `holiday`
 (3x), weekends are `weekend` (2x), everything else `weekday` (1.5x). HR can still
 override the class on a record.
 
-```
-GET/POST   /api/v1/attendance/holidays
-DELETE     /api/v1/attendance/holidays/:id
-```
+### Attendance v1 limits
 
-Payroll reads the period's OT hours by class and approved `unpaid` leave. Unpaid leave deducts `base_salary / 30`
-per day; OT is priced on `base_salary / 30 / 8`, unaffected by that deduction.
-SSO follows the explicit `sso_enrolled` flag, independent of provident fund.
+- GPS geofencing deters buddy-punching from outside the site, but it does not
+  cryptographically prove location; a motivated user can spoof coordinates.
+- No face recognition / liveness check.
+- No offline queue: punches require a live connection. If the request fails, the
+  employee must retry.
+- No shift swaps or self-scheduling; HR assigns shifts.
+- Holiday/weekend OT policy: all hours on a holiday or weekend are classified as
+  OT (holiday 3x, weekend 2x). There is no separate "holiday pay" multiplier
+  beyond the OT class.
+- Only approved days feed payroll; pending or rejected days are ignored.
 
 ## Settings (admin UI)
 

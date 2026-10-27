@@ -6,13 +6,16 @@ DELETE FROM tenants WHERE slug = 'e2e';
 INSERT INTO tenants (id, name, slug)
 VALUES ('eeeeeeee-0000-0000-0000-000000000001', 'E2E Co', 'e2e');
 
-INSERT INTO entities (id, tenant_id, name, tax_id, address)
+INSERT INTO entities (id, tenant_id, name, tax_id, address, geofence_lat, geofence_lng, geofence_radius_m)
 VALUES (
     'eeeeeeee-0000-0000-0000-000000000002',
     'eeeeeeee-0000-0000-0000-000000000001',
     'E2E Main',
     '0105555555555',
-    '{"line1":"1 Test Road","province":"Bangkok"}'::jsonb
+    '{"line1":"1 Test Road","province":"Bangkok"}'::jsonb,
+    13.7563,
+    100.5018,
+    200
 );
 
 -- 7-day, single-use invite. Token (plain) = e2e-invite-token-4f8a2c1d9b7e6a3f5c0d8e2b1a9f7c6d

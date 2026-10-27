@@ -10,6 +10,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "ภาพรวม", icon: "overview" },
   { href: "/employees", label: "พนักงาน", icon: "users" },
   { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
+  { href: "/clock", label: "ลงเวลา", icon: "clock" },
   { href: "/payroll", label: "รอบเงินเดือน", icon: "wallet" },
   { href: "/payslip", label: "แบบฟอร์มสลิป", icon: "file" },
   { href: "/me/payslips", label: "สลิปของฉัน", icon: "file" },
@@ -72,7 +73,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     ? NAV
     : canHr
       ? [...NAV, ...(isAdmin ? ADMIN_NAV : [])]
-      : [{ href: "/me/payslips", label: "สลิปของฉัน", icon: "file" as IconName }];
+      : NAV.filter((i) => i.href === "/clock" || i.href === "/me/payslips");
 
   return (
     <div className="shell">

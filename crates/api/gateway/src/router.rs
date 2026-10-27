@@ -29,6 +29,7 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/me/payslips", get(me::payslips))
         .route("/api/v1/me/payslips/:id/render", get(me::render))
         .route("/api/v1/me/payslips/:id/pdf", get(me::pdf))
+        .route("/api/v1/me/attendance", get(me::my_attendance))
         .route("/api/v1/me/attendance/punch", post(me::punch))
         .route("/api/v1/auth/change-password", post(users::change_password))
         .route(

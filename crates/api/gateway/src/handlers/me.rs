@@ -3,7 +3,7 @@
 //! ownership check.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -293,6 +293,56 @@ pub async fn punch(
             }),
         )
             .into_response(),
+        Err(e) => map_attendance_error(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MonthQuery {
+    pub month: Option<String>,
+}
+
+/// GET /api/v1/me/attendance?month=YYYY-MM (defaults to the current Bangkok month)
+pub async fn my_attendance(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Query(query): Query<MonthQuery>,
+) -> Response {
+    use chrono::{Datelike, NaiveDate};
+    if let Err(forbidden) = require(&ctx, "attendance", "punch_self") {
+        return forbidden;
+    }
+    let first = match query.month.as_deref() {
+        Some(m) => NaiveDate::parse_from_str(&format!("{m}-01"), "%Y-%m-%d").ok(),
+        None => {
+            let today = chrono::Utc::now()
+                .with_timezone(&talentos_attendance::bangkok_offset())
+                .date_naive();
+            NaiveDate::from_ymd_opt(today.year(), today.month(), 1)
+        }
+    };
+    let Some(first) = first else {
+        return error_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_month",
+            "month must be YYYY-MM",
+        );
+    };
+    let last = (first + chrono::Months::new(1)).pred_opt().unwrap_or(first);
+
+    match talentos_hr_runner::attendance::list_my_days(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        first,
+        last,
+    )
+    .await
+    {
+        Ok(days) => Json(json!({ "employee_linked": true, "days": days })).into_response(),
+        Err(talentos_hr_runner::attendance::AttendanceError::EmployeeNotLinked) => {
+            Json(json!({ "employee_linked": false, "days": [] })).into_response()
+        }
         Err(e) => map_attendance_error(e),
     }
 }

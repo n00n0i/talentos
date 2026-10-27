@@ -171,3 +171,33 @@ test("links an employee account and shows self-service payslips", async ({ page 
   await expect(page.getByRole("heading", { name: "สลิปของฉัน" })).toBeVisible();
   await expect(page.getByRole("link", { name: "PDF" }).first()).toBeVisible();
 });
+
+test("employee punches in and out from the clock page", async ({ page, context }) => {
+  await login(page);
+  const shift = await page.request.post("/api/gw/api/v1/shifts", {
+    data: { name: "E2E", start: "09:00", end: "18:00", break_minutes: 60, grace_minutes: 5 },
+  });
+  expect(shift.ok()).toBeTruthy();
+  const { id: shiftId } = await shift.json();
+  const list = await page.request.get("/api/gw/api/v1/employees?q=E2E001");
+  const employeeId = (await list.json()).employees[0].id;
+  const assign = await page.request.post(`/api/gw/api/v1/shifts/${shiftId}/assign`, {
+    data: { employee_id: employeeId, effective_from: "2026-01-01" },
+  });
+  expect(assign.ok()).toBeTruthy();
+
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill(invitedEmail);
+  await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 13.7563, longitude: 100.5018 });
+  await page.goto("/clock");
+  await page.getByRole("button", { name: "เข้างาน" }).click();
+  await expect(page.getByText("บันทึกเวลาแล้ว")).toBeVisible();
+  await page.getByRole("button", { name: "ออกงาน" }).click();
+  await expect(page.getByTestId("day-row").first()).toBeVisible();
+});

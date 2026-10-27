@@ -633,6 +633,44 @@ pub async fn list_days(
     Ok(days)
 }
 
+/// List the caller's own attendance days in a date range, newest first.
+/// Returns `EmployeeNotLinked` when no active employee belongs to `user_id`.
+pub async fn list_my_days(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Result<Vec<DayView>, AttendanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let employee_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM employees
+          WHERE tenant_id = $1 AND user_id = $2 AND status <> 'terminated'",
+    )
+    .bind(tenant_id.0)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let employee_id = employee_id.ok_or(AttendanceError::EmployeeNotLinked)?;
+
+    let rows = sqlx::query(
+        r#"SELECT work_date, worked_minutes, late_minutes, early_leave_minutes,
+                  ot_minutes, ot_kind, incomplete, status
+             FROM attendance_days
+            WHERE tenant_id = $1 AND employee_id = $2
+              AND work_date BETWEEN $3 AND $4
+            ORDER BY work_date DESC"#,
+    )
+    .bind(tenant_id.0)
+    .bind(employee_id)
+    .bind(from)
+    .bind(to)
+    .fetch_all(&mut *tx)
+    .await?;
+    let _ = tx.rollback().await;
+    Ok(rows.into_iter().map(map_day).collect::<Result<_, _>>()?)
+}
+
 /// Approve an attendance day and feed the payroll row in one transaction.
 pub async fn approve_day(
     pool: &TenantPool,

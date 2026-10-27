@@ -67,6 +67,10 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 &["hr_admin", "payroll_manager"][..],
             ),
             (
+                ("attendance", "punch_self"),
+                &["hr_admin", "payroll_manager", "manager", "employee"][..],
+            ),
+            (
                 ("attendance", "approve"),
                 &["hr_admin", "payroll_manager", "manager"][..],
             ),
@@ -185,7 +189,17 @@ mod tests {
         assert!(perms.contains(&"payslip.view_self".to_string()));
         assert!(perms.contains(&"leave_request.submit_self".to_string()));
         assert!(!perms.contains(&"employee.create".to_string()));
-        assert_eq!(perms.len(), 3); // update_self + view_self + submit_self
+        assert_eq!(perms.len(), 4); // update_self + view_self + submit_self + punch_self
+    }
+
+    #[test]
+    fn all_roles_can_punch_self() {
+        for role in ROLES {
+            assert!(
+                has_permission(&[role.to_string()], "attendance", "punch_self"),
+                "role {role} failed"
+            );
+        }
     }
 
     #[test]

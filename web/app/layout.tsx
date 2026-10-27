@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "TalentOS",
   description: "ระบบ HR และเงินเดือนสำหรับองค์กรไทย",
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

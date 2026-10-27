@@ -30,6 +30,7 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/auth/2fa/enable", post(auth::enable_2fa))
         .route("/api/v1/auth/2fa/disable", post(auth::disable_2fa))
         .route("/api/v1/me/payslips", get(me::payslips))
+        .route("/api/v1/me/payslips/:id/acknowledge", post(me::acknowledge))
         .route("/api/v1/me/payslips/:id/render", get(me::render))
         .route("/api/v1/me/payslips/:id/pdf", get(me::pdf))
         .route("/api/v1/me/attendance", get(me::my_attendance))

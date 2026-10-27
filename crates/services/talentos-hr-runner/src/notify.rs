@@ -154,7 +154,10 @@ pub async fn enqueue_payslip_ready(
     period_end: NaiveDate,
 ) -> Result<(), sqlx::Error> {
     let subject = "สลิปเงินเดือนพร้อมให้ดาวน์โหลด";
-    let body = format!("สลิปเงินเดือนสำหรับงวด {period_start} ถึง {period_end} พร้อมให้ดาวน์โหลดแล้ว");
+    let app_url = std::env::var("APP_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let body = format!(
+        "สลิปเงินเดือนสำหรับงวด {period_start} ถึง {period_end} พร้อมให้ดาวน์โหลดแล้ว เปิดดูได้ที่ {app_url}/me/payslips"
+    );
 
     let recipients = sqlx::query(
         r#"SELECT DISTINCT u.id, u.email, u.line_user_id

@@ -10,21 +10,39 @@ type SelfPayslip = {
   gross: string;
   net: string;
   status: string;
+  acknowledged_at: string | null;
 };
 
 export default function MyPayslipsPage() {
   const [linked, setLinked] = useState(true);
   const [rows, setRows] = useState<SelfPayslip[] | null>(null);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
+  const load = () =>
     gw<{ employee_linked: boolean; payslips: SelfPayslip[] }>("api/v1/me/payslips")
       .then((r) => {
         setLinked(r.employee_linked);
         setRows(r.payslips);
       })
       .catch((e) => handleApiError(e, setError));
+
+  useEffect(() => {
+    load();
   }, []);
+
+  async function acknowledge(id: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/me/payslips/${id}/acknowledge`, { method: "POST" });
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <>
@@ -55,6 +73,7 @@ export default function MyPayslipsPage() {
                 <th className="num">ยอดรวม</th>
                 <th className="num">สุทธิ</th>
                 <th>สลิป</th>
+                <th>การรับสลิป</th>
               </tr>
             </thead>
             <tbody>
@@ -79,6 +98,20 @@ export default function MyPayslipsPage() {
                     >
                       PDF
                     </a>
+                  </td>
+                  <td data-testid="payslip-ack-status">
+                    {p.acknowledged_at ? (
+                      <span className="badge success">ยืนยันแล้ว</span>
+                    ) : (
+                      <button
+                        className="btn btn-sm"
+                        data-testid="acknowledge-payslip"
+                        disabled={busy}
+                        onClick={() => acknowledge(p.id)}
+                      >
+                        ยืนยันรับสลิปแล้ว
+                      </button>
+                    )}
                   </td>
                 </tr>
                 );

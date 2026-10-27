@@ -295,9 +295,12 @@ tokens.
 
 An employee can be linked to a login account from the employee form. That user
 then sees only their own payslips at `/me/payslips`
-(`GET /api/v1/me/payslips`, plus `/render` and `/pdf`); ownership is checked
+(`GET /api/v1/me/payslips`, plus `/render`, `/pdf`, and `/acknowledge`);
+ownership is checked
 against `employees.user_id`, so `payslip.view_self` never exposes a colleague's
-slip.
+slip. Employees confirm receipt with `POST /api/v1/me/payslips/:id/acknowledge`
+(idempotent); HR sees the acknowledgement time in the payroll run payslip list.
+The payslip-ready notification links to `/me/payslips`.
 
 `GET /api/v1/audit` (permission `audit_log.read`) lists the tenant audit trail;
 the admin UI is at `/audit`.

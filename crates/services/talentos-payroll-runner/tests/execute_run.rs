@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 mod common;
 
-use common::{cleanup, database_url, recovery_url, seed};
+use common::{cleanup, database_url, recovery_url, seed, seed_attendance_day, seed_shift};
+use std::collections::HashMap;
 
 #[tokio::test]
 async fn execute_run_writes_payslips_and_totals() {
@@ -159,6 +160,139 @@ async fn attendance_ot_and_unpaid_leave_feed_the_run() {
         "base − unpaid leave + OT"
     );
     assert_eq!(sso, Decimal::new(750, 0), "SSO capped on 38k gross");
+
+    let _ = tx.rollback().await;
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn attendance_ot_uses_approved_records_and_ignores_pending_days() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, employee_ids) = seed(
+        &raw,
+        &[
+            ("EMP060", Decimal::new(30_000, 0)),
+            ("EMP061", Decimal::new(30_000, 0)),
+            ("EMP062", Decimal::new(30_000, 0)),
+        ],
+    )
+    .await;
+    let emp_weekday = employee_ids[0];
+    let emp_weekend = employee_ids[1];
+    let emp_holiday = employee_ids[2];
+
+    // 09:00–18:00 shift (8 effective hours after the default 60-min break).
+    seed_shift(&raw, tenant_id, emp_weekday, "09:00", "18:00").await;
+    seed_shift(&raw, tenant_id, emp_weekend, "09:00", "18:00").await;
+    seed_shift(&raw, tenant_id, emp_holiday, "09:00", "18:00").await;
+
+    seed_attendance_day(
+        &raw,
+        tenant_id,
+        emp_weekday,
+        "2026-10-05",
+        "2",
+        "weekday",
+        true,
+    )
+    .await;
+    // A pending day in the same period must not reach payroll.
+    seed_attendance_day(
+        &raw,
+        tenant_id,
+        emp_weekday,
+        "2026-10-06",
+        "3",
+        "weekday",
+        false,
+    )
+    .await;
+    seed_attendance_day(
+        &raw,
+        tenant_id,
+        emp_weekend,
+        "2026-10-10",
+        "2",
+        "weekend",
+        true,
+    )
+    .await;
+    seed_attendance_day(
+        &raw,
+        tenant_id,
+        emp_holiday,
+        "2026-10-13",
+        "2",
+        "holiday",
+        true,
+    )
+    .await;
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("run should succeed");
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+
+    let rows = sqlx::query(
+        "SELECT employee_id, ot_amount, gross_earnings, sso_employee
+           FROM payslips
+          WHERE payroll_run_id = $1",
+    )
+    .bind(run_id)
+    .fetch_all(&mut *tx)
+    .await
+    .expect("payslips");
+    assert_eq!(rows.len(), 3, "all three employees paid");
+
+    let mut by_employee: HashMap<Uuid, (Decimal, Decimal, Decimal)> = HashMap::new();
+    for row in &rows {
+        let employee_id: Uuid = row.try_get("employee_id").expect("employee_id");
+        let ot: Decimal = row.try_get("ot_amount").expect("ot_amount");
+        let gross: Decimal = row.try_get("gross_earnings").expect("gross_earnings");
+        let sso: Decimal = row.try_get("sso_employee").expect("sso_employee");
+        by_employee.insert(employee_id, (ot, gross, sso));
+    }
+
+    // Hourly rate = 30,000 / 30 / 8 = 125.
+    let expected = [
+        (
+            emp_weekday,
+            Decimal::new(375, 0),
+            Decimal::new(3_037_500, 2),
+        ),
+        (
+            emp_weekend,
+            Decimal::new(500, 0),
+            Decimal::new(3_050_000, 2),
+        ),
+        (
+            emp_holiday,
+            Decimal::new(750, 0),
+            Decimal::new(3_075_000, 2),
+        ),
+    ];
+    for (emp, exp_ot, exp_gross) in expected {
+        let (ot, gross, sso) =
+            by_employee
+                .get(&emp)
+                .copied()
+                .unwrap_or((Decimal::ZERO, Decimal::ZERO, Decimal::ZERO));
+        assert_eq!(ot, exp_ot, "OT for {emp}");
+        assert_eq!(gross, exp_gross, "gross for {emp}");
+        assert_eq!(sso, Decimal::new(750, 0), "SSO capped for {emp}");
+    }
 
     let _ = tx.rollback().await;
     cleanup(&raw, tenant_id).await;

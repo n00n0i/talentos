@@ -177,28 +177,10 @@ pub async fn create_request(
         // request; the approver sees the raw request and decides.
     }
 
-    let row = sqlx::query(
-        r#"INSERT INTO leave_requests
-             (tenant_id, entity_id, employee_id, leave_type, start_date, end_date, days,
-              reason, status, requested_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9)
-           RETURNING id, status"#,
-    )
-    .bind(tenant_id.0)
-    .bind(entity_id)
-    .bind(employee_id)
-    .bind(&input.leave_type)
-    .bind(input.start_date)
-    .bind(input.end_date)
-    .bind(days)
-    .bind(&input.reason)
-    .bind(caller_user_id)
-    .fetch_one(&mut *tx)
-    .await?;
-
     // Debit the balance when a row exists; unpaid leave is never tracked.
+    let mut balance_debited = false;
     if input.leave_type != "unpaid" {
-        sqlx::query(
+        let debited = sqlx::query(
             r#"UPDATE leave_balances lb
                SET used_days = used_days + $1, updated_at = now()
                FROM leave_types lt
@@ -215,7 +197,28 @@ pub async fn create_request(
         .bind(tenant_id.0)
         .execute(&mut *tx)
         .await?;
+        balance_debited = debited.rows_affected() > 0;
     }
+
+    let row = sqlx::query(
+        r#"INSERT INTO leave_requests
+             (tenant_id, entity_id, employee_id, leave_type, start_date, end_date, days,
+              reason, status, requested_by, balance_debited)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$10)
+           RETURNING id, status"#,
+    )
+    .bind(tenant_id.0)
+    .bind(entity_id)
+    .bind(employee_id)
+    .bind(&input.leave_type)
+    .bind(input.start_date)
+    .bind(input.end_date)
+    .bind(days)
+    .bind(&input.reason)
+    .bind(caller_user_id)
+    .bind(balance_debited)
+    .fetch_one(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 
@@ -346,7 +349,7 @@ pub async fn cancel_request(
         r#"UPDATE leave_requests
            SET status = 'cancelled', updated_at = now()
            WHERE id = $1 AND tenant_id = $2 AND employee_id = $3 AND status = 'pending'
-           RETURNING status, leave_type, start_date, days"#,
+           RETURNING status, leave_type, start_date, days, balance_debited"#,
     )
     .bind(request_id)
     .bind(tenant_id.0)
@@ -359,8 +362,9 @@ pub async fn cancel_request(
         let leave_type: String = row.try_get("leave_type")?;
         let year: i32 = row.try_get::<NaiveDate, _>("start_date")?.year();
         let days: Decimal = row.try_get("days")?;
+        let was_debited: bool = row.try_get("balance_debited")?;
 
-        if leave_type != "unpaid" {
+        if was_debited && leave_type != "unpaid" {
             sqlx::query(
                 r#"UPDATE leave_balances lb
                    SET used_days = used_days - $1, updated_at = now()
@@ -406,6 +410,79 @@ pub async fn cancel_request(
         }
         None => Err(LeaveError::NotFound),
     }
+}
+
+/// Approve or reject a pending leave request. Rejection restores the balance
+/// debit when `balance_debited` is true; approval keeps it.
+pub async fn decide_request(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    approver_user_id: Uuid,
+    request_id: Uuid,
+    approve: bool,
+) -> Result<String, LeaveError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+
+    let updated = sqlx::query(
+        r#"UPDATE leave_requests
+           SET status = $3, approver_id = $4, approved_at = now(), updated_at = now()
+           WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
+           RETURNING status, employee_id, leave_type, start_date, days, balance_debited"#,
+    )
+    .bind(request_id)
+    .bind(tenant_id.0)
+    .bind(if approve { "approved" } else { "rejected" })
+    .bind(approver_user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(row) = updated else {
+        let _ = tx.rollback().await;
+        return Err(LeaveError::NotFound);
+    };
+
+    let status: String = row.try_get("status")?;
+
+    if !approve {
+        let was_debited: bool = row.try_get("balance_debited")?;
+        if was_debited {
+            let employee_id: Uuid = row.try_get("employee_id")?;
+            let leave_type: String = row.try_get("leave_type")?;
+            let year: i32 = row.try_get::<NaiveDate, _>("start_date")?.year();
+            let days: Decimal = row.try_get("days")?;
+
+            if leave_type != "unpaid" {
+                sqlx::query(
+                    r#"UPDATE leave_balances lb
+                       SET used_days = used_days - $1, updated_at = now()
+                       FROM leave_types lt
+                       WHERE lb.employee_id = $2
+                         AND lb.year = $3
+                         AND lt.id = lb.leave_type_id
+                         AND lt.name = $4
+                         AND (lt.tenant_id IS NULL OR lt.tenant_id = $5)"#,
+                )
+                .bind(days)
+                .bind(employee_id)
+                .bind(year)
+                .bind(&leave_type)
+                .bind(tenant_id.0)
+                .execute(&mut *tx)
+                .await?;
+
+                sqlx::query(
+                    "UPDATE leave_requests SET balance_debited = FALSE WHERE id = $1 AND tenant_id = $2"
+                )
+                .bind(request_id)
+                .bind(tenant_id.0)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+    }
+
+    tx.commit().await?;
+    Ok(status)
 }
 
 /// All pending leave requests across the tenant, newest first.

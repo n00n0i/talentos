@@ -11,7 +11,7 @@ pub use attendance::{
     DayView, PunchInput, ShiftInput, ShiftView,
 };
 pub use leave::{
-    cancel_request, count_leave_days, create_request, employee_of_user, list_balances,
-    list_requests, pending_approvals, LeaveBalanceView, LeaveError, LeaveInput, LeaveRequestView,
-    PendingLeave,
+    cancel_request, count_leave_days, create_request, decide_request, employee_of_user,
+    list_balances, list_requests, pending_approvals, LeaveBalanceView, LeaveError, LeaveInput,
+    LeaveRequestView, PendingLeave,
 };

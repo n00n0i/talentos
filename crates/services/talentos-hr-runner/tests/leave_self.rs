@@ -3,11 +3,12 @@
 //! Skips when DATABASE_URL is unset so `cargo test` passes offline.
 
 use chrono::NaiveDate;
+use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
 use talentos_hr_runner::leave::{
-    cancel_request, create_request, employee_of_user, list_balances, list_requests,
+    cancel_request, create_request, decide_request, employee_of_user, list_balances, list_requests,
     pending_approvals, LeaveInput,
 };
 use talentos_kernel::TenantId;
@@ -36,6 +37,77 @@ async fn user_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
     row.get("user_id")
 }
 
+async fn leave_type_id(pool: &PgPool, tenant_id: Uuid, name: &str) -> i32 {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let id: i32 = sqlx::query_scalar("SELECT id FROM leave_types WHERE name = $1")
+        .bind(name)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("leave type");
+    let _ = tx.rollback().await;
+    id
+}
+
+async fn seed_balance(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    employee_id: Uuid,
+    leave_type_id: i32,
+    year: i32,
+    total_days: Decimal,
+) {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        "INSERT INTO leave_balances (tenant_id, employee_id, leave_type_id, year, total_days, used_days)
+         VALUES ($1, $2, $3, $4, $5, 0)",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .bind(leave_type_id)
+    .bind(year)
+    .bind(total_days)
+    .execute(&mut *tx)
+    .await
+    .expect("seed balance");
+    tx.commit().await.expect("commit seed");
+}
+
+async fn used_days(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    employee_id: Uuid,
+    leave_type_id: i32,
+    year: i32,
+) -> Decimal {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let used: Decimal = sqlx::query_scalar(
+        "SELECT used_days FROM leave_balances WHERE employee_id = $1 AND leave_type_id = $2 AND year = $3",
+    )
+    .bind(employee_id)
+    .bind(leave_type_id)
+    .bind(year)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("used days");
+    let _ = tx.rollback().await;
+    used
+}
+
 #[tokio::test]
 async fn linked_user_sees_only_own_balances_and_requests() {
     let Some(url) = database_url() else {
@@ -47,31 +119,11 @@ async fn linked_user_sees_only_own_balances_and_requests() {
     let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
     let tenant = TenantId(tenant_id);
     let year = 2026;
+    let annual_id = leave_type_id(&raw, tenant_id, "annual").await;
 
-    let mut tx = raw.begin().await.expect("begin");
-    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
-        .bind(tenant_id.to_string())
-        .execute(&mut *tx)
-        .await
-        .expect("set tenant");
-    let annual_type_id: i32 = sqlx::query_scalar("SELECT id FROM leave_types WHERE name = 'annual'")
-        .fetch_one(&mut *tx)
-        .await
-        .expect("annual type");
     for (_entity_id, employee_id) in entities.iter() {
-        sqlx::query(
-            "INSERT INTO leave_balances (tenant_id, employee_id, leave_type_id, year, total_days, used_days)
-             VALUES ($1, $2, $3, $4, 6, 0)",
-        )
-        .bind(tenant_id)
-        .bind(*employee_id)
-        .bind(annual_type_id)
-        .bind(year)
-        .execute(&mut *tx)
-        .await
-        .expect("seed balance");
+        seed_balance(&raw, tenant_id, *employee_id, annual_id, year, dec!(6)).await;
     }
-    tx.commit().await.expect("commit seed");
 
     let mut users = Vec::new();
     for (_entity_id, employee_id) in entities.iter() {
@@ -79,7 +131,6 @@ async fn linked_user_sees_only_own_balances_and_requests() {
         users.push((user_id, *employee_id));
     }
 
-    // Create a request for employee 0 only.
     let req = create_request(
         &pool,
         tenant,
@@ -95,7 +146,6 @@ async fn linked_user_sees_only_own_balances_and_requests() {
     .await
     .expect("create request");
 
-    // User 0 sees one request and a balance row for annual.
     let my_emp = employee_of_user(&pool, tenant, users[0].0)
         .await
         .expect("resolve employee")
@@ -109,7 +159,6 @@ async fn linked_user_sees_only_own_balances_and_requests() {
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].id, req.id);
 
-    // User 1 sees zero requests and zero used annual days.
     let other_emp = employee_of_user(&pool, tenant, users[1].0)
         .await
         .expect("resolve employee")
@@ -145,7 +194,7 @@ async fn unlinked_user_gets_empty_balances_and_requests() {
 }
 
 #[tokio::test]
-async fn cancel_pending_succeeds() {
+async fn cancel_pending_succeeds_and_restores_balance() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
@@ -154,6 +203,9 @@ async fn cancel_pending_succeeds() {
     let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
     let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
     let tenant = TenantId(tenant_id);
+    let year = 2026;
+    let annual_id = leave_type_id(&raw, tenant_id, "annual").await;
+    seed_balance(&raw, tenant_id, entities[0].1, annual_id, year, dec!(6)).await;
 
     let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
     let req = create_request(
@@ -161,7 +213,7 @@ async fn cancel_pending_succeeds() {
         tenant,
         user_id,
         LeaveInput {
-            leave_type: "sick".into(),
+            leave_type: "annual".into(),
             start_date: d(2026, 10, 10),
             end_date: d(2026, 10, 11),
             reason: None,
@@ -171,6 +223,11 @@ async fn cancel_pending_succeeds() {
     .await
     .expect("create request");
 
+    assert_eq!(
+        used_days(&raw, tenant_id, entities[0].1, annual_id, year).await,
+        dec!(2)
+    );
+
     let status = cancel_request(&pool, tenant, user_id, req.id).await.expect("cancel");
     assert_eq!(status, "cancelled");
 
@@ -178,6 +235,11 @@ async fn cancel_pending_succeeds() {
         .await
         .expect("list cancelled");
     assert_eq!(requests.len(), 1);
+
+    assert_eq!(
+        used_days(&raw, tenant_id, entities[0].1, annual_id, year).await,
+        dec!(0)
+    );
 
     cleanup(&raw, tenant_id).await;
 }
@@ -267,6 +329,139 @@ async fn cancel_approved_request_returns_conflict() {
 }
 
 #[tokio::test]
+async fn approve_keeps_balance_debited_and_reject_restores() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+    let year = 2026;
+    let annual_id = leave_type_id(&raw, tenant_id, "annual").await;
+
+    let approver = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let requester = user_id_of(&raw, tenant_id, entities[1].1).await;
+    seed_balance(&raw, tenant_id, entities[1].1, annual_id, year, dec!(6)).await;
+
+    let to_approve = create_request(
+        &pool,
+        tenant,
+        requester,
+        LeaveInput {
+            leave_type: "annual".into(),
+            start_date: d(2026, 10, 5),
+            end_date: d(2026, 10, 6),
+            reason: None,
+            employee_id: None,
+        },
+    )
+    .await
+    .expect("create approve request");
+
+    let to_reject = create_request(
+        &pool,
+        tenant,
+        requester,
+        LeaveInput {
+            leave_type: "annual".into(),
+            start_date: d(2026, 10, 12),
+            end_date: d(2026, 10, 13),
+            reason: None,
+            employee_id: None,
+        },
+    )
+    .await
+    .expect("create reject request");
+
+    // Both debited: 4 used days.
+    assert_eq!(
+        used_days(&raw, tenant_id, entities[1].1, annual_id, year).await,
+        dec!(4)
+    );
+
+    let approved = decide_request(&pool, tenant, approver, to_approve.id, true)
+        .await
+        .expect("approve");
+    assert_eq!(approved, "approved");
+
+    let rejected = decide_request(&pool, tenant, approver, to_reject.id, false)
+        .await
+        .expect("reject");
+    assert_eq!(rejected, "rejected");
+
+    // Approved kept the debit, rejected restored it: net 2 used days.
+    assert_eq!(
+        used_days(&raw, tenant_id, entities[1].1, annual_id, year).await,
+        dec!(2)
+    );
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn legacy_pending_request_cancels_without_touching_balance() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+    let year = 2026;
+    let annual_id = leave_type_id(&raw, tenant_id, "annual").await;
+    seed_balance(&raw, tenant_id, entities[0].1, annual_id, year, dec!(6)).await;
+
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+
+    // Insert a legacy-style pending row with balance_debited = false.
+    let request_id = Uuid::new_v4();
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        r#"INSERT INTO leave_requests
+             (id, tenant_id, entity_id, employee_id, leave_type, start_date, end_date, days,
+              reason, status, requested_by, balance_debited)
+           VALUES ($1,$2,$3,$4,'annual',$5,$6,2,'legacy','pending',$7,FALSE)"#,
+    )
+    .bind(request_id)
+    .bind(tenant_id)
+    .bind(entities[0].0)
+    .bind(entities[0].1)
+    .bind(d(2026, 10, 20))
+    .bind(d(2026, 10, 21))
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await
+    .expect("insert legacy request");
+    tx.commit().await.expect("commit");
+
+    assert_eq!(
+        used_days(&raw, tenant_id, entities[0].1, annual_id, year).await,
+        dec!(0)
+    );
+
+    let status = cancel_request(&pool, tenant, user_id, request_id)
+        .await
+        .expect("cancel legacy");
+    assert_eq!(status, "cancelled");
+
+    // Balance must stay at 0 because the legacy row was never debited.
+    assert_eq!(
+        used_days(&raw, tenant_id, entities[0].1, annual_id, year).await,
+        dec!(0)
+    );
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
 async fn hr_inbox_lists_pending_with_code_and_name() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
@@ -280,7 +475,6 @@ async fn hr_inbox_lists_pending_with_code_and_name() {
     let user0 = user_id_of(&raw, tenant_id, entities[0].1).await;
     let user1 = user_id_of(&raw, tenant_id, entities[1].1).await;
 
-    // One pending, one approved.
     let pending = create_request(
         &pool,
         tenant,

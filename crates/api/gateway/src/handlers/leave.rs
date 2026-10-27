@@ -9,7 +9,6 @@ use axum::{
 use chrono::{Datelike, NaiveDate};
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::Row;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
@@ -218,97 +217,20 @@ pub async fn decide(
     if let Err(forbidden) = require(&ctx, "leave_request", "approve_team") {
         return forbidden;
     }
-    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
-        Ok(tx) => tx,
-        Err(e) => return internal_err(&e.to_string()),
-    };
-
-    // Only pending requests may be decided; the guard is in SQL so two approvers
-    // cannot both "win" a race.
-    let updated = sqlx::query(
-        r#"UPDATE leave_requests
-           SET status = $3, approver_id = $4, approved_at = now(), updated_at = now()
-           WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
-           RETURNING status, employee_id, leave_type, start_date, days"#,
-    )
-    .bind(id)
-    .bind(ctx.tenant_id.0)
-    .bind(if body.approve { "approved" } else { "rejected" })
-    .bind(ctx.user_id.0)
-    .fetch_optional(&mut *tx)
-    .await;
-
-    let row = match updated {
-        Ok(Some(row)) => row,
-        Ok(None) => {
-            let _ = tx.rollback().await;
-            return not_found();
-        }
-        Err(e) => return internal_err(&e.to_string()),
-    };
-
-    let status: String = match row.try_get("status") {
-        Ok(v) => v,
-        Err(e) => return internal_err(&e.to_string()),
-    };
-
-    // Rejection restores the balance that was debited when the request was created.
-    if !body.approve {
-        let employee_id: Uuid = match row.try_get("employee_id") {
-            Ok(v) => v,
-            Err(e) => return internal_err(&e.to_string()),
-        };
-        let leave_type: String = match row.try_get("leave_type") {
-            Ok(v) => v,
-            Err(e) => return internal_err(&e.to_string()),
-        };
-        let year: i32 = match row.try_get::<chrono::NaiveDate, _>("start_date") {
-            Ok(v) => v.year(),
-            Err(e) => return internal_err(&e.to_string()),
-        };
-        let days: rust_decimal::Decimal = match row.try_get("days") {
-            Ok(v) => v,
-            Err(e) => return internal_err(&e.to_string()),
-        };
-
-        if leave_type != "unpaid" {
-            if let Err(e) = sqlx::query(
-                r#"UPDATE leave_balances lb
-                   SET used_days = used_days - $1, updated_at = now()
-                   FROM leave_types lt
-                   WHERE lb.employee_id = $2
-                     AND lb.year = $3
-                     AND lt.id = lb.leave_type_id
-                     AND lt.name = $4
-                     AND (lt.tenant_id IS NULL OR lt.tenant_id = $5)"#,
-            )
-            .bind(days)
-            .bind(employee_id)
-            .bind(year)
-            .bind(&leave_type)
-            .bind(ctx.tenant_id.0)
-            .execute(&mut *tx)
-            .await
-            {
-                let _ = tx.rollback().await;
-                return internal_err(&e.to_string());
-            }
-        }
+    match talentos_hr_runner::decide_request(&state.pool, ctx.tenant_id, ctx.user_id.0, id, body.approve)
+        .await
+    {
+        Ok(status) => (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "request_id": id.to_string(),
+                "status": status,
+                "approver_id": ctx.user_id.to_string(),
+            })),
+        )
+            .into_response(),
+        Err(e) => map_leave_error(e),
     }
-
-    if let Err(e) = tx.commit().await {
-        return internal_err(&e.to_string());
-    }
-
-    (
-        StatusCode::OK,
-        Json(serde_json::json!({
-            "request_id": id.to_string(),
-            "status": status,
-            "approver_id": ctx.user_id.to_string(),
-        })),
-    )
-        .into_response()
 }
 
 fn envelope(code: &str, message: &str) -> ErrorResponse {

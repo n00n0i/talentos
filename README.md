@@ -167,6 +167,10 @@ open http://localhost   # nginx -> web:3000, /api/* and /health -> gateway:8080
   `make restore FILE=...` stops the app, restores and restarts.
 - `./scripts/deploy.sh` = migrate → rebuild → health check. `--rollback` starts
   the previous gateway/web images.
+- **HTTPS:** `./scripts/selfsigned-cert.sh` (testing) or drop real certs into
+  `./certs`, then `docker compose -f docker-compose.yml -f docker-compose.tls.yml
+  up -d --build gateway web nginx`. Set `APP_URL=https://…` and
+  `TALENTOS_COOKIE_SECURE=true`. Port 80 redirects to 443.
 - The embedded migrator keeps a `_sqlx_migrations` ledger. A database created by
   the old hand-run SQL (before this ledger existed) cannot be upgraded in place;
   recreate it with `make db-reset` on dev, or baseline it before the first
@@ -222,8 +226,16 @@ POST /api/v1/attendance      {employee_id, work_date, ot_hours, ot_kind}
 GET  /api/v1/attendance?from=&to=&employee_id=
 ```
 
-Payroll reads the period's OT hours by class (weekday 1.5x, rest day 2x, public
-holiday 3x) and approved `unpaid` leave. Unpaid leave deducts `base_salary / 30`
+The OT class is automatic: a date in the tenant holiday calendar is `holiday`
+(3x), weekends are `weekend` (2x), everything else `weekday` (1.5x). HR can still
+override the class on a record.
+
+```
+GET/POST   /api/v1/attendance/holidays
+DELETE     /api/v1/attendance/holidays/:id
+```
+
+Payroll reads the period's OT hours by class and approved `unpaid` leave. Unpaid leave deducts `base_salary / 30`
 per day; OT is priced on `base_salary / 30 / 8`, unaffected by that deduction.
 SSO follows the explicit `sso_enrolled` flag, independent of provident fund.
 

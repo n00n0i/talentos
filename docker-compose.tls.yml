@@ -1,0 +1,12 @@
+# HTTPS overlay:
+#   ./scripts/selfsigned-cert.sh        # or drop real certs into ./certs
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d --build gateway web nginx
+# Set APP_URL=https://your-host and TALENTOS_COOKIE_SECURE=true in .env.
+services:
+  nginx:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes: !override
+      - ./nginx.tls.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro

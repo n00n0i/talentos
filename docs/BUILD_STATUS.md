@@ -8,8 +8,8 @@ Last verified: 2026-10-26 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **108 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 18 files apply cleanly |
+| Tests | `cargo test --workspace` | **110 passed**, 0 failed (real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 20 files apply cleanly |
 
 Tests by crate: kernel 5, authz 22, compliance 6, payroll 17, rag 7, agent 7,
 payroll-runner 8 (real PostgreSQL + Chromium: payslips, totals, state machine,
@@ -19,8 +19,9 @@ wasm-host 6 (real guest module: sandbox, capability refusal, tenant scoping),
 db 5 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking),
 graphql 3 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
 destructive guard, notifications), memory 6 (3 pure + 3 real-Postgres: recall,
-RLS isolation, layer filter, expiry purge, stats), gateway 6 (RBAC gate, tenant provisioning CLI, CSV escaping/totals:
-hr_admin allowed, employee refused, manager cannot approve payroll).
+RLS isolation, layer filter, expiry purge, stats), gateway 8 (RBAC gate, tenant provisioning CLI, CSV escaping/totals, holiday
+classification: hr_admin allowed, employee refused, manager cannot approve
+payroll).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -71,7 +72,9 @@ against a live gateway.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings) and `/users` (invite, roles, deactivate, HR-issued password reset).
-Payroll runs export a UTF-8 CSV register (formula-injection safe) with totals. UI restyled to the approved reference: rounded app
+Payroll runs export a UTF-8 CSV register (formula-injection safe) with totals.
+Attendance has a tenant holiday calendar; OT is classified holiday > weekend >
+weekday automatically. HTTPS is a compose overlay (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout. Browser E2E (`web/e2e`, Playwright) passes 4/4
 locally and runs in CI: invite acceptance → login, settings persistence,
@@ -87,9 +90,8 @@ employee → attendance → payroll → approval, user invite.
   day, OT on `base_salary / 30 / 8`), but the divisor and OT multipliers are now
   tenant settings (`/settings`), so HR can adjust them without a deploy.
   Statutory SSO/tax remain in code.
-- Attendance OT class (weekday/weekend/holiday) is chosen by the recorder, not
-  derived from a holiday calendar. Wire a Thai holiday calendar before relying on
-  holiday OT at scale.
+- Holiday dates are tenant-managed (the cabinet announces them yearly); there is
+  no bundled national calendar to go stale.
 
 ## Deferred — not wired
 

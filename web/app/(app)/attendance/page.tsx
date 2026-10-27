@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
 
 type Employee = { id: string; employee_code: string; first_name_th: string; last_name_th: string };
+type Holiday = { id: string; holiday_date: string; name_th: string };
 type Record = {
   id: string;
   employee_id: string;
@@ -16,6 +17,7 @@ type Record = {
 };
 
 const KINDS = [
+  { value: "", label: "อัตโนมัติ (ตามวัน/ปฏิทิน)" },
   { value: "weekday", label: "วันทำงาน (1.5x)" },
   { value: "weekend", label: "วันหยุด (2x)" },
   { value: "holiday", label: "วันหยุดนักขัตฤกษ์ (3x)" },
@@ -32,10 +34,13 @@ function monthRange() {
 export default function AttendancePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [records, setRecords] = useState<Record[] | null>(null);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [holidayDate, setHolidayDate] = useState("");
+  const [holidayName, setHolidayName] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [workDate, setWorkDate] = useState(new Date().toISOString().slice(0, 10));
   const [otHours, setOtHours] = useState("0");
-  const [otKind, setOtKind] = useState("weekday");
+  const [otKind, setOtKind] = useState("");
   const [note, setNote] = useState("");
   const [range] = useState(monthRange);
   const [busy, setBusy] = useState(false);
@@ -43,12 +48,15 @@ export default function AttendancePage() {
   const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
-    const [emps, recs] = await Promise.all([
+    const year = range.from.slice(0, 4);
+    const [emps, recs, hols] = await Promise.all([
       gw<{ employees: Employee[] }>("api/v1/employees?status=active&limit=500"),
       gw<{ records: Record[] }>(`api/v1/attendance?from=${range.from}&to=${range.to}`),
+      gw<{ holidays: Holiday[] }>(`api/v1/attendance/holidays?year=${year}`),
     ]);
     setEmployees(emps.employees);
     setRecords(recs.records);
+    setHolidays(hols.holidays);
     if (!employeeId && emps.employees[0]) setEmployeeId(emps.employees[0].id);
   }, [range.from, range.to, employeeId]);
 
@@ -69,13 +77,45 @@ export default function AttendancePage() {
           work_date: workDate,
           hours_worked: 8,
           ot_hours: Number(otHours || "0"),
-          ot_kind: otKind,
+          ot_kind: otKind || null,
           note: note.trim() || null,
         }),
       });
       setNotice("บันทึกเวลาแล้ว");
       setOtHours("0");
       setNote("");
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addHoliday(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await gw("api/v1/attendance/holidays", {
+        method: "POST",
+        body: JSON.stringify({ holiday_date: holidayDate, name_th: holidayName }),
+      });
+      setHolidayDate("");
+      setHolidayName("");
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeHoliday(holiday: Holiday) {
+    if (!confirm(`ลบวันหยุด ${holiday.name_th} (${holiday.holiday_date})?`)) return;
+    setBusy(true);
+    try {
+      await gw(`api/v1/attendance/holidays/${holiday.id}`, { method: "DELETE" });
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -145,7 +185,11 @@ export default function AttendancePage() {
         <div className="form-row" style={{ marginTop: 12, gridTemplateColumns: "1fr 1fr auto" }}>
           <div className="field">
             <label>ประเภท OT</label>
-            <select value={otKind} onChange={(e) => setOtKind(e.target.value)}>
+            <select
+              data-testid="attendance-ot-kind"
+              value={otKind}
+              onChange={(e) => setOtKind(e.target.value)}
+            >
               {KINDS.map((k) => (
                 <option key={k.value} value={k.value}>
                   {k.label}
@@ -164,6 +208,83 @@ export default function AttendancePage() {
           </div>
         </div>
       </form>
+
+      <div className="grid-2">
+        <form className="card card-pad" onSubmit={addHoliday} style={{ display: "grid", gap: 12 }}>
+          <div>
+            <h2>ปฏิทินวันหยุด</h2>
+            <p className="hint" style={{ marginTop: 4 }}>
+              ใช้จัดประเภท OT อัตโนมัติ (วันหยุดนักขัตฤกษ์ 3x)
+            </p>
+          </div>
+          <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <label>วันที่</label>
+              <input
+                data-testid="holiday-date"
+                type="date"
+                value={holidayDate}
+                onChange={(e) => setHolidayDate(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>ชื่อวันหยุด</label>
+              <input
+                data-testid="holiday-name"
+                value={holidayName}
+                onChange={(e) => setHolidayName(e.target.value)}
+                placeholder="เช่น วันลอยกระทง"
+                required
+              />
+            </div>
+          </div>
+          <div>
+            <button className="btn btn-primary btn-sm" data-testid="add-holiday" type="submit" disabled={busy}>
+              เพิ่มวันหยุด
+            </button>
+          </div>
+        </form>
+
+        <div className="card">
+          <div className="card-head">
+            <h2>วันหยุดในปีนี้</h2>
+            <span className="hint">{holidays.length} วัน</span>
+          </div>
+          {holidays.length === 0 ? (
+            <div className="empty" style={{ padding: "24px 18px" }}>
+              ยังไม่มีวันหยุด — เพิ่มเพื่อให้ OT จัดประเภทเอง
+            </div>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>วันที่</th>
+                  <th>ชื่อ</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {holidays.map((h) => (
+                  <tr key={h.id}>
+                    <td>{h.holiday_date}</td>
+                    <td>{h.name_th}</td>
+                    <td className="num">
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => removeHoliday(h)}
+                        disabled={busy}
+                      >
+                        ลบ
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
 
       <div className="card">
         {records === null ? (

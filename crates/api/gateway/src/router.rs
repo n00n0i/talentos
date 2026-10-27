@@ -88,6 +88,14 @@ pub fn build(state: AppState) -> Router {
             get(attendance::list).post(attendance::upsert),
         )
         .route(
+            "/api/v1/attendance/holidays",
+            get(attendance::list_holidays).post(attendance::upsert_holiday),
+        )
+        .route(
+            "/api/v1/attendance/holidays/:id",
+            axum::routing::delete(attendance::delete_holiday),
+        )
+        .route(
             "/api/v1/attendance/:id",
             axum::routing::delete(attendance::delete),
         )

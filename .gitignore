@@ -35,3 +35,6 @@ docker-compose.override.yml
 # IDE
 .idea/
 .vscode/
+
+# TLS certificates (generate locally, never commit private keys)
+certs/

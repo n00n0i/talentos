@@ -82,6 +82,22 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await expect(page.getByRole("link", { name: "CSV" }).first()).toBeVisible();
 });
 
+test("classifies OT on a company holiday", async ({ page }) => {
+  await login(page);
+  await page.goto("/attendance");
+
+  await page.getByTestId("holiday-date").fill("2026-10-07");
+  await page.getByTestId("holiday-name").fill("ทดสอบวันหยุด");
+  await page.getByTestId("add-holiday").click();
+  await expect(page.getByText("ทดสอบวันหยุด")).toBeVisible();
+
+  await page.getByTestId("attendance-date").fill("2026-10-07");
+  await page.getByTestId("attendance-ot").fill("2");
+  await page.getByTestId("save-attendance").click();
+  await expect(page.getByText("บันทึกเวลาแล้ว")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "วันหยุดนักขัตฤกษ์ (3x)" })).toBeVisible();
+});
+
 test("invites a user from the admin screen", async ({ page }) => {
   await login(page);
   await page.goto("/users");

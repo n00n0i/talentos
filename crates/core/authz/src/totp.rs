@@ -16,7 +16,34 @@ pub fn generate_secret() -> String {
 
 /// Build an `otpauth://` URL for the given account and secret.
 pub fn otpauth_url(account: &str, secret: &str) -> String {
-    format!("otpauth://totp/TalentOS:{account}?secret={secret}&issuer=TalentOS")
+    format!(
+        "otpauth://totp/TalentOS:{}?secret={secret}&issuer=TalentOS",
+        urlencode(account)
+    )
+}
+
+fn urlencode(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 /// Verify a 6-digit TOTP code for `unix_seconds` allowing ±1 step drift.
@@ -24,16 +51,17 @@ pub fn verify(secret_b32: &str, code: &str, unix_seconds: u64) -> bool {
     if code.len() != CODE_DIGITS || !code.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
+    // shortcut: codes are not single-use; one can be replayed inside the ±1
+    // step window. Add a last-used-step column if replay becomes a concern.
     let step = unix_seconds / STEP_SECONDS;
+    let mut matched = false;
     for delta in [0i64, -1, 1] {
         let check_step = step.saturating_add_signed(delta);
         if let Some(expected) = code_at(secret_b32, check_step) {
-            if expected.as_bytes() == code.as_bytes() {
-                return true;
-            }
+            matched |= constant_time_eq(expected.as_bytes(), code.as_bytes());
         }
     }
-    false
+    matched
 }
 
 /// Compute the 6-digit code at a specific counter step.
@@ -126,6 +154,13 @@ mod tests {
     }
 
     #[test]
+    fn otpauth_url_encodes_the_account() {
+        let url = otpauth_url("a+b@example.com", TEST_SECRET_B32);
+        assert!(url.contains("TalentOS:a%2Bb%40example.com?"));
+        assert!(url.contains(&format!("secret={TEST_SECRET_B32}")));
+    }
+
+    #[test]
     fn code_at_round_trips_and_rejects_malformed_secret() {
         let step = 123_456u64;
         let code = code_at(TEST_SECRET_B32, step).unwrap();
@@ -149,6 +184,6 @@ mod tests {
         assert!(url.starts_with("otpauth://totp/"));
         assert!(url.contains(TEST_SECRET_B32));
         assert!(url.contains("issuer=TalentOS"));
-        assert!(url.contains("alice@example.com"));
+        assert!(url.contains("alice%40example.com"));
     }
 }

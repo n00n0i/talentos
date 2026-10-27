@@ -3,7 +3,7 @@
 //! ownership check.
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{connect_info::ConnectInfo, Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
@@ -45,10 +45,13 @@ pub async fn payslips(State(state): State<AppState>, Authed(ctx): Authed) -> Res
     }
 
     let rows = sqlx::query(
-        r#"SELECT p.id, r.period_start, r.period_end, p.gross_earnings, p.net_pay, p.status
+        r#"SELECT p.id, r.period_start, r.period_end, p.gross_earnings, p.net_pay, p.status,
+                  pa.acknowledged_at
              FROM payslips p
              JOIN payroll_runs r ON r.id = p.payroll_run_id
              JOIN employees e ON e.id = p.employee_id
+             LEFT JOIN payslip_acknowledgements pa
+                    ON pa.payslip_id = p.id AND pa.tenant_id = p.tenant_id
             WHERE p.tenant_id = $1 AND e.user_id = $2
             ORDER BY r.period_start DESC
             LIMIT 50"#,
@@ -72,6 +75,7 @@ pub async fn payslips(State(state): State<AppState>, Authed(ctx): Authed) -> Res
                         "gross": row.get::<rust_decimal::Decimal, _>("gross_earnings").to_string(),
                         "net": row.get::<rust_decimal::Decimal, _>("net_pay").to_string(),
                         "status": row.get::<String, _>("status"),
+                        "acknowledged_at": row.get::<Option<chrono::DateTime<chrono::Utc>>, _>("acknowledged_at").map(|t| t.to_rfc3339()),
                     })
                 })
                 .collect();
@@ -82,6 +86,85 @@ pub async fn payslips(State(state): State<AppState>, Authed(ctx): Authed) -> Res
                 .into_response()
         }
         Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+/// POST /api/v1/me/payslips/:id/acknowledge — idempotent receipt confirmation.
+pub async fn acknowledge(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payslip", "view_self") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+
+    let owned: Option<Uuid> = match sqlx::query_scalar(
+        r#"SELECT p.id FROM payslips p
+             JOIN employees e ON e.id = p.employee_id
+            WHERE p.id = $1 AND p.tenant_id = $2 AND e.user_id = $3"#,
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0)
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(found) => found,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    };
+
+    if owned.is_none() {
+        let _ = tx.rollback().await;
+        return not_found();
+    }
+
+    if let Err(e) = sqlx::query(
+        "INSERT INTO payslip_acknowledgements (payslip_id, tenant_id, user_id, ip_address)
+         VALUES ($1, $2, $3, $4) ON CONFLICT (payslip_id) DO NOTHING",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0)
+    .bind(sqlx::types::ipnetwork::IpNetwork::from(addr.ip()))
+    .execute(&mut *tx)
+    .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
+
+    let acknowledged_at: Option<chrono::DateTime<chrono::Utc>> = match sqlx::query_scalar(
+        "SELECT acknowledged_at FROM payslip_acknowledgements WHERE payslip_id = $1 AND tenant_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(ts) => ts,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    };
+
+    let _ = tx.commit().await;
+    match acknowledged_at {
+        Some(ts) => (
+            StatusCode::OK,
+            Json(json!({ "acknowledged_at": ts.to_rfc3339() })),
+        )
+            .into_response(),
+        None => internal_err("acknowledgement not found after insert"),
     }
 }
 

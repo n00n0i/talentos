@@ -199,6 +199,11 @@ test("links an employee account and shows self-service payslips", async ({ page 
 
   await expect(page.getByRole("heading", { name: "สลิปของฉัน" })).toBeVisible();
   await expect(page.getByRole("link", { name: "PDF" }).first()).toBeVisible();
+
+  await page.getByTestId("acknowledge-payslip").first().click();
+  await expect(page.getByTestId("payslip-ack-status").first()).toContainText("ยืนยันแล้ว");
+  await page.reload();
+  await expect(page.getByTestId("payslip-ack-status").first()).toContainText("ยืนยันแล้ว");
 });
 
 test("employee punches in and out from the clock page", async ({ page, context }) => {

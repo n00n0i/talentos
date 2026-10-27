@@ -509,9 +509,35 @@ pub async fn list_payslips(
     .await
     .unwrap_or_default();
 
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let mut acks: std::collections::HashMap<Uuid, chrono::DateTime<chrono::Utc>> =
+        std::collections::HashMap::new();
+    if !ids.is_empty() {
+        if let Ok(ack_rows) = sqlx::query(
+            "SELECT payslip_id, acknowledged_at FROM payslip_acknowledgements \
+             WHERE tenant_id = $1 AND payslip_id = ANY($2)",
+        )
+        .bind(ctx.tenant_id.0)
+        .bind(&ids)
+        .fetch_all(&mut *tx)
+        .await
+        {
+            use sqlx::Row;
+            for row in ack_rows {
+                if let (Ok(id), Ok(ts)) = (
+                    row.try_get::<Uuid, _>("payslip_id"),
+                    row.try_get::<chrono::DateTime<chrono::Utc>, _>("acknowledged_at"),
+                ) {
+                    acks.insert(id, ts);
+                }
+            }
+        }
+    }
+
     let payslips = rows
         .into_iter()
         .map(|r| PayslipSummary {
+            acknowledged_at: acks.get(&r.id).map(|t| t.to_rfc3339()),
             payslip_id: r.id.to_string(),
             employee_id: r.employee_id.to_string(),
             employee_code: r.employee_code,
@@ -751,6 +777,7 @@ pub struct PayslipSummary {
     pub pf_employee: String,
     pub status: String,
     pub anomalies: serde_json::Value,
+    pub acknowledged_at: Option<String>,
 }
 
 fn conflict(message: &str) -> Response {

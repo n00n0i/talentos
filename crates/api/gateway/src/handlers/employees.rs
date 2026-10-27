@@ -920,11 +920,19 @@ fn parse_import_row(row: &ImportEmployeeRow) -> Result<ParsedImportRow, Vec<Stri
         .filter(|v| !v.is_empty())
     {
         Some(v) => match Decimal::from_str(v) {
-            Ok(d) if d >= Decimal::ZERO => Some(d),
-            Ok(_) => {
+            Ok(d) if d < Decimal::ZERO => {
                 errors.push("base_salary must be >= 0".into());
                 None
             }
+            Ok(d) if d > Decimal::new(999_999_999_999_i64, 2) => {
+                errors.push("base_salary exceeds the maximum".into());
+                None
+            }
+            Ok(d) if d.round_dp(2) != d => {
+                errors.push("base_salary must have at most 2 decimal places".into());
+                None
+            }
+            Ok(d) => Some(d),
             Err(_) => {
                 errors.push("base_salary must be a number".into());
                 None
@@ -1056,8 +1064,15 @@ fn validate_import_rows(
         rows.iter().map(parse_import_row).collect();
 
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    for row in parsed.iter().flatten() {
-        *counts.entry(row.employee_code.clone()).or_insert(0) += 1;
+    for raw in rows {
+        if let Some(code) = raw
+            .employee_code
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            *counts.entry(code.to_string()).or_insert(0) += 1;
+        }
     }
 
     let results = rows
@@ -1069,12 +1084,14 @@ fn validate_import_rows(
                 Err(e) => e.clone(),
                 Ok(_) => Vec::new(),
             };
-            if let Ok(row) = parsed {
-                if counts.get(&row.employee_code).copied().unwrap_or(0) > 1 {
-                    errors.push(format!(
-                        "employee_code {} is duplicated in file",
-                        row.employee_code
-                    ));
+            if let Some(code) = raw
+                .employee_code
+                .as_deref()
+                .map(str::trim)
+                .filter(|v| !v.is_empty())
+            {
+                if counts.get(code).copied().unwrap_or(0) > 1 {
+                    errors.push(format!("employee_code {code} is duplicated in file"));
                 }
             }
             let status = if errors.is_empty() {
@@ -1357,6 +1374,91 @@ mod tests {
         ];
         let (results, _) = validate_import_rows(&rows);
         assert!(results.iter().all(|r| r.status == "valid"));
+    }
+
+    #[test]
+    fn import_rejects_salary_over_maximum() {
+        let rows = vec![row("E013", "10000000000", "2024-01-01", None)];
+        let (results, _) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("base_salary exceeds the maximum")));
+    }
+
+    #[test]
+    fn import_rejects_salary_with_more_than_2_decimals() {
+        let rows = vec![row("E014", "100.999", "2024-01-01", None)];
+        let (results, _) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("base_salary must have at most 2 decimal places")));
+    }
+
+    #[test]
+    fn import_accepts_salary_with_2_decimals() {
+        let rows = vec![row("E015", "100.50", "2024-01-01", None)];
+        let (results, parsed) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "valid");
+        assert_eq!(
+            parsed[0].as_ref().unwrap().base_salary,
+            Decimal::from_str("100.50").unwrap()
+        );
+    }
+
+    #[test]
+    fn import_accepts_max_salary() {
+        let rows = vec![row("E016", "9999999999.99", "2024-01-01", None)];
+        let (results, parsed) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "valid");
+        assert_eq!(
+            parsed[0].as_ref().unwrap().base_salary,
+            Decimal::from_str("9999999999.99").unwrap()
+        );
+    }
+
+    #[test]
+    fn import_detects_duplicates_even_when_other_fields_invalid() {
+        let rows = vec![
+            row("E017", "abc", "2024-01-01", None),
+            row("E017", "1", "2024-01-01", None),
+        ];
+        let (results, _) = validate_import_rows(&rows);
+        assert_eq!(results[0].status, "invalid");
+        assert_eq!(results[1].status, "invalid");
+        assert!(results[0]
+            .errors
+            .iter()
+            .any(|e| e.contains("duplicated") || e.contains("base_salary")));
+        assert!(results[1].errors.iter().any(|e| e.contains("duplicated")));
+    }
+
+    #[test]
+    fn report_from_rows_commit_with_invalid_yields_zero_created() {
+        let rows = vec![
+            ImportRowResult {
+                row: 1,
+                employee_code: "A".into(),
+                status: "valid".into(),
+                errors: vec![],
+            },
+            ImportRowResult {
+                row: 2,
+                employee_code: "B".into(),
+                status: "invalid".into(),
+                errors: vec!["bad".into()],
+            },
+        ];
+        let report = report_from_rows(false, rows);
+        assert_eq!(report.total, 2);
+        assert_eq!(report.valid, 1);
+        assert!(report.valid < report.total);
+        assert_eq!(report.invalid, 1);
+        assert_eq!(report.created, 0);
+        assert!(!report.dry_run);
     }
 
     #[test]

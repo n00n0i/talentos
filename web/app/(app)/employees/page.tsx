@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, thb } from "@/lib/api";
 
 type Employee = {
@@ -94,6 +94,11 @@ function parseCsv(text: string): string[][] {
   let row: string[] = [];
   let cell = "";
   let quoted = false;
+  let closed = false;
+  let quoteRec = 0;
+  const where = (rec: number) => (rec === 0 ? "แถวหัวตาราง" : `แถว ${rec}`);
+  const bad = (rec: number) =>
+    new Error(`ไฟล์ CSV ไม่ถูกต้อง: เครื่องหมายอัญประกาศผิดรูปแบบที่${where(rec)}`);
   const src = text.replace(/^\uFEFF/, "");
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
@@ -101,25 +106,65 @@ function parseCsv(text: string): string[][] {
       if (c === '"' && src[i + 1] === '"') {
         cell += '"';
         i++;
-      } else if (c === '"') quoted = false;
-      else cell += c;
-    } else if (c === '"') quoted = true;
-    else if (c === ",") {
+      } else if (c === '"') {
+        quoted = false;
+        closed = true;
+      } else cell += c;
+    } else if (c === '"') {
+      if (closed || cell.trim() !== "") throw bad(out.length);
+      quoted = true;
+      quoteRec = out.length;
+      cell = "";
+    } else if (c === ",") {
       row.push(cell);
       cell = "";
+      closed = false;
     } else if (c === "\n" || c === "\r") {
       if (c === "\r" && src[i + 1] === "\n") i++;
       row.push(cell);
       cell = "";
+      closed = false;
       out.push(row);
       row = [];
-    } else cell += c;
+    } else if (closed && c !== " " && c !== "\t") throw bad(out.length);
+    else if (!closed) cell += c;
   }
-  if (cell !== "" || row.length) {
+  if (quoted) throw bad(quoteRec);
+  if (cell !== "" || row.length || closed) {
     row.push(cell);
     out.push(row);
   }
   return out.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+const IMPORT_ERRORS: [RegExp, (m: RegExpMatchArray) => string][] = [
+  [/^first_name_th and last_name_th are required$/, () => "first_name_th และ last_name_th จำเป็นต้องระบุ"],
+  [/^(\w+) is required$/, (m) => `${m[1]} จำเป็นต้องระบุ`],
+  [/^(\w+) must be a number$/, (m) => `${m[1]} ต้องเป็นตัวเลข`],
+  [/^(\w+) must be >= 0$/, (m) => `${m[1]} ต้องไม่ติดลบ`],
+  [/^(\w+) must be YYYY-MM-DD$/, (m) => `${m[1]} ต้องอยู่ในรูปแบบ YYYY-MM-DD`],
+  [/^(\w+) must be 1\.\.=5$/, (m) => `${m[1]} ต้องอยู่ระหว่าง 1 ถึง 5`],
+  [
+    /^(\w+) must be true\/false, 1\/0, or yes\/no \(got (.*)\)$/,
+    (m) => `${m[1]} ต้องเป็น true/false, 1/0 หรือ yes/no (ได้รับ "${m[2]}")`,
+  ],
+  [/^(\w+) must have at most 2 decimal places$/, (m) => `${m[1]} ต้องมีทศนิยมไม่เกิน 2 ตำแหน่ง`],
+  [/^(\w+) exceeds the maximum$/, (m) => `${m[1]} เกินค่าสูงสุดที่อนุญาต`],
+  [/^employee_code (.*) is duplicated in file$/, (m) => `employee_code ${m[1]} ซ้ำกันในไฟล์`],
+  [/^employee_code (.*) already exists$/, (m) => `employee_code ${m[1]} มีอยู่แล้วในระบบ`],
+  [/^entity not in tenant$/, () => "entity_id ไม่อยู่ในองค์กรนี้"],
+  [
+    /^entity_id is required when the token spans multiple entities$/,
+    () => "entity_id จำเป็นต้องระบุเมื่อบัญชีดูแลหลายหน่วยงาน",
+  ],
+];
+
+function thImportError(message: string): string {
+  for (const [re, f] of IMPORT_ERRORS) {
+    const m = message.match(re);
+    if (m) return f(m);
+  }
+  return message;
 }
 
 function csvToImportRows(text: string): ImportRow[] {
@@ -130,7 +175,9 @@ function csvToImportRows(text: string): ImportRow[] {
   if (missing.length) throw new Error(`ไม่พบคอลัมน์ที่จำเป็น: ${missing.join(", ")}`);
   if (body.length === 0) throw new Error("ไม่มีข้อมูลพนักงานในไฟล์");
   if (body.length > IMPORT_MAX_ROWS) throw new Error(`นำเข้าได้ไม่เกิน ${IMPORT_MAX_ROWS} แถวต่อไฟล์`);
-  return body.map((cells) => {
+  return body.map((cells, i) => {
+    if (cells.length !== cols.length)
+      throw new Error(`แถว ${i + 1}: จำนวนคอลัมน์ (${cells.length}) ไม่ตรงกับหัวตาราง (${cols.length})`);
     const r: ImportRow = {};
     for (const key of [...IMPORT_REQUIRED, ...IMPORT_OPTIONAL]) {
       const idx = cols.indexOf(key);
@@ -155,6 +202,7 @@ export default function EmployeesPage() {
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importKey, setImportKey] = useState(0);
+  const importGen = useRef(0);
 
   const load = useCallback(async (all: boolean) => {
     const r = await gw<{ employees: Employee[] }>(
@@ -237,6 +285,7 @@ export default function EmployeesPage() {
 
   async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    const gen = ++importGen.current;
     setImportResult(null);
     setImportRows([]);
     setError("");
@@ -246,13 +295,15 @@ export default function EmployeesPage() {
       return;
     }
     try {
-      setImportRows(csvToImportRows(await file.text()));
+      const parsed = csvToImportRows(await file.text());
+      if (gen === importGen.current) setImportRows(parsed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "อ่านไฟล์ไม่สำเร็จ");
+      if (gen === importGen.current) setError(err instanceof Error ? err.message : "อ่านไฟล์ไม่สำเร็จ");
     }
   }
 
   async function runImport(dryRun: boolean) {
+    const gen = importGen.current;
     setBusy(true);
     setError("");
     setNotice("");
@@ -261,6 +312,7 @@ export default function EmployeesPage() {
         method: "POST",
         body: JSON.stringify({ dry_run: dryRun, rows: importRows }),
       });
+      if (gen !== importGen.current) return;
       if (dryRun) {
         setImportResult(r);
       } else if (r.invalid > 0 || r.created !== r.valid) {
@@ -274,7 +326,7 @@ export default function EmployeesPage() {
         await load(showTerminated);
       }
     } catch (err) {
-      handleApiError(err, setError);
+      if (gen === importGen.current) handleApiError(err, setError);
     } finally {
       setBusy(false);
     }
@@ -469,7 +521,16 @@ export default function EmployeesPage() {
           คอลัมน์ที่จำเป็น: {IMPORT_REQUIRED.join(", ")} · ไม่บังคับ: {IMPORT_OPTIONAL.join(", ")} (ไฟล์ไม่เกิน 2 MB
           และ {IMPORT_MAX_ROWS} แถว)
         </p>
-        <input key={importKey} type="file" accept=".csv" data-testid="import-csv" onChange={onImportFile} />
+        <label htmlFor="import-csv">เลือกไฟล์ CSV พนักงาน</label>
+        <input
+          key={importKey}
+          id="import-csv"
+          type="file"
+          accept=".csv"
+          data-testid="import-csv"
+          onChange={onImportFile}
+          disabled={busy}
+        />
         {importRows.length > 0 && (
           <>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -520,7 +581,7 @@ export default function EmployeesPage() {
                           (res.status === "valid" ? (
                             <span className="badge success">ถูกต้อง</span>
                           ) : (
-                            <span className="error">{res.errors.join(" · ")}</span>
+                            <span className="error">{res.errors.map(thImportError).join(" · ")}</span>
                           ))}
                       </td>
                     </tr>

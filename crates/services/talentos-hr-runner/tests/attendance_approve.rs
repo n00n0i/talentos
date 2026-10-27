@@ -203,9 +203,16 @@ async fn pending_day_is_not_paid() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -228,12 +235,24 @@ async fn pending_day_is_not_paid() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    punch_at(&pool, TenantId(tenant_id), user_id, input_in, utc(2026, 10, 27, 9, 0))
-        .await
-        .expect("punch in");
-    punch_at(&pool, TenantId(tenant_id), user_id, input_out, utc(2026, 10, 27, 18, 0))
-        .await
-        .expect("punch out");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_in,
+        utc(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("punch in");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_out,
+        utc(2026, 10, 27, 18, 0),
+    )
+    .await
+    .expect("punch out");
 
     assert_eq!(
         day_status(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await,
@@ -261,9 +280,16 @@ async fn approve_writes_payroll_row_with_hours_and_ot_kind() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -286,12 +312,24 @@ async fn approve_writes_payroll_row_with_hours_and_ot_kind() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    punch_at(&pool, TenantId(tenant_id), user_id, input_in, utc(2026, 10, 27, 9, 0))
-        .await
-        .expect("punch in");
-    punch_at(&pool, TenantId(tenant_id), user_id, input_out, utc(2026, 10, 27, 18, 0))
-        .await
-        .expect("punch out");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_in,
+        utc(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("punch in");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_out,
+        utc(2026, 10, 27, 18, 0),
+    )
+    .await
+    .expect("punch out");
 
     let work_date = bkk_date(2026, 10, 27);
     let day_id = day_id_of(&raw, tenant_id, employee_id, work_date)
@@ -336,9 +374,16 @@ async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapp
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -361,12 +406,24 @@ async fn correction_resets_approved_day_and_payroll_row_is_unchanged_until_reapp
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    punch_at(&pool, TenantId(tenant_id), user_id, input_in, utc(2026, 10, 27, 9, 0))
-        .await
-        .expect("punch in");
-    punch_at(&pool, TenantId(tenant_id), user_id, input_out, utc(2026, 10, 27, 18, 0))
-        .await
-        .expect("punch out");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_in,
+        utc(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("punch in");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_out,
+        utc(2026, 10, 27, 18, 0),
+    )
+    .await
+    .expect("punch out");
 
     let work_date = bkk_date(2026, 10, 27);
     let day_id = day_id_of(&raw, tenant_id, employee_id, work_date)
@@ -434,9 +491,16 @@ async fn tenant_b_cannot_approve_tenant_a_day() {
     let (tenant_a, entity_a, employee_a) = seed_tenant_employee(&raw).await;
     let user_a = user_id_of(&raw, tenant_a, employee_a).await;
 
-    set_geofence(&pool, TenantId(tenant_a), entity_a, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_a),
+        entity_a,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_a,
@@ -453,9 +517,15 @@ async fn tenant_b_cannot_approve_tenant_a_day() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    punch_at(&pool, TenantId(tenant_a), user_a, input, utc(2026, 10, 27, 9, 0))
-        .await
-        .expect("punch");
+    punch_at(
+        &pool,
+        TenantId(tenant_a),
+        user_a,
+        input,
+        utc(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("punch");
 
     let day_id = day_id_of(&raw, tenant_a, employee_a, bkk_date(2026, 10, 27))
         .await
@@ -486,9 +556,16 @@ async fn list_days_filters_by_date_range_employee_and_status() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -505,9 +582,15 @@ async fn list_days_filters_by_date_range_employee_and_status() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 9, 0))
-        .await
-        .expect("punch");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("punch");
 
     let all = list_days(
         &pool,

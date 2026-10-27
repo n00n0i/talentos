@@ -278,7 +278,8 @@ pub async fn punch(
         accuracy_m: body.accuracy_m,
     };
 
-    match talentos_hr_runner::attendance::punch(&state.pool, ctx.tenant_id, ctx.user_id.0, input).await
+    match talentos_hr_runner::attendance::punch(&state.pool, ctx.tenant_id, ctx.user_id.0, input)
+        .await
     {
         Ok(day) => (
             StatusCode::OK,

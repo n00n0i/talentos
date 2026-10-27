@@ -147,9 +147,16 @@ async fn punch_inside_geofence_is_accepted() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -166,9 +173,15 @@ async fn punch_inside_geofence_is_accepted() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    let day = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 2, 0))
-        .await
-        .expect("inside punch should succeed");
+    let day = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await
+    .expect("inside punch should succeed");
     assert_eq!(day.work_date, bkk_date(2026, 10, 27));
 
     cleanup(&raw, tenant_id).await;
@@ -186,9 +199,16 @@ async fn punch_outside_geofence_is_rejected() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -205,7 +225,14 @@ async fn punch_outside_geofence_is_rejected() {
         lng: OFFICE_LNG + 0.01,
         accuracy_m: Some(10.0),
     };
-    let result = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 2, 0)).await;
+    let result = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await;
     assert!(
         matches!(result, Err(AttendanceError::OutsideGeofence { .. })),
         "expected OutsideGeofence, got {result:?}"
@@ -227,9 +254,16 @@ async fn punch_within_accuracy_tolerance_is_accepted() {
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
     // radius 100, accuracy 40, distance 130 -> allowed = 140.
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -249,7 +283,14 @@ async fn punch_within_accuracy_tolerance_is_accepted() {
         lng: OFFICE_LNG,
         accuracy_m: Some(40.0),
     };
-    let result = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 2, 0)).await;
+    let result = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await;
     assert!(result.is_ok(), "expected acceptance, got {result:?}");
 
     cleanup(&raw, tenant_id).await;
@@ -284,7 +325,14 @@ async fn punch_without_geofence_is_rejected() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    let result = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 2, 0)).await;
+    let result = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await;
     assert!(
         matches!(result, Err(AttendanceError::NoGeofence)),
         "expected NoGeofence, got {result:?}"
@@ -304,9 +352,16 @@ async fn unlinked_user_is_rejected() {
     let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -324,8 +379,14 @@ async fn unlinked_user_is_rejected() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    let result = punch_at(&pool, TenantId(tenant_id), unlinked_user, input, utc(2026, 10, 27, 2, 0))
-        .await;
+    let result = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        unlinked_user,
+        input,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await;
     assert!(
         matches!(result, Err(AttendanceError::EmployeeNotLinked)),
         "expected EmployeeNotLinked, got {result:?}"
@@ -346,9 +407,16 @@ async fn overnight_punch_lands_on_previous_work_date() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -366,9 +434,15 @@ async fn overnight_punch_lands_on_previous_work_date() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    let day = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 18, 0))
-        .await
-        .expect("overnight punch should succeed");
+    let day = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 18, 0),
+    )
+    .await
+    .expect("overnight punch should succeed");
     assert_eq!(day.work_date, bkk_date(2026, 10, 27));
 
     cleanup(&raw, tenant_id).await;
@@ -386,9 +460,16 @@ async fn holiday_punch_marks_day_holiday() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -406,9 +487,15 @@ async fn holiday_punch_marks_day_holiday() {
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
-    let day = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 2, 0))
-        .await
-        .expect("holiday punch should succeed");
+    let day = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await
+    .expect("holiday punch should succeed");
     assert_eq!(day.work_date, bkk_date(2026, 10, 27));
     assert_eq!(day.ot_kind, "holiday");
 
@@ -427,9 +514,16 @@ async fn two_punches_same_second_stay_consistent() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -485,9 +579,16 @@ async fn negative_accuracy_is_rejected() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -504,7 +605,14 @@ async fn negative_accuracy_is_rejected() {
         lng: OFFICE_LNG,
         accuracy_m: Some(-10.0),
     };
-    let result = punch_at(&pool, TenantId(tenant_id), user_id, input, utc(2026, 10, 27, 2, 0)).await;
+    let result = punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await;
     assert!(
         matches!(result, Err(AttendanceError::InvalidImport)),
         "expected InvalidImport for negative accuracy, got {result:?}"
@@ -525,9 +633,16 @@ async fn new_punch_resets_approved_day_to_pending() {
     let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
 
-    set_geofence(&pool, TenantId(tenant_id), entity_id, OFFICE_LAT, OFFICE_LNG, 100)
-        .await
-        .expect("set geofence");
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
     seed_shift(
         &pool,
         tenant_id,
@@ -551,12 +666,24 @@ async fn new_punch_resets_approved_day_to_pending() {
         accuracy_m: Some(10.0),
     };
 
-    punch_at(&pool, TenantId(tenant_id), user_id, input_in, utc(2026, 10, 27, 2, 0))
-        .await
-        .expect("first punch");
-    punch_at(&pool, TenantId(tenant_id), user_id, input_out, utc(2026, 10, 27, 11, 0))
-        .await
-        .expect("second punch");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_in,
+        utc(2026, 10, 27, 2, 0),
+    )
+    .await
+    .expect("first punch");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_out,
+        utc(2026, 10, 27, 11, 0),
+    )
+    .await
+    .expect("second punch");
 
     approve_day(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await;
     assert_eq!(
@@ -565,9 +692,15 @@ async fn new_punch_resets_approved_day_to_pending() {
     );
 
     // A new punch after approval resets the day to pending.
-    punch_at(&pool, TenantId(tenant_id), user_id, input_out, utc(2026, 10, 27, 11, 1))
-        .await
-        .expect("post-approval punch");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input_out,
+        utc(2026, 10, 27, 11, 1),
+    )
+    .await
+    .expect("post-approval punch");
     assert_eq!(
         day_status(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await,
         Some("pending".into())

@@ -10,6 +10,13 @@ type PayrollSettings = {
   ot_weekend_rate: Num;
   ot_holiday_rate: Num;
   leave_approval_chain: string[];
+  gl_salary_account: string;
+  gl_net_account: string;
+  gl_tax_account: string;
+  gl_sso_account: string;
+  gl_pf_account: string;
+  gl_loan_account: string;
+  gl_claim_account: string;
 };
 type Tenant = { id: string; name: string; slug: string };
 type Entity = { id: string; name: string; tax_id: string | null; is_active: boolean };
@@ -40,6 +47,13 @@ const DEFAULTS: PayrollSettings = {
   ot_weekend_rate: "2.00",
   ot_holiday_rate: "3.00",
   leave_approval_chain: ["hr_admin"],
+  gl_salary_account: "5100",
+  gl_net_account: "2100",
+  gl_tax_account: "2200",
+  gl_sso_account: "2210",
+  gl_pf_account: "2220",
+  gl_loan_account: "2230",
+  gl_claim_account: "5200",
 };
 
 export default function SettingsPage() {
@@ -116,6 +130,13 @@ export default function SettingsPage() {
           ot_weekend_rate: Number(policy.ot_weekend_rate),
           ot_holiday_rate: Number(policy.ot_holiday_rate),
           leave_approval_chain: policy.leave_approval_chain,
+          gl_salary_account: policy.gl_salary_account,
+          gl_net_account: policy.gl_net_account,
+          gl_tax_account: policy.gl_tax_account,
+          gl_sso_account: policy.gl_sso_account,
+          gl_pf_account: policy.gl_pf_account,
+          gl_loan_account: policy.gl_loan_account,
+          gl_claim_account: policy.gl_claim_account,
         }),
       });
       setNotice("บันทึกสูตรเงินเดือนแล้ว — มีผลกับรอบถัดไป");
@@ -350,6 +371,70 @@ export default function SettingsPage() {
               <option value="hr_admin">HR อนุมัติขั้นเดียว</option>
               <option value="manager,hr_admin">หัวหน้างาน → HR</option>
             </select>
+          </div>
+          <div>
+            <h3>รหัสบัญชี GL</h3>
+            <p className="hint" style={{ marginTop: 4 }}>
+              รหัสบัญชีสำหรับไฟล์ GL (ไม่เกิน 20 ตัวอักษร ตัวเลข/ตัวอักษร)
+            </p>
+          </div>
+          <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <label>ค่าแรง (เดบิต)</label>
+              <input
+                data-testid="gl-salary"
+                value={policy.gl_salary_account}
+                onChange={(e) => setPolicyValue("gl_salary_account", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>เงินเดือนค้างจ่าย (เครดิต)</label>
+              <input
+                data-testid="gl-net"
+                value={policy.gl_net_account}
+                onChange={(e) => setPolicyValue("gl_net_account", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>ภาษีหัก ณ ที่จ่าย</label>
+              <input
+                data-testid="gl-tax"
+                value={policy.gl_tax_account}
+                onChange={(e) => setPolicyValue("gl_tax_account", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>ประกันสังคม</label>
+              <input
+                data-testid="gl-sso"
+                value={policy.gl_sso_account}
+                onChange={(e) => setPolicyValue("gl_sso_account", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>กองทุนสำรองเลี้ยงชีพ</label>
+              <input
+                data-testid="gl-pf"
+                value={policy.gl_pf_account}
+                onChange={(e) => setPolicyValue("gl_pf_account", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>เงินให้กู้พนักงาน</label>
+              <input
+                data-testid="gl-loan"
+                value={policy.gl_loan_account}
+                onChange={(e) => setPolicyValue("gl_loan_account", e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label>ค่าใช้จ่ายพนักงาน</label>
+              <input
+                data-testid="gl-claim"
+                value={policy.gl_claim_account}
+                onChange={(e) => setPolicyValue("gl_claim_account", e.target.value)}
+              />
+            </div>
           </div>
           <div>
             <button className="btn btn-primary" data-testid="save-policy" type="submit" disabled={busy}>

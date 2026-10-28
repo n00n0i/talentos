@@ -905,6 +905,77 @@ async fn pf_remittance_csv_rejects_draft_run() -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
+#[tokio::test]
+async fn gl_export_uses_custom_account_codes() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    sqlx::query(
+        "INSERT INTO tenant_payroll_settings \
+           (tenant_id, unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate, ot_holiday_rate, \
+            gl_salary_account, gl_net_account, gl_tax_account, gl_sso_account, gl_pf_account, \
+            gl_loan_account, gl_claim_account) \
+         VALUES ($1, 30, 1.50, 2.00, 3.00, '6100','2100','2200','2210','2220','2230','6101')",
+    )
+    .bind(seed.tenant_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    let run_id = seed_approved_payroll_run(&pool, &seed).await?;
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    let (_, body) = export_gl_csv(&mut *tx, run_id).await?;
+    tx.rollback().await?;
+
+    assert!(body.contains("\"6100\""), "custom salary account code");
+    assert!(body.contains("\"6101\""), "custom claim account code");
+    assert!(body.contains("ค่าแรง"), "Thai account name is preserved");
+    assert!(
+        !body.contains("\"5100\""),
+        "default salary code is replaced"
+    );
+
+    cleanup_tenant(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn gl_export_groups_by_cost_center_with_department_fallback(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    // IT employee gets a cost center; Sales employee stays NULL → department fallback.
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    sqlx::query("UPDATE employees SET cost_center = $1 WHERE id = $2")
+        .bind("CC-100")
+        .bind(seed.emp_active_it)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+
+    let run_id = seed_approved_payroll_run(&pool, &seed).await?;
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    let (_, body) = export_gl_csv(&mut *tx, run_id).await?;
+    tx.rollback().await?;
+
+    assert!(body.contains("CC-100"), "grouped by cost center");
+    assert!(body.contains("Sales"), "falls back to department");
+    assert!(!body.contains("ไอที"), "department replaced by cost center");
+
+    cleanup_tenant(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
 fn strip_csv_quotes(value: &str) -> &str {
     value
         .strip_prefix('"')

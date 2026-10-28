@@ -14,10 +14,51 @@ pub struct PayrollSettings {
     pub ot_holiday_rate: Decimal,
     #[serde(default = "default_leave_approval_chain")]
     pub leave_approval_chain: Vec<String>,
+    #[serde(default = "default_gl_salary_account")]
+    pub gl_salary_account: String,
+    #[serde(default = "default_gl_net_account")]
+    pub gl_net_account: String,
+    #[serde(default = "default_gl_tax_account")]
+    pub gl_tax_account: String,
+    #[serde(default = "default_gl_sso_account")]
+    pub gl_sso_account: String,
+    #[serde(default = "default_gl_pf_account")]
+    pub gl_pf_account: String,
+    #[serde(default = "default_gl_loan_account")]
+    pub gl_loan_account: String,
+    #[serde(default = "default_gl_claim_account")]
+    pub gl_claim_account: String,
 }
 
 fn default_leave_approval_chain() -> Vec<String> {
     vec!["hr_admin".to_string()]
+}
+
+fn default_gl_salary_account() -> String {
+    "5100".into()
+}
+fn default_gl_net_account() -> String {
+    "2100".into()
+}
+fn default_gl_tax_account() -> String {
+    "2200".into()
+}
+fn default_gl_sso_account() -> String {
+    "2210".into()
+}
+fn default_gl_pf_account() -> String {
+    "2220".into()
+}
+fn default_gl_loan_account() -> String {
+    "2230".into()
+}
+fn default_gl_claim_account() -> String {
+    "5200".into()
+}
+
+/// A GL account code is non-empty, at most 20 chars, and alphanumeric.
+fn is_gl_account(code: &str) -> bool {
+    !code.is_empty() && code.len() <= 20 && code.chars().all(|c| c.is_ascii_alphanumeric())
 }
 
 impl Default for PayrollSettings {
@@ -34,6 +75,13 @@ impl PayrollSettings {
             ot_weekend_rate: dec!(2.00),
             ot_holiday_rate: dec!(3.00),
             leave_approval_chain: default_leave_approval_chain(),
+            gl_salary_account: default_gl_salary_account(),
+            gl_net_account: default_gl_net_account(),
+            gl_tax_account: default_gl_tax_account(),
+            gl_sso_account: default_gl_sso_account(),
+            gl_pf_account: default_gl_pf_account(),
+            gl_loan_account: default_gl_loan_account(),
+            gl_claim_account: default_gl_claim_account(),
         }
     }
 
@@ -45,6 +93,21 @@ impl PayrollSettings {
             && (one..=five).contains(&self.ot_weekend_rate)
             && (one..=five).contains(&self.ot_holiday_rate)
             && self.leave_approval_chain_is_valid()
+            && self.gl_accounts_are_valid()
+    }
+
+    pub fn gl_accounts_are_valid(&self) -> bool {
+        [
+            &self.gl_salary_account,
+            &self.gl_net_account,
+            &self.gl_tax_account,
+            &self.gl_sso_account,
+            &self.gl_pf_account,
+            &self.gl_loan_account,
+            &self.gl_claim_account,
+        ]
+        .iter()
+        .all(|code| is_gl_account(code))
     }
 
     pub fn leave_approval_chain_is_valid(&self) -> bool {
@@ -100,5 +163,18 @@ mod tests {
         assert!(!s.is_valid());
         s.leave_approval_chain = vec!["manager".into(), "hr_admin".into()];
         assert!(s.is_valid());
+    }
+
+    #[test]
+    fn rejects_bad_gl_accounts() {
+        let mut s = PayrollSettings::standard();
+        s.gl_salary_account = String::new();
+        assert!(!s.is_valid());
+        s.gl_salary_account = "x".repeat(21);
+        assert!(!s.is_valid());
+        s.gl_salary_account = "5100 1".into();
+        assert!(!s.is_valid());
+        s.gl_salary_account = "5100A".into();
+        assert!(s.is_valid(), "alphanumeric codes are accepted");
     }
 }

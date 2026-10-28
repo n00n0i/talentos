@@ -36,6 +36,7 @@ pub struct EmployeeBody {
     pub last_name_en: Option<String>,
     pub position_title: String,
     pub department: Option<String>,
+    pub cost_center: Option<String>,
     pub base_salary: Decimal,
     pub hire_date: NaiveDate,
     pub entity_id: Option<Uuid>,
@@ -121,6 +122,7 @@ pub struct EmployeeDto {
     pub last_name_en: Option<String>,
     pub position_title: String,
     pub department: Option<String>,
+    pub cost_center: Option<String>,
     pub base_salary: String,
     pub hire_date: String,
     pub termination_date: Option<String>,
@@ -154,7 +156,7 @@ pub async fn list(
     };
     let rows = sqlx::query(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
-                  first_name_en, last_name_en, position_title, department,
+                  first_name_en, last_name_en, position_title, department, cost_center,
                   base_salary, hire_date, termination_date, status, pf_member,
                   sso_enrolled, bank_name, bank_account_number, national_id, sso_number, user_id
              FROM employees
@@ -241,10 +243,10 @@ pub async fn create(
     let insert = sqlx::query(
         r#"INSERT INTO employees
              (id, tenant_id, entity_id, employee_code, first_name_th, last_name_th,
-              first_name_en, last_name_en, position_title, department, base_salary,
-              hire_date, tax_filing_status, pf_member, sso_enrolled,
+              first_name_en, last_name_en, position_title, department, cost_center,
+              base_salary, hire_date, tax_filing_status, pf_member, sso_enrolled,
               bank_name, bank_account_number, national_id, sso_number, user_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)"#,
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)"#,
     )
     .bind(id)
     .bind(ctx.tenant_id.0)
@@ -256,6 +258,7 @@ pub async fn create(
     .bind(body.last_name_en.as_deref())
     .bind(body.position_title.trim())
     .bind(body.department.as_deref())
+    .bind(body.cost_center.as_deref())
     .bind(body.base_salary)
     .bind(body.hire_date)
     .bind(body.tax_filing_status.unwrap_or(1))
@@ -509,6 +512,7 @@ pub async fn update(
              national_id = COALESCE($17, national_id),
              sso_number = COALESCE($18, sso_number),
              user_id = $19,
+             cost_center = $20,
              updated_at = now()
            WHERE id = $1 AND tenant_id = $2"#,
     )
@@ -531,6 +535,7 @@ pub async fn update(
     .bind(national.as_deref())
     .bind(sso.as_deref())
     .bind(body.user_id)
+    .bind(body.cost_center.as_deref())
     .execute(&mut *tx)
     .await;
 
@@ -753,7 +758,7 @@ async fn fetch_one(
         .map_err(|e| e.to_string())?;
     let row = sqlx::query(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
-                  first_name_en, last_name_en, position_title, department,
+                  first_name_en, last_name_en, position_title, department, cost_center,
                   base_salary, hire_date, termination_date, status, pf_member,
                   sso_enrolled, bank_name, bank_account_number, national_id, sso_number, user_id
              FROM employees WHERE id = $1 AND tenant_id = $2"#,
@@ -783,6 +788,7 @@ fn row_to_dto(
         last_name_en: row.get("last_name_en"),
         position_title: row.get("position_title"),
         department: row.get("department"),
+        cost_center: row.get("cost_center"),
         base_salary: base_salary.to_string(),
         hire_date: row.get::<NaiveDate, _>("hire_date").to_string(),
         termination_date: row

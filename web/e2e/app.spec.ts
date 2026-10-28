@@ -67,6 +67,17 @@ test("settings persist across reload", async ({ page }) => {
   await page.getByTestId("save-policy").click();
   await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
 
+  await page.getByTestId("gl-salary").fill("6100");
+  await page.getByTestId("save-policy").click();
+  await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByTestId("gl-salary")).toHaveValue("6100");
+
+  await page.getByTestId("gl-salary").fill("5100");
+  await page.getByTestId("save-policy").click();
+  await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
+
   await page.goto("/audit");
   await expect(page.getByRole("heading", { name: "ประวัติการใช้งาน" })).toBeVisible();
   await expect(page.getByText("settings.payroll").first()).toBeVisible();
@@ -210,9 +221,16 @@ test("links an employee account and shows self-service payslips", async ({ page 
   await page.goto("/employees");
   const row = page.getByRole("row", { name: /E2E001/ });
   await row.getByRole("button", { name: "แก้ไข" }).click();
+  await page.getByTestId("employee-cost-center").fill("CC-E2E");
   await page.getByTestId("employee-user").selectOption({ label: `${invitedEmail} · ผู้ถูกเชิญ` });
   await page.getByTestId("save-employee").click();
   await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
+
+  // Cost center persists across reload.
+  await page.reload();
+  await page.getByRole("row", { name: /E2E001/ }).getByRole("button", { name: "แก้ไข" }).click();
+  await expect(page.getByTestId("employee-cost-center")).toHaveValue("CC-E2E");
+  await page.getByRole("button", { name: "ยกเลิก" }).click();
 
   await page.getByLabel("ออกจากระบบ").click();
   await page.getByLabel("องค์กร").fill("e2e");

@@ -39,7 +39,8 @@ pub async fn get_payroll(State(state): State<AppState>, Authed(ctx): Authed) -> 
     };
     let row = sqlx::query(
         "SELECT unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate, ot_holiday_rate,
-                leave_approval_chain
+                leave_approval_chain, gl_salary_account, gl_net_account, gl_tax_account,
+                gl_sso_account, gl_pf_account, gl_loan_account, gl_claim_account
            FROM tenant_payroll_settings WHERE tenant_id = $1",
     )
     .bind(ctx.tenant_id.0)
@@ -57,6 +58,13 @@ pub async fn get_payroll(State(state): State<AppState>, Authed(ctx): Authed) -> 
             leave_approval_chain: row
                 .get::<Option<Vec<String>>, _>("leave_approval_chain")
                 .unwrap_or_else(|| vec!["hr_admin".to_string()]),
+            gl_salary_account: row.get("gl_salary_account"),
+            gl_net_account: row.get("gl_net_account"),
+            gl_tax_account: row.get("gl_tax_account"),
+            gl_sso_account: row.get("gl_sso_account"),
+            gl_pf_account: row.get("gl_pf_account"),
+            gl_loan_account: row.get("gl_loan_account"),
+            gl_claim_account: row.get("gl_claim_account"),
         },
         Ok(None) => PayrollSettings::standard(),
         Err(e) => return internal_err(&e.to_string()),
@@ -76,7 +84,8 @@ pub async fn put_payroll(
     if !settings.is_valid() {
         return bad_request(
             "unpaid_leave_divisor must be 1..31; OT rates must be between 1 and 5; \
-             leave_approval_chain must be 1..3 roles from {manager, hr_admin} ending with hr_admin",
+             leave_approval_chain must be 1..3 roles from {manager, hr_admin} ending with hr_admin; \
+             GL account codes must be non-empty, at most 20 alphanumeric characters",
         );
     }
 
@@ -87,14 +96,23 @@ pub async fn put_payroll(
     let done = sqlx::query(
         r#"INSERT INTO tenant_payroll_settings
              (tenant_id, unpaid_leave_divisor, ot_weekday_rate, ot_weekend_rate,
-              ot_holiday_rate, leave_approval_chain, updated_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)
+              ot_holiday_rate, leave_approval_chain, gl_salary_account, gl_net_account,
+              gl_tax_account, gl_sso_account, gl_pf_account, gl_loan_account,
+              gl_claim_account, updated_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
            ON CONFLICT (tenant_id) DO UPDATE SET
                unpaid_leave_divisor = EXCLUDED.unpaid_leave_divisor,
                ot_weekday_rate = EXCLUDED.ot_weekday_rate,
                ot_weekend_rate = EXCLUDED.ot_weekend_rate,
                ot_holiday_rate = EXCLUDED.ot_holiday_rate,
                leave_approval_chain = EXCLUDED.leave_approval_chain,
+               gl_salary_account = EXCLUDED.gl_salary_account,
+               gl_net_account = EXCLUDED.gl_net_account,
+               gl_tax_account = EXCLUDED.gl_tax_account,
+               gl_sso_account = EXCLUDED.gl_sso_account,
+               gl_pf_account = EXCLUDED.gl_pf_account,
+               gl_loan_account = EXCLUDED.gl_loan_account,
+               gl_claim_account = EXCLUDED.gl_claim_account,
                updated_at = now(),
                updated_by = EXCLUDED.updated_by"#,
     )
@@ -104,6 +122,13 @@ pub async fn put_payroll(
     .bind(settings.ot_weekend_rate)
     .bind(settings.ot_holiday_rate)
     .bind(&settings.leave_approval_chain)
+    .bind(&settings.gl_salary_account)
+    .bind(&settings.gl_net_account)
+    .bind(&settings.gl_tax_account)
+    .bind(&settings.gl_sso_account)
+    .bind(&settings.gl_pf_account)
+    .bind(&settings.gl_loan_account)
+    .bind(&settings.gl_claim_account)
     .bind(ctx.user_id.0)
     .execute(&mut *tx)
     .await;

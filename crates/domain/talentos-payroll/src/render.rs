@@ -51,6 +51,7 @@ pub struct PayslipRenderData {
     pub tax_withheld: Decimal,
     pub pf_employee: Decimal,
     pub loan_deduction: Decimal,
+    pub reimbursement: Decimal,
     pub total_deductions: Decimal,
     pub net_pay: Decimal,
     pub bank_name: Option<String>,
@@ -241,6 +242,13 @@ pub fn render_html(t: &PayslipTemplate, d: &PayslipRenderData) -> String {
         "<tr><td><strong>รายได้รวม</strong></td><td class=\"num\"><strong>{}</strong></td></tr>",
         baht(d.gross_earnings)
     );
+    if !d.reimbursement.is_zero() {
+        let _ = writeln!(
+            h,
+            "<tr><td>เบิกค่าใช้จ่าย</td><td class=\"num\">+{}</td></tr>",
+            baht(d.reimbursement)
+        );
+    }
 
     if show("sso") {
         let _ = writeln!(
@@ -329,6 +337,7 @@ mod tests {
             tax_withheld: dec!(9416.67),
             pf_employee: dec!(4250),
             loan_deduction: dec!(0),
+            reimbursement: dec!(0),
             total_deductions: dec!(14416.67),
             net_pay: dec!(72083.33),
             bank_name: Some("BBL".into()),
@@ -404,6 +413,16 @@ mod tests {
         let html = render_html(&PayslipTemplate::default(), &d);
         assert!(html.contains("หักเงินกู้/เบิกล่วงหน้า"));
         assert!(html.contains("1,500.00"));
+    }
+
+    #[test]
+    fn renders_reimbursement_line_when_present() {
+        let mut d = data();
+        d.reimbursement = dec!(2500);
+        d.net_pay += dec!(2500);
+        let html = render_html(&PayslipTemplate::default(), &d);
+        assert!(html.contains("เบิกค่าใช้จ่าย"));
+        assert!(html.contains("+2,500.00"));
     }
 
     #[test]

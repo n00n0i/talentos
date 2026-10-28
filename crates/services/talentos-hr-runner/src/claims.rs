@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 const DESCRIPTION_MAX_CHARS: usize = 500;
 const VALID_CATEGORIES: &[&str] = &["travel", "meal", "supplies", "other"];
-const VALID_STATUSES: &[&str] = &["pending", "approved", "rejected", "cancelled"];
+const VALID_STATUSES: &[&str] = &["pending", "approved", "rejected", "cancelled", "paid"];
 const ALLOWED_RECEIPT_TYPES: &[&str] = &["image/jpeg", "image/png", "application/pdf"];
 const MAX_RECEIPT_BYTES: usize = 5 * 1024 * 1024;
 

@@ -8,11 +8,11 @@ Last verified: 2026-10-28 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **320 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 35 files apply cleanly (including `20261112000001_attendance_derived_ot.sql` for effective OT) |
+| Tests | `cargo test --workspace` | **328 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 36 files apply cleanly (including `20261113000001_claims_payroll.sql` for claim reimbursement) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
-overnight, holiday/weekend OT, timezone), compliance 6, payroll 21, rag 7,
+overnight, holiday/weekend OT, timezone), compliance 6, payroll 25, rag 7,
 agent 7, hr-runner 10 (leave day maths, attendance break/grace validation, notification rendering), db 5
 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking), graphql 3
 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
@@ -29,9 +29,9 @@ punch/correct/approve; the rest seed approved records directly), attendance 30
 self-service 15 (me/leave, history pagination, notification outbox, cancel, approvals, balance debit/restore, multi-level chain, legacy
 pending isolation, RBAC; service-level DB + handler-helper units — cancel/reject
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
-purge, stats), 2FA recovery/session units 5 (format/hash/normalize), settlement 10 (proration, leave, notice, severance tiers, totals, isolation), claims 11 (own create/list/cancel, decisions, inbox, isolation), reports 10 (headcount, PF remittance, cost, OT trend, balanced/deterministic GL), leave balances 6 (dry-run, upsert, duplicates, bounds), leave approvals 12 (default one-step, manager→HR, role denial, override, skip, snapshot), notify 1 (payslip recipients and rendered body), OT self-service 18
+purge, stats), 2FA recovery/session units 5 (format/hash/normalize), settlement 10 (proration, leave, notice, severance tiers, totals, isolation), claims 11 (own create/list/cancel, decisions, inbox, isolation), reports 11 (headcount, PF remittance, cost, OT trend, balanced/deterministic GL), leave balances 6 (dry-run, upsert, duplicates, bounds), leave approvals 12 (default one-step, manager→HR, role denial, override, skip, snapshot), notify 1 (payslip recipients and rendered body), OT self-service 18
 (own create/list/cancel, duplicates, decisions, inbox, approved history, reason/minute bounds), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 320 passed, 1 ignored (`load.rs`).
+tenant scoping). Total: 328 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -134,8 +134,9 @@ request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LI
   tokens but access tokens are not revoked immediately. No passkeys/WebAuthn.
 - Final settlement is a draft calculation; it does not withhold tax/SSO or
   generate 50 ทวิ/SSO termination forms, and it is not posted to a payroll run.
-- Expense claims are not reimbursed through payroll; receipts live on the local
-  filesystem (back up `CLAIM_UPLOAD_DIR`) and are type-checked by header only.
+- Expense claims are reimbursed through the next payroll run; receipts live on
+  the local filesystem (back up `CLAIM_UPLOAD_DIR`) and are type-checked by
+  header only. Overlapping payroll runs are serialized by a claim row lock.
 - Loans have no interest, early payoff, or reversal of past installments; a
   cancelled loan keeps already-deducted amounts. GL credits 2230 for the
   installment but does not split the receivable ledger.

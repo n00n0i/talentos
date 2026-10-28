@@ -49,6 +49,7 @@ const STATUS: { [k: string]: { label: string; tone: string } } = {
   approved: { label: "อนุมัติแล้ว", tone: "success" },
   rejected: { label: "ไม่อนุมัติ", tone: "danger" },
   cancelled: { label: "ยกเลิกแล้ว", tone: "" },
+  paid: { label: "จ่ายแล้ว", tone: "success" },
 };
 
 const categoryLabel = (key: string) => CATEGORIES.find((c) => c.key === key)?.label ?? key;

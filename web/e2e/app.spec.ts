@@ -14,6 +14,29 @@ async function login(page: Page) {
   await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
 }
 
+async function apiPost(page: Page, path: string, data: object) {
+  return page.evaluate(
+    async ({ p, d }) => {
+      const res = await fetch(p, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(d),
+      });
+      const json = await res.json().catch(() => undefined);
+      return { ok: res.ok, status: res.status, json };
+    },
+    { p: path, d: data }
+  );
+}
+
+async function apiGet(page: Page, path: string) {
+  return page.evaluate(async ({ p }) => {
+    const res = await fetch(p);
+    const json = await res.json().catch(() => undefined);
+    return { ok: res.ok, status: res.status, json };
+  }, { p: path });
+}
+
 test("accepts the invite and logs in", async ({ page }) => {
   await page.goto("/invite/e2e-invite-token-4f8a2c1d9b7e6a3f5c0d8e2b1a9f7c6d");
   const passwords = page.locator('input[type="password"]');
@@ -65,21 +88,21 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await expect(page.getByRole("cell", { name: "E2E001" })).toBeVisible();
 
   // Derived path: shift + device import (09:00-22:00 = 4h after shift end), then HR approval.
-  const shift = await page.request.post("/api/gw/api/v1/shifts", {
-    data: { name: "E2E OT", start: "09:00", end: "18:00", break_minutes: 60, grace_minutes: 0 },
+  const shift = await apiPost(page, "/api/gw/api/v1/shifts", {
+    name: "E2E OT", start: "09:00", end: "18:00", break_minutes: 60, grace_minutes: 0,
   });
-  expect(shift.ok()).toBeTruthy();
-  const { id: shiftId } = await shift.json();
-  const found = await page.request.get("/api/gw/api/v1/employees?q=E2E001");
-  const employeeId = (await found.json()).employees[0].id;
-  const assign = await page.request.post(`/api/gw/api/v1/shifts/${shiftId}/assign`, {
-    data: { employee_id: employeeId, effective_from: "2026-01-01" },
+  expect(shift.ok).toBeTruthy();
+  const { id: shiftId } = shift.json;
+  const found = await apiGet(page, "/api/gw/api/v1/employees?q=E2E001");
+  const employeeId = found.json.employees[0].id;
+  const assign = await apiPost(page, `/api/gw/api/v1/shifts/${shiftId}/assign`, {
+    employee_id: employeeId, effective_from: "2026-01-01",
   });
-  expect(assign.ok()).toBeTruthy();
-  const imported = await page.request.post("/api/gw/api/v1/attendance/import", {
-    data: { rows: [{ employee_code: "E2E001", date: "2026-10-05", in: "09:00", out: "22:00" }] },
+  expect(assign.ok).toBeTruthy();
+  const imported = await apiPost(page, "/api/gw/api/v1/attendance/import", {
+    rows: [{ employee_code: "E2E001", date: "2026-10-05", in: "09:00", out: "22:00" }],
   });
-  expect((await imported.json()).imported).toBe(1);
+  expect(imported.json.imported).toBe(1);
 
   await page.goto("/attendance");
   await page.getByTestId("month-picker").fill("2026-10");
@@ -114,10 +137,10 @@ test("classifies OT on a company holiday", async ({ page }) => {
   await page.getByTestId("add-holiday").click();
   await expect(page.getByText("ทดสอบวันหยุด")).toBeVisible();
 
-  const imported = await page.request.post("/api/gw/api/v1/attendance/import", {
-    data: { rows: [{ employee_code: "E2E001", date: "2026-10-07", in: "09:00", out: "13:00" }] },
+  const imported = await apiPost(page, "/api/gw/api/v1/attendance/import", {
+    rows: [{ employee_code: "E2E001", date: "2026-10-07", in: "09:00", out: "13:00" }],
   });
-  expect((await imported.json()).imported).toBe(1);
+  expect(imported.json.imported).toBe(1);
 
   await page.reload();
   await page.getByTestId("month-picker").fill("2026-10");
@@ -208,17 +231,17 @@ test("links an employee account and shows self-service payslips", async ({ page 
 
 test("employee punches in and out from the clock page", async ({ page, context }) => {
   await login(page);
-  const shift = await page.request.post("/api/gw/api/v1/shifts", {
-    data: { name: "E2E", start: "09:00", end: "18:00", break_minutes: 60, grace_minutes: 5 },
+  const shift = await apiPost(page, "/api/gw/api/v1/shifts", {
+    name: "E2E", start: "09:00", end: "18:00", break_minutes: 60, grace_minutes: 5,
   });
-  expect(shift.ok()).toBeTruthy();
-  const { id: shiftId } = await shift.json();
-  const list = await page.request.get("/api/gw/api/v1/employees?q=E2E001");
-  const employeeId = (await list.json()).employees[0].id;
-  const assign = await page.request.post(`/api/gw/api/v1/shifts/${shiftId}/assign`, {
-    data: { employee_id: employeeId, effective_from: "2026-01-01" },
+  expect(shift.ok).toBeTruthy();
+  const { id: shiftId } = shift.json;
+  const list = await apiGet(page, "/api/gw/api/v1/employees?q=E2E001");
+  const employeeId = list.json.employees[0].id;
+  const assign = await apiPost(page, `/api/gw/api/v1/shifts/${shiftId}/assign`, {
+    employee_id: employeeId, effective_from: "2026-01-01",
   });
-  expect(assign.ok()).toBeTruthy();
+  expect(assign.ok).toBeTruthy();
 
   await page.getByLabel("ออกจากระบบ").click();
   await page.getByLabel("องค์กร").fill("e2e");
@@ -589,4 +612,28 @@ test("employee submits an expense claim with receipt and HR approves it", async 
 
   await page.reload();
   await expect(page.getByTestId("claim-row").filter({ hasText: "E2E team lunch" })).toContainText("อนุมัติแล้ว");
+});
+
+test("HR computes a final settlement for an employee", async ({ page }) => {
+  await login(page);
+  await page.goto("/final-settlement");
+  await expect(page.getByRole("heading", { name: "พนักงานลาออก" })).toBeVisible();
+
+  await page.getByTestId("settlement-employee").selectOption({ label: "E2E001 · สมชาย ทดสอบ" });
+  await page.getByTestId("settlement-date").fill("2026-12-31");
+  await page.getByTestId("settlement-unused").fill("5");
+  await page.getByTestId("settlement-notice").fill("30");
+  await page.getByTestId("compute-settlement").click();
+
+  await expect(page.getByText("คำนวณเงินค่าจ้างแล้ว")).toBeVisible();
+  await expect(page.getByTestId("settlement-total")).toContainText(/[0-9,]+\.\d{2}/);
+
+  // Stored as a draft in the list.
+  const row = page.getByTestId("settlement-row").filter({ hasText: "E2E001" });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("ฉบับร่าง");
+
+  // No payroll run is created.
+  await page.goto("/payroll");
+  await expect(page.getByTestId("create-run")).toBeVisible();
 });

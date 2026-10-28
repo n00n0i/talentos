@@ -215,6 +215,15 @@ and green primary actions. Headings use a display serif; numbers stay tabular.
 - Responsive: below 1000px the top bar wraps into brand + pills, stat cards go
   2×2, the right rail stacks, and wide tables scroll inside their card.
 
+## Final settlement
+
+HR computes a draft from `/final-settlement` or
+`POST /api/v1/employees/:id/final-settlement`:
+last-month pay prorated to the termination day, unused leave days, notice days,
+and statutory LPA §118 severance (completed calendar years). The breakdown is
+stored as a draft; tax/SSO withholding and the official 50 ทวิ/SSO forms remain
+with payroll/Phase 0. This does not create or change a payroll run.
+
 ## Expense claims
 
 Employees submit claims at `/claims` (category, amount, date, description,

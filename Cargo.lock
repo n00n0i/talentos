@@ -4059,6 +4059,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "talentos-attendance",
+ "talentos-compliance",
  "talentos-db",
  "talentos-kernel",
  "thiserror 2.0.21",

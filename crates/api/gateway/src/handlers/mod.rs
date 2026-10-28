@@ -16,4 +16,5 @@ pub mod payroll;
 pub mod plugins;
 pub mod reports;
 pub mod settings;
+pub mod settlement;
 pub mod users;

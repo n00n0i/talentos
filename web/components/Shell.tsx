@@ -77,7 +77,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     ? [
         ...NAV,
         ...(isAdmin
-          ? [{ href: "/loans", label: "เงินกู้", icon: "wallet" as IconName }]
+          ? [
+              { href: "/loans", label: "เงินกู้", icon: "wallet" as IconName },
+              { href: "/final-settlement", label: "พนักงานลาออก", icon: "users" as IconName },
+            ]
           : []),
         { href: "/reports", label: "รายงาน", icon: "file" as IconName },
       ]

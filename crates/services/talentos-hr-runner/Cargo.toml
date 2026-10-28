@@ -7,6 +7,7 @@ edition.workspace = true
 talentos-kernel = { path = "../../core/kernel" }
 talentos-db = { path = "../../infra/db" }
 talentos-attendance = { path = "../../domain/talentos-attendance" }
+talentos-compliance = { path = "../../domain/talentos-compliance" }
 sqlx = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

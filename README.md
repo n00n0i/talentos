@@ -237,8 +237,9 @@ with payroll/Phase 0. This does not create or change a payroll run.
 Employees submit claims at `/claims` (category, amount, date, description,
 receipt). Receipts are JPEG/PNG/PDF up to 5 MB, stored under
 `CLAIM_UPLOAD_DIR` with a server-generated name and served only to the owner or
-HR. HR approves/rejects from the same page. **Reimbursement is not wired to
-payroll in this slice**; HR pays outside the payroll run.
+HR. HR approves/rejects from the same page. Approved claims in the next payroll
+period are added to net pay as a non-taxable reimbursement and marked “จ่ายแล้ว”;
+the payslip and GL show the amount.
 
 ### Notification outbox
 

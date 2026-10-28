@@ -554,7 +554,8 @@ async fn load_approved_claims(
              AND (
                (status = 'approved' AND payroll_run_id IS NULL)
                OR payroll_run_id = $4
-             )"#,
+             )
+           FOR UPDATE"#,
     )
     .bind(tenant_id)
     .bind(period_start)

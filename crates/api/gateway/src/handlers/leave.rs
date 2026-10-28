@@ -318,23 +318,7 @@ pub async fn import_balances(
         Err(e) => return internal_err(&e.to_string()),
     };
 
-    let mut service_iter = service_report.rows.iter();
-    let rows: Vec<talentos_hr_runner::leave::BalanceImportRowResult> = parse_results
-        .into_iter()
-        .map(|parsed| match parsed {
-            Some(parsed) => parsed,
-            None => service_iter.next().cloned().unwrap_or(
-                talentos_hr_runner::leave::BalanceImportRowResult {
-                    row: 0,
-                    employee_code: String::new(),
-                    leave_type: String::new(),
-                    year: 0,
-                    status: "invalid".into(),
-                    errors: vec!["row could not be validated".into()],
-                },
-            ),
-        })
-        .collect();
+    let rows = merge_balance_import_rows(parse_results, &service_report.rows);
 
     let total = rows.len();
     let invalid = rows.iter().filter(|r| r.status == "invalid").count();
@@ -357,7 +341,6 @@ pub async fn import_balances(
     (StatusCode::OK, Json(report)).into_response()
 }
 
-#[allow(dead_code)]
 fn merge_balance_import_rows(
     parse_results: Vec<Option<talentos_hr_runner::leave::BalanceImportRowResult>>,
     service_rows: &[talentos_hr_runner::leave::BalanceImportRowResult],

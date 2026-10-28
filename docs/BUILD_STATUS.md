@@ -8,8 +8,8 @@ Last verified: 2026-10-28 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **304 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 33 files apply cleanly (including `20261110000001_final_settlements.sql` for final settlement) |
+| Tests | `cargo test --workspace` | **309 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 34 files apply cleanly (including `20261111000001_recovery_sessions.sql` for 2FA recovery codes) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 21, rag 7,
@@ -29,9 +29,9 @@ punch/correct/approve; the rest seed approved records directly), attendance 30
 self-service 14 (me/leave, notification outbox, cancel, approvals, balance debit/restore, multi-level chain, legacy
 pending isolation, RBAC; service-level DB + handler-helper units — cancel/reject
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
-purge, stats), settlement 10 (proration, leave, notice, severance tiers, totals, isolation), claims 11 (own create/list/cancel, decisions, inbox, isolation), reports 10 (headcount, PF remittance, cost, OT trend, balanced/deterministic GL), leave balances 6 (dry-run, upsert, duplicates, bounds), leave approvals 12 (default one-step, manager→HR, role denial, override, skip, snapshot), notify 1 (payslip recipients and rendered body), OT self-service 13
+purge, stats), 2FA recovery/session units 5 (format/hash/normalize), settlement 10 (proration, leave, notice, severance tiers, totals, isolation), claims 11 (own create/list/cancel, decisions, inbox, isolation), reports 10 (headcount, PF remittance, cost, OT trend, balanced/deterministic GL), leave balances 6 (dry-run, upsert, duplicates, bounds), leave approvals 12 (default one-step, manager→HR, role denial, override, skip, snapshot), notify 1 (payslip recipients and rendered body), OT self-service 13
 (own create/list/cancel, duplicates, decisions, inbox, approved history, reason/minute bounds), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 304 passed, 1 ignored (`load.rs`).
+tenant scoping). Total: 309 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -130,6 +130,8 @@ request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LI
   restores it on cancel/reject; approve keeps the debit. Legacy pending rows
   with `balance_debited=false` are not retroactively debited. Leave and payslip
   notifications are queued for email/LINE; delivery needs provider credentials.
+- 2FA recovery codes are one-time and hashed; sessions list active refresh
+  tokens but access tokens are not revoked immediately. No passkeys/WebAuthn.
 - Final settlement is a draft calculation; it does not withhold tax/SSO or
   generate 50 ทวิ/SSO termination forms, and it is not posted to a payroll run.
 - Expense claims are not reimbursed through payroll; receipts live on the local

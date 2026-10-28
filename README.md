@@ -356,9 +356,10 @@ on the row. PII (national id, bank account, SSO number) is not imported in v1.
 HR admins can enroll an authenticator app from `/settings` (RFC 6238, 6 digits,
 30 s, ±1 step). The secret is shown once and stored AES-256-GCM-encrypted; logins
 for an enabled user require `totp_code` and return `totp_required` /
-`invalid_totp` otherwise. There are no backup codes in v1: another HR admin can
-reset a lost device from `/users`, which clears 2FA and revokes that user's refresh
-tokens.
+`invalid_totp` otherwise. Enabling returns 10 one-time recovery codes (hashed at
+rest, shown once); regenerate them with a current TOTP. `/settings` also lists
+active refresh sessions with IP/device and can revoke one or all. Another HR
+admin can reset a lost device from `/users`.
 
 An employee can be linked to a login account from the employee form. That user
 then sees only their own payslips at `/me/payslips`

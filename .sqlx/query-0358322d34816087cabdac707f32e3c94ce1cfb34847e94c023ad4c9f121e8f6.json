@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH rotated AS (\n               UPDATE refresh_tokens SET revoked_at = now()\n               WHERE token_hash = $1 AND revoked_at IS NULL\n               RETURNING 1\n           )\n           INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at, parent_hash, ip_address, user_agent)\n           SELECT $2, $3, $4, $5, now() + make_interval(days => $6), $1, $7, $8\n           FROM rotated\n           RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Inet",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0358322d34816087cabdac707f32e3c94ce1cfb34847e94c023ad4c9f121e8f6"
+}

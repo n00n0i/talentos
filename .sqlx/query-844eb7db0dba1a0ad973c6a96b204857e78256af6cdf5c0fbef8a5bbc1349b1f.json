@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE totp_recovery_codes SET used_at = now() WHERE user_id = $1 AND tenant_id = $2 AND code_hash = $3 AND used_at IS NULL RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "844eb7db0dba1a0ad973c6a96b204857e78256af6cdf5c0fbef8a5bbc1349b1f"
+}

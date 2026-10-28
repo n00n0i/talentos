@@ -87,6 +87,11 @@
         "ordinal": 16,
         "name": "ot_amount",
         "type_info": "Numeric"
+      },
+      {
+        "ordinal": 17,
+        "name": "loan_deduction",
+        "type_info": "Numeric"
       }
     ],
     "parameters": {
@@ -96,6 +101,7 @@
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,

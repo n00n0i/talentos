@@ -474,6 +474,20 @@ test("multi-level leave approval chain", async ({ page }) => {
   await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
 });
 
+test("HR opens reports and sees headcount totals", async ({ page }) => {
+  await login(page);
+  await page.goto("/reports");
+  await expect(page.getByRole("heading", { name: "รายงาน" })).toBeVisible();
+  await expect(page.getByTestId("headcount-active")).toContainText(/[0-9]+/);
+  await expect(page.getByTestId("headcount-probation")).toContainText(/[0-9]+/);
+  await expect(page.getByTestId("headcount-leave")).toContainText(/[0-9]+/);
+
+  await page.getByTestId("cost-from").fill("2026-01-01");
+  await page.getByTestId("cost-to").fill("2026-12-31");
+  await page.getByTestId("cost-load").click();
+  await expect(page.getByRole("table", { name: "ต้นทุนเงินเดือน" })).toBeVisible();
+});
+
 test("HR imports opening leave balance and employee sees quota", async ({ page }) => {
   async function loginAs(email: string, password: string) {
     await page.getByLabel("ออกจากระบบ").click();

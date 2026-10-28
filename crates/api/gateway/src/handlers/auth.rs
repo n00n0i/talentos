@@ -4,7 +4,7 @@ use std::time::Duration;
 use axum::extract::connect_info::ConnectInfo;
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -33,6 +33,7 @@ const EMAIL_MAX: u32 = 5;
 pub async fn login(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> Response {
     let errs = body.validate();
@@ -59,6 +60,9 @@ pub async fn login(
 
     let email = body.email.to_lowercase();
     let ip = addr.ip();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
     let ip_key = format!("rl:login:ip:{ip}");
     let email_key = format!("rl:login:email:{}:{}", body.tenant_slug, email);
 
@@ -95,7 +99,7 @@ pub async fn login(
             ratelimit::reset(&state.redis, &[ip_key.clone(), email_key.clone()]).await;
             // M1: update last_login_at and insert audit_log row on success.
             record_login_success(&state, &ctx, &addr).await;
-            match issue_tokens(&state, &ctx).await {
+            match issue_tokens(&state, &ctx, Some(addr.ip()), user_agent).await {
                 Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
                 Err(e) => auth_err_to_response(e),
             }
@@ -229,6 +233,11 @@ async fn verify_recovery_code_tx(
         return Ok(false);
     }
     let hash = recovery_codes::hash_code(&normalized);
+    let mut tx = state
+        .pool
+        .begin_tenant(TenantId(tenant_id))
+        .await
+        .map_err(internal_db_err)?;
     let updated = sqlx::query!(
         "UPDATE totp_recovery_codes SET used_at = now() \
          WHERE user_id = $1 AND tenant_id = $2 AND code_hash = $3 AND used_at IS NULL \
@@ -237,16 +246,24 @@ async fn verify_recovery_code_tx(
         tenant_id,
         hash
     )
-    .fetch_optional(&state.auth_pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(internal_db_err)?;
+    if updated.is_some() {
+        tx.commit().await.map_err(internal_db_err)?;
+    }
     Ok(updated.is_some())
 }
 
-async fn issue_tokens(state: &AppState, ctx: &TenantContext) -> Result<TokenResponse, AuthError> {
+async fn issue_tokens(
+    state: &AppState,
+    ctx: &TenantContext,
+    ip: Option<std::net::IpAddr>,
+    user_agent: Option<&str>,
+) -> Result<TokenResponse, AuthError> {
     let access = jwt::issue_access_token(ctx, &state.jwt_secret, state.access_ttl_secs)?;
     let raw_refresh = jwt::generate_refresh_token();
-    store_refresh_token(state, ctx, &raw_refresh).await?;
+    store_refresh_token(state, ctx, &raw_refresh, ip, user_agent).await?;
     Ok(TokenResponse {
         access_token: access,
         refresh_token: raw_refresh,
@@ -265,16 +282,21 @@ async fn store_refresh_token(
     state: &AppState,
     ctx: &TenantContext,
     raw: &str,
+    ip: Option<std::net::IpAddr>,
+    user_agent: Option<&str>,
 ) -> Result<(), AuthError> {
     let hashed = hash_refresh(raw);
+    let ip_net = ip.map(sqlx::types::ipnetwork::IpNetwork::from);
     sqlx::query!(
-        r#"INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at)
-           VALUES ($1, $2, $3, $4, now() + make_interval(days => $5))"#,
+        r#"INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at, ip_address, user_agent)
+           VALUES ($1, $2, $3, $4, now() + make_interval(days => $5), $6, $7)"#,
         hashed,
         ctx.user_id.0,
         ctx.tenant_id.0,
         ctx.entity_id.map(|e| e.0),
-        state.refresh_ttl_days as i32
+        state.refresh_ttl_days as i32,
+        ip_net,
+        user_agent
     )
     .execute(&state.auth_pool)
     .await
@@ -287,10 +309,14 @@ async fn store_refresh_token(
 pub async fn refresh(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(body): Json<RefreshRequest>,
 ) -> Response {
     // M6: apply IP-based rate limiting to refresh endpoint too.
     let ip = addr.ip();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
     let rl_key = format!("rl:refresh:ip:{ip}");
     if let Err(retry_after) =
         ratelimit::check(&state.redis, &rl_key, 30, Duration::from_secs(60)).await
@@ -369,14 +395,15 @@ pub async fn refresh(
     let new_hashed = hash_refresh(&raw_new);
 
     // Atomic rotation: revoke old + insert successor in ONE CTE.
+    let ip_net = Some(sqlx::types::ipnetwork::IpNetwork::from(ip));
     let tx_result = sqlx::query!(
         r#"WITH rotated AS (
                UPDATE refresh_tokens SET revoked_at = now()
                WHERE token_hash = $1 AND revoked_at IS NULL
                RETURNING 1
            )
-           INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at, parent_hash)
-           SELECT $2, $3, $4, $5, now() + make_interval(days => $6), $1
+           INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at, parent_hash, ip_address, user_agent)
+           SELECT $2, $3, $4, $5, now() + make_interval(days => $6), $1, $7, $8
            FROM rotated
            RETURNING id"#,
         hashed,
@@ -385,6 +412,8 @@ pub async fn refresh(
         ctx.tenant_id.0,
         ctx.entity_id.map(|e| e.0),
         state.refresh_ttl_days as i32,
+        ip_net,
+        user_agent
     )
     .fetch_optional(&state.auth_pool)
     .await;
@@ -949,6 +978,10 @@ pub async fn disable_2fa(
 
 /// GET /api/v1/auth/sessions — caller's active refresh-token sessions.
 pub async fn list_sessions(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
     let rows = match sqlx::query!(
         r#"SELECT id, created_at, expires_at, ip_address, user_agent
            FROM refresh_tokens
@@ -957,12 +990,16 @@ pub async fn list_sessions(State(state): State<AppState>, Authed(ctx): Authed) -
         ctx.user_id.0,
         ctx.tenant_id.0
     )
-    .fetch_all(&state.auth_pool)
+    .fetch_all(&mut *tx)
     .await
     {
         Ok(r) => r,
         Err(e) => return internal_err_to_response(e),
     };
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
 
     let sessions: Vec<_> = rows
         .into_iter()
@@ -986,6 +1023,10 @@ pub async fn revoke_session(
     Authed(ctx): Authed,
     Path(session_id): Path<i64>,
 ) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
     let done = match sqlx::query!(
         "UPDATE refresh_tokens SET revoked_at = now() \
          WHERE id = $1 AND user_id = $2 AND tenant_id = $3 AND revoked_at IS NULL",
@@ -993,7 +1034,7 @@ pub async fn revoke_session(
         ctx.user_id.0,
         ctx.tenant_id.0
     )
-    .execute(&state.auth_pool)
+    .execute(&mut *tx)
     .await
     {
         Ok(r) => r.rows_affected(),
@@ -1001,6 +1042,7 @@ pub async fn revoke_session(
     };
 
     if done == 0 {
+        let _ = tx.rollback().await;
         return (
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
@@ -1014,20 +1056,32 @@ pub async fn revoke_session(
             .into_response();
     }
 
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
     StatusCode::OK.into_response()
 }
 
 /// POST /api/v1/auth/sessions/revoke-all — revoke all of the caller's sessions.
 pub async fn revoke_all_sessions(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
     if let Err(e) = sqlx::query!(
         "UPDATE refresh_tokens SET revoked_at = now() \
          WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
         ctx.user_id.0,
         ctx.tenant_id.0
     )
-    .execute(&state.auth_pool)
+    .execute(&mut *tx)
     .await
     {
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = tx.commit().await {
         return internal_err_to_response(e);
     }
 

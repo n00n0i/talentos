@@ -48,3 +48,37 @@ Playwright e2e (20 tests, ports 18259/3134)           20 passed, 0 failed
 - The DB migration was applied manually to the `loans-postgres-1` container because `_sqlx_migrations` did not exist; I baselined the table and inserted the new migration record. CI/production should run `sqlx migrate run` normally once `_sqlx_migrations` is in sync.
 - `_sqlx_migrations` checksums for older migrations differ from `sqlx migrate info`'s local computation in this environment; this predates my change and does not affect runtime, but a fresh `sqlx migrate revert`/`run` cycle may need the migration table rebuilt.
 - No new integration tests were added in `tests/integration`; coverage is via unit tests and the existing Playwright 2FA flow. Adding backend integration tests for recovery-code single-use and rotation would strengthen the slice.
+
+---
+
+# Review Fixes
+
+## Commit
+`8581d70` — `fix(auth): populate session metadata, tenant-scoped session queries, recovery-code E2E`
+
+## Changes
+- `crates/api/gateway/src/handlers/auth.rs`
+  - `store_refresh_token` now binds `ip_address` and `user_agent` from the request.
+  - `login` and `refresh` extract `ConnectInfo` IP and `User-Agent` header and pass them through; refresh rotation CTE inserts metadata for the successor token.
+  - `list_sessions`, `revoke_session`, and `revoke_all_sessions` now run inside `state.pool.begin_tenant(ctx.tenant_id)` so RLS applies.
+  - `verify_recovery_code` moved from `auth_pool` to a tenant-scoped transaction (tenant is already known at that point).
+- `crates/core/authz/src/recovery_codes.rs`
+  - Added rationale comment for unsalted SHA-256 (40-bit single-use random codes).
+  - `generate_codes` deduplicates with a `HashSet` and loops until 10 unique codes are produced.
+- `web/app/login/page.tsx`
+  - TOTP input now accepts recovery codes: `maxLength={9}`, pattern `[A-Z0-9\-]{6,9}`.
+- `web/e2e/app.spec.ts`
+  - Test 12 now reads a recovery code from the UI after enabling 2FA, logs in once with it, asserts reuse fails and keeps the user on the login page, then logs back in with a fresh TOTP and disables 2FA to keep the suite replayable.
+
+## Test Summary
+```
+cargo fmt --all                                       ok
+cargo clippy -p talentos-gateway -p talentos-authz --all-targets -- -D warnings  ok
+cargo test -p talentos-authz -p talentos-gateway      89 passed, 0 failed
+npm run build (web/)                                  ok
+Playwright e2e (20 tests, ports 18259/3134)           20 passed, 0 failed
+```
+
+## Concerns
+- Same `_sqlx_migrations` baseline note as above; the runtime behavior is verified by tests and e2e.
+- The `pkill` helper in my local server teardown scripts can hit the surrounding shell; I used standalone `/tmp/*.sh` scripts for the final run to avoid self-termination.

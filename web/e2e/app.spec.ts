@@ -379,8 +379,41 @@ test("HR enrolls in 2FA, logs in with a code, then disables it", async ({ page }
   await page.getByTestId("enable-2fa").click();
   await expect(page.getByTestId("totp-status")).toContainText("เปิดใช้งานอยู่");
 
+  const recoveryCode = (await page.getByTestId("recovery-codes").locator("li").first().innerText()).trim();
+
   await page.getByLabel("ออกจากระบบ").click();
   await page.goto("/login");
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill("e2e@example.com");
+  await page.getByLabel("รหัสผ่าน").fill("E2ePassword123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByTestId("login-totp")).toBeVisible();
+  await page.getByTestId("login-totp").fill(totp(secret));
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.goto("/login");
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill("e2e@example.com");
+  await page.getByLabel("รหัสผ่าน").fill("E2ePassword123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByTestId("login-totp")).toBeVisible();
+  await page.getByTestId("login-totp").fill(recoveryCode);
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.goto("/login");
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill("e2e@example.com");
+  await page.getByLabel("รหัสผ่าน").fill("E2ePassword123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByTestId("login-totp")).toBeVisible();
+  await page.getByTestId("login-totp").fill(recoveryCode);
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toHaveCount(0);
+
   await page.getByLabel("องค์กร").fill("e2e");
   await page.getByLabel("อีเมล").fill("e2e@example.com");
   await page.getByLabel("รหัสผ่าน").fill("E2ePassword123!");

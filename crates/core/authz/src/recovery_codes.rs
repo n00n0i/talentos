@@ -11,8 +11,18 @@ const GROUP_LEN: usize = 4;
 const HASH_LEN: usize = 32;
 
 /// Generate `count` fresh recovery codes.
+///
+/// Codes are deduplicated before returning. SHA-256 is used without a salt
+/// because each code is a single-use random 40-bit value (5 bytes / 8 base32
+/// chars). The search space and one-time use make offline brute-force
+/// impractical for the current threat model; add a per-user salt if the DB
+/// leakage model changes.
 pub fn generate_codes(count: usize) -> Vec<String> {
-    (0..count).map(|_| generate_one()).collect()
+    let mut codes = std::collections::HashSet::new();
+    while codes.len() < count {
+        codes.insert(generate_one());
+    }
+    codes.into_iter().collect()
 }
 
 fn generate_one() -> String {

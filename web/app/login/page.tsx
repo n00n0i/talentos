@@ -101,10 +101,9 @@ export default function LoginPage() {
               <input
                 id="totp"
                 data-testid="login-totp"
-                inputMode="numeric"
                 autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                maxLength={6}
+                pattern="[A-Z0-9\-]{6,9}"
+                maxLength={9}
                 autoFocus
                 value={totp}
                 onChange={(e) => setTotp(e.target.value)}

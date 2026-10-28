@@ -143,7 +143,8 @@ request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LI
   there is no per-tenant chart of accounts or accounting-system sync.
 - Multi-level approvals cover sequential manager→HR chains only; delegation,
   SLA/escalation, per-type conditions, and OT chains are not built. Intermediate
-  steps do not send notifications. GraphQL leave mutations are disabled; use REST.
+  steps do not send notifications. GraphQL leave mutations use the same service
+  layer as REST.
 - Payslip acknowledgement records the linked user and time; there is no e-signature
   or dispute workflow, and HR sees it only in the run payslip list.
 - OT requests are an authorization trail only; approved minutes are not added to

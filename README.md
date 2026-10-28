@@ -152,6 +152,10 @@ when no employee is linked. Employees cancel their own pending request with
 HR/managers use `GET /api/v1/leave/approvals` as the pending inbox and
 `POST /api/v1/leave/requests/:id/decision` to approve or reject.
 
+GraphQL leave mutations (`requestLeave`, `approveLeaveRequest`, `rejectLeaveRequest`,
+`cancelLeaveRequest`) now call the same service layer as REST, so chains and
+balances apply on both surfaces.
+
 Leave approvals can be one step (HR) or a sequential chain
 `manager → hr_admin`, configured in `/settings` (`leave_approval_chain`). The
 chain is snapshotted onto each request; the current step's role decides, and an

@@ -476,7 +476,13 @@ fn map_leave_error(e: LeaveError) -> async_graphql::Error {
         LeaveError::Overlap(_, _)
         | LeaveError::NotActive
         | LeaveError::NotCancellable => (codes::INVALID_STATE, e.to_string()),
-        LeaveError::Db(_) => (codes::INTERNAL_ERROR, e.to_string()),
+        LeaveError::Db(err) => {
+            tracing::error!(error = %err, "graphql leave mutation failed");
+            (
+                codes::INTERNAL_ERROR,
+                "An unexpected error occurred".to_string(),
+            )
+        }
     };
     gql_error(code, &msg)
 }
@@ -489,7 +495,10 @@ async fn fetch_request_row(
     let mut tx = pool
         .begin_tenant(tenant_id)
         .await
-        .map_err(|e| gql_error(codes::INTERNAL_ERROR, &format!("db: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "graphql leave query failed");
+            gql_error(codes::INTERNAL_ERROR, "An unexpected error occurred")
+        })?;
 
     let row = sqlx::query_as!(
         LeaveRequestRow,
@@ -507,11 +516,17 @@ async fn fetch_request_row(
     )
     .fetch_optional(&mut *tx)
     .await
-    .map_err(|e| gql_error(codes::INTERNAL_ERROR, &format!("db: {}", e)))?;
+    .map_err(|e| {
+            tracing::error!(error = %e, "graphql leave query failed");
+            gql_error(codes::INTERNAL_ERROR, "An unexpected error occurred")
+        })?;
 
     tx.commit()
         .await
-        .map_err(|e| gql_error(codes::INTERNAL_ERROR, &format!("db: {}", e)))?;
+        .map_err(|e| {
+            tracing::error!(error = %e, "graphql leave query failed");
+            gql_error(codes::INTERNAL_ERROR, "An unexpected error occurred")
+        })?;
 
     row.ok_or_else(|| async_graphql::Error::new("leave request not found"))
 }

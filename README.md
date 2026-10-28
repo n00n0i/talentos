@@ -215,6 +215,16 @@ and green primary actions. Headings use a display serif; numbers stay tabular.
 - Responsive: below 1000px the top bar wraps into brand + pills, stat cards go
   2×2, the right rail stacks, and wide tables scroll inside their card.
 
+## Loans and advances
+
+HR records a loan/advance at `/loans` (one active loan per employee):
+`POST /api/v1/loans {employee_id, principal, installment_amount, start_date, note?}`.
+Each payroll run deducts `min(installment, balance)` after SSO/tax/PF, records a
+`loan_installments` row and reduces the balance in the same transaction; reruns
+are idempotent per run and the loan closes at zero. Employees see their loan at
+`GET /api/v1/me/loans`; the payslip shows the deduction line. There is no
+interest, early payoff, or reversal of past installments.
+
 ## Reports and GL
 
 `/reports` (HR/payroll) shows headcount by department, payroll cost by

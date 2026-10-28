@@ -77,6 +77,7 @@ pub async fn headcount(conn: &mut PgConnection) -> Result<Headcount, ReportError
         "SELECT status, COUNT(*)::bigint AS cnt \
          FROM employees \
          WHERE status IN ('active', 'probation', 'leave', 'terminated') \
+           AND tenant_id = current_tenant_id() \
          GROUP BY status",
     )
     .fetch_all(&mut *conn)
@@ -100,7 +101,8 @@ pub async fn headcount(conn: &mut PgConnection) -> Result<Headcount, ReportError
         "SELECT COUNT(*)::bigint \
          FROM employees \
          WHERE status = 'terminated' \
-           AND termination_date >= (CURRENT_DATE - INTERVAL '12 months')",
+           AND termination_date >= (CURRENT_DATE - INTERVAL '12 months') \
+           AND tenant_id = current_tenant_id()",
     )
     .fetch_one(&mut *conn)
     .await?;
@@ -109,6 +111,7 @@ pub async fn headcount(conn: &mut PgConnection) -> Result<Headcount, ReportError
         "SELECT COALESCE(department, $1) AS department, COUNT(*)::bigint AS cnt \
          FROM employees \
          WHERE status != 'terminated' \
+           AND tenant_id = current_tenant_id() \
          GROUP BY department \
          ORDER BY department",
     )
@@ -153,6 +156,7 @@ pub async fn payroll_cost(
          JOIN payroll_runs r ON r.id = p.payroll_run_id \
          JOIN employees e ON e.id = p.employee_id \
          WHERE r.status = 'approved' \
+           AND r.tenant_id = current_tenant_id() \
            AND r.period_end BETWEEN $2 AND $3 \
          GROUP BY e.department \
          ORDER BY department",
@@ -192,6 +196,7 @@ pub async fn ot_trend(
                 COUNT(*)::bigint AS approved_days \
          FROM attendance_days \
          WHERE status = 'approved' \
+           AND tenant_id = current_tenant_id() \
            AND work_date BETWEEN $1 AND $2 \
          GROUP BY month \
          ORDER BY month",
@@ -213,6 +218,89 @@ pub async fn ot_trend(
     Ok(OtTrendReport { rows: result })
 }
 
+/// PF remittance CSV for an approved payroll run.
+/// Returns `(filename, body)`. Only `approved` runs are exported; anything else
+/// or a run not visible to the tenant yields `NotFound`. Rows are included only
+/// for payslips with a PF contribution (employee or employer side).
+pub async fn export_pf_remittance_csv(
+    conn: &mut PgConnection,
+    run_id: Uuid,
+) -> Result<(String, String), ReportError> {
+    let run = sqlx::query(
+        "SELECT status, period_start, period_end \
+         FROM payroll_runs \
+         WHERE id = $1 \
+           AND tenant_id = current_tenant_id()",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let (period_start, period_end) = match run {
+        Some(row) => {
+            let status: String = row.get("status");
+            if status != "approved" {
+                return Err(ReportError::NotFound);
+            }
+            let start: NaiveDate = row.get("period_start");
+            let end: NaiveDate = row.get("period_end");
+            (start, end)
+        }
+        None => return Err(ReportError::NotFound),
+    };
+
+    let rows = sqlx::query(
+        "SELECT e.employee_code, \
+                 e.first_name_th || ' ' || e.last_name_th AS name, \
+                 p.pf_employee, \
+                 p.pf_employer \
+          FROM payslips p \
+          JOIN employees e ON e.id = p.employee_id \
+          WHERE p.payroll_run_id = $1 \
+            AND p.tenant_id = current_tenant_id() \
+            AND (p.pf_employee > 0 OR p.pf_employer > 0) \
+          ORDER BY e.employee_code",
+    )
+    .bind(run_id)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let filename = format!("pf-remittance-{run_id}-{period_start}-{period_end}.csv");
+
+    let mut total_employee = Decimal::ZERO;
+    let mut total_employer = Decimal::ZERO;
+    let mut body =
+        String::from("\u{feff}employee_code,name,employee_amount,employer_amount,total\r\n");
+    for row in &rows {
+        let code: String = row.get("employee_code");
+        let name: String = row.get("name");
+        let employee: Decimal = row.get("pf_employee");
+        let employer: Decimal = row.get("pf_employer");
+        let total = employee + employer;
+        total_employee += employee;
+        total_employer += employer;
+        body.push_str(&format!(
+            "{},{},{},{},{}\r\n",
+            csv_field(&code),
+            csv_field(&name),
+            csv_field(&format_decimal(employee)),
+            csv_field(&format_decimal(employer)),
+            csv_field(&format_decimal(total)),
+        ));
+    }
+    let grand_total = total_employee + total_employer;
+    body.push_str(&format!(
+        "{},{},{},{},{}\r\n",
+        csv_field(""),
+        csv_field(""),
+        csv_field(&format_decimal(total_employee)),
+        csv_field(&format_decimal(total_employer)),
+        csv_field(&format_decimal(grand_total)),
+    ));
+
+    Ok((filename, body))
+}
+
 /// GL journal CSV for an approved payroll run.
 /// Returns `(filename, body)`. Only `approved` runs are exported; anything else
 /// or a run not visible to the tenant yields `NotFound`.
@@ -223,7 +311,8 @@ pub async fn export_gl_csv(
     let run = sqlx::query(
         "SELECT status, period_start, period_end \
          FROM payroll_runs \
-         WHERE id = $1",
+         WHERE id = $1 \
+           AND tenant_id = current_tenant_id()",
     )
     .bind(run_id)
     .fetch_optional(&mut *conn)
@@ -255,6 +344,7 @@ pub async fn export_gl_csv(
          FROM payslips p \
          JOIN employees e ON e.id = p.employee_id \
          WHERE p.payroll_run_id = $2 \
+           AND p.tenant_id = current_tenant_id() \
          GROUP BY e.department \
          ORDER BY department",
     )

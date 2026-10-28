@@ -248,15 +248,26 @@ function RunRow({
             CSV
           </a>
           {run.status === "approved" && (
-            <a
-              className="badge accent"
-              href={`/api/gw/api/v1/payroll/runs/${run.id}/export.gl.csv`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ marginRight: 6 }}
-            >
-              ดาวน์โหลด GL (CSV)
-            </a>
+            <>
+              <a
+                className="badge accent"
+                href={`/api/gw/api/v1/payroll/runs/${run.id}/export.gl.csv`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ marginRight: 6 }}
+              >
+                ดาวน์โหลด GL (CSV)
+              </a>
+              <a
+                className="badge accent"
+                href={`/api/gw/api/v1/payroll/runs/${run.id}/pf-remittance.csv`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ marginRight: 6 }}
+              >
+                ดาวน์โหลด PF (CSV)
+              </a>
+            </>
           )}
           {run.status === "pending_approval" && (
             <button className="btn btn-sm btn-primary" data-testid="approve-run" disabled={busy} onClick={onApprove}>

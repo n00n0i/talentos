@@ -157,6 +157,40 @@ pub async fn export_gl_csv(
     };
     let _ = tx.rollback().await;
 
+    csv_response(filename, body)
+}
+
+/// GET /api/v1/payroll/runs/:id/pf-remittance.csv
+pub async fn export_pf_remittance_csv(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(run_id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "export_report") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
+    let (filename, body) =
+        match talentos_hr_runner::reports::export_pf_remittance_csv(&mut tx, run_id).await {
+            Ok(pair) => pair,
+            Err(talentos_hr_runner::reports::ReportError::NotFound) => {
+                let _ = tx.rollback().await;
+                return not_found();
+            }
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return internal_err_msg(&format!("pf remittance export failed: {e}"));
+            }
+        };
+    let _ = tx.rollback().await;
+
+    csv_response(filename, body)
+}
+
+fn csv_response(filename: String, body: String) -> Response {
     (
         StatusCode::OK,
         [

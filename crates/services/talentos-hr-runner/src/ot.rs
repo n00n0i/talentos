@@ -1,7 +1,8 @@
 //! OT (overtime) self-service requests.
 //!
-//! This slice only authorizes OT; payroll still derives OT from attendance,
-//! and auto-applying approved OT to attendance/payroll is a future slice.
+//! Approved OT requests raise the effective `ot_minutes` of the attendance day
+//! to `max(derived_ot_minutes, approved request minutes)`. Rejection or cancel
+//! restores the derived value when no other approved request exists.
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
@@ -9,6 +10,8 @@ use sqlx::Row;
 use talentos_db::TenantPool;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
+
+use crate::attendance;
 
 const REASON_MAX_CHARS: usize = 500;
 const VALID_STATUSES: &[&str] = &["pending", "approved", "rejected", "cancelled"];
@@ -29,6 +32,8 @@ pub enum OtError {
     InvalidReason,
     #[error("invalid status filter")]
     InvalidStatus,
+    #[error("attendance day is already approved; revoke approval before changing OT")]
+    DayAlreadyApproved,
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -192,7 +197,7 @@ pub async fn cancel_request(
         r#"UPDATE ot_requests
            SET status = 'cancelled', updated_at = now()
            WHERE id = $1 AND tenant_id = $2 AND employee_id = $3 AND status = 'pending'
-           RETURNING status"#,
+           RETURNING status, work_date"#,
     )
     .bind(request_id)
     .bind(tenant_id.0)
@@ -200,7 +205,15 @@ pub async fn cancel_request(
     .fetch_optional(&mut *tx)
     .await?;
 
-    if updated.is_some() {
+    if let Some(row) = updated {
+        let work_date: NaiveDate = row.try_get("work_date")?;
+        attendance::reapply_ot_request(&mut tx, employee_id, work_date)
+            .await
+            .map_err(|e| match e {
+                attendance::AttendanceError::DayAlreadyApproved => OtError::DayAlreadyApproved,
+                attendance::AttendanceError::Db(sqlx_err) => OtError::Db(sqlx_err),
+                _ => unreachable!("reapply_ot_request only returns Db or DayAlreadyApproved"),
+            })?;
         tx.commit().await?;
         return Ok(());
     }
@@ -298,8 +311,8 @@ pub async fn pending_approvals(
 }
 
 /// Approve or reject a pending OT request.
-/// shortcut: approved OT is authorization only; payroll still uses attendance-derived OT,
-/// and auto-apply to attendance/payroll is a future slice.
+/// Approved OT raises the attendance day's effective OT to
+/// `max(derived, approved request minutes)`; days already approved reject changes.
 pub async fn decide_request(
     pool: &TenantPool,
     tenant_id: TenantId,
@@ -313,7 +326,7 @@ pub async fn decide_request(
         r#"UPDATE ot_requests
            SET status = $3, decided_by = $4, decided_at = now(), updated_at = now()
            WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
-           RETURNING status"#,
+           RETURNING status, employee_id, work_date"#,
     )
     .bind(request_id)
     .bind(tenant_id.0)
@@ -323,6 +336,15 @@ pub async fn decide_request(
     .await?;
 
     if let Some(row) = updated {
+        let employee_id: Uuid = row.try_get("employee_id")?;
+        let work_date: NaiveDate = row.try_get("work_date")?;
+        attendance::reapply_ot_request(&mut tx, employee_id, work_date)
+            .await
+            .map_err(|e| match e {
+                attendance::AttendanceError::DayAlreadyApproved => OtError::DayAlreadyApproved,
+                attendance::AttendanceError::Db(sqlx_err) => OtError::Db(sqlx_err),
+                _ => unreachable!("reapply_ot_request only returns Db or DayAlreadyApproved"),
+            })?;
         tx.commit().await?;
         return row.try_get("status").map_err(Into::into);
     }

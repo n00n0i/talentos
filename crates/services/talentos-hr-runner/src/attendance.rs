@@ -77,6 +77,7 @@ pub struct DayView {
     pub late_minutes: i32,
     pub early_leave_minutes: i32,
     pub ot_minutes: i32,
+    pub derived_ot_minutes: i32,
     pub ot_kind: String,
     pub incomplete: bool,
     pub status: String,
@@ -105,6 +106,8 @@ pub enum AttendanceError {
     IncompleteDay,
     #[error("invalid correction: {0}")]
     InvalidCorrection(&'static str),
+    #[error("attendance day is already approved")]
+    DayAlreadyApproved,
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -500,6 +503,11 @@ async fn check_geofence(
     Ok((distance, allowed))
 }
 
+/// Effective OT for payroll: requested OT can raise a day, never add to it.
+pub fn effective_ot(derived_ot_minutes: i32, approved_request_minutes: i32) -> i32 {
+    derived_ot_minutes.max(approved_request_minutes)
+}
+
 /// Haversine distance in metres between two WGS-84 points.
 fn haversine_m(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
     const R: f64 = 6_371_000.0;
@@ -571,6 +579,20 @@ async fn recompute_day(
         OtKind::Holiday => "holiday",
     };
 
+    let derived_ot_minutes = summary.ot_minutes;
+    let approved_ot_minutes: i32 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(minutes), 0)::INT FROM ot_requests
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $1
+              AND work_date = $2
+              AND status = 'approved'"#,
+    )
+    .bind(employee_id)
+    .bind(work_date)
+    .fetch_one(&mut **tx)
+    .await?;
+    let effective_ot_minutes = effective_ot(derived_ot_minutes, approved_ot_minutes);
+
     // Re-opening an approved day withdraws its payroll row until re-approved.
     sqlx::query(
         r#"DELETE FROM attendance_records
@@ -588,13 +610,14 @@ async fn recompute_day(
         r#"INSERT INTO attendance_days
              (tenant_id, employee_id, work_date, shift_id,
               worked_minutes, late_minutes, early_leave_minutes,
-              ot_minutes, ot_kind, incomplete, status, computed_at)
-           VALUES (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,'pending', now())
+              derived_ot_minutes, ot_minutes, ot_kind, incomplete, status, computed_at)
+           VALUES (current_tenant_id(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending', now())
            ON CONFLICT (employee_id, work_date) DO UPDATE SET
                shift_id = EXCLUDED.shift_id,
                worked_minutes = EXCLUDED.worked_minutes,
                late_minutes = EXCLUDED.late_minutes,
                early_leave_minutes = EXCLUDED.early_leave_minutes,
+               derived_ot_minutes = EXCLUDED.derived_ot_minutes,
                ot_minutes = EXCLUDED.ot_minutes,
                ot_kind = EXCLUDED.ot_kind,
                incomplete = EXCLUDED.incomplete,
@@ -611,7 +634,8 @@ async fn recompute_day(
     .bind(summary.worked_minutes)
     .bind(summary.late_minutes)
     .bind(summary.early_leave_minutes)
-    .bind(summary.ot_minutes)
+    .bind(derived_ot_minutes)
+    .bind(effective_ot_minutes)
     .bind(ot_kind_str)
     .bind(summary.incomplete)
     .fetch_one(&mut **tx)
@@ -624,11 +648,82 @@ async fn recompute_day(
         worked_minutes: summary.worked_minutes,
         late_minutes: summary.late_minutes,
         early_leave_minutes: summary.early_leave_minutes,
-        ot_minutes: summary.ot_minutes,
+        ot_minutes: effective_ot_minutes,
+        derived_ot_minutes,
         ot_kind: ot_kind_str.to_string(),
         incomplete: summary.incomplete,
         status: "pending".to_string(),
     })
+}
+
+/// Re-apply approved OT requests to an existing attendance day.
+///
+/// Computes `effective = max(derived_ot_minutes, sum(approved request minutes))`.
+/// If the day is `approved` and the effective value would change, returns
+/// `AttendanceError::DayAlreadyApproved`. If the day is `pending`, updates
+/// `ot_minutes` but leaves status untouched. If no day exists, this is a no-op.
+pub async fn reapply_ot_request(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    employee_id: Uuid,
+    work_date: NaiveDate,
+) -> Result<(), AttendanceError> {
+    let day = sqlx::query(
+        r#"SELECT status, derived_ot_minutes, ot_minutes
+             FROM attendance_days
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $1
+              AND work_date = $2
+           FOR UPDATE"#,
+    )
+    .bind(employee_id)
+    .bind(work_date)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    let Some(day) = day else {
+        return Ok(());
+    };
+
+    let status: String = day.try_get("status")?;
+    let derived_ot_minutes: i32 = day.try_get("derived_ot_minutes")?;
+    let current_ot_minutes: i32 = day.try_get("ot_minutes")?;
+
+    let approved_ot_minutes: i32 = sqlx::query_scalar(
+        r#"SELECT COALESCE(SUM(minutes), 0)::INT FROM ot_requests
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $1
+              AND work_date = $2
+              AND status = 'approved'"#,
+    )
+    .bind(employee_id)
+    .bind(work_date)
+    .fetch_one(&mut **tx)
+    .await?;
+
+    let effective_ot_minutes = effective_ot(derived_ot_minutes, approved_ot_minutes);
+    if effective_ot_minutes == current_ot_minutes {
+        return Ok(());
+    }
+
+    if status == "approved" {
+        return Err(AttendanceError::DayAlreadyApproved);
+    }
+
+    sqlx::query(
+        r#"UPDATE attendance_days
+              SET ot_minutes = $1,
+                  updated_at = now()
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $2
+              AND work_date = $3"#,
+    )
+    .bind(effective_ot_minutes)
+    .bind(employee_id)
+    .bind(work_date)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
 }
 
 /// List attendance days for a tenant in a date range, optionally filtered by
@@ -644,7 +739,7 @@ pub async fn list_days(
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let rows = sqlx::query(
         r#"SELECT id, employee_id, work_date, worked_minutes, late_minutes, early_leave_minutes,
-                  ot_minutes, ot_kind, incomplete, status
+                  derived_ot_minutes, ot_minutes, ot_kind, incomplete, status
              FROM attendance_days
             WHERE tenant_id = current_tenant_id()
               AND work_date BETWEEN $1 AND $2
@@ -689,7 +784,7 @@ pub async fn list_my_days(
 
     let rows = sqlx::query(
         r#"SELECT id, employee_id, work_date, worked_minutes, late_minutes, early_leave_minutes,
-                  ot_minutes, ot_kind, incomplete, status
+                  derived_ot_minutes, ot_minutes, ot_kind, incomplete, status
              FROM attendance_days
             WHERE tenant_id = $1 AND employee_id = $2
               AND work_date BETWEEN $3 AND $4
@@ -1138,6 +1233,7 @@ fn map_day(row: sqlx::postgres::PgRow) -> Result<DayView, sqlx::Error> {
         worked_minutes: row.try_get("worked_minutes")?,
         late_minutes: row.try_get("late_minutes")?,
         early_leave_minutes: row.try_get("early_leave_minutes")?,
+        derived_ot_minutes: row.try_get("derived_ot_minutes")?,
         ot_minutes: row.try_get("ot_minutes")?,
         ot_kind: row.try_get("ot_kind")?,
         incomplete: row.try_get("incomplete")?,
@@ -1199,5 +1295,18 @@ mod tests {
             input(0, 61).validate(),
             Err(AttendanceError::InvalidImport)
         ));
+    }
+}
+
+#[cfg(test)]
+mod effective_ot_tests {
+    use super::effective_ot;
+
+    #[test]
+    fn request_raises_but_never_adds() {
+        assert_eq!(effective_ot(60, 120), 120);
+        assert_eq!(effective_ot(180, 120), 180);
+        assert_eq!(effective_ot(0, 120), 120);
+        assert_eq!(effective_ot(60, 0), 60);
     }
 }

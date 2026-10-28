@@ -156,7 +156,7 @@ Leave approvals can be one step (HR) or a sequential chain
 `manager → hr_admin`, configured in `/settings` (`leave_approval_chain`). The
 chain is snapshotted onto each request; the current step's role decides, and an
 HR admin may override. Rejection at any step is final; intermediate steps send
-no notification. GraphQL leave mutations are disabled — use these REST routes.
+no notification. GraphQL leave mutations are also available for the same request lifecycle.
 
 History is paginated (`limit`/`offset`, default 50, pending first); the page
 loads more with a button instead of silently stopping at 200.

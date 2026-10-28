@@ -4043,6 +4043,7 @@ dependencies = [
  "sqlx",
  "talentos-authz",
  "talentos-db",
+ "talentos-hr-runner",
  "talentos-kernel",
  "tracing",
  "uuid",

@@ -7,6 +7,7 @@ edition.workspace = true
 talentos-kernel = { path = "../../core/kernel" }
 talentos-db = { path = "../../infra/db" }
 talentos-authz = { path = "../../core/authz" }
+talentos-hr-runner = { path = "../../services/talentos-hr-runner" }
 async-graphql = { version = "7", features = ["chrono", "uuid"] }
 async-graphql-axum = "7"
 axum = { workspace = true }

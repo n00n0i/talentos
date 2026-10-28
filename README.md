@@ -233,6 +233,13 @@ are idempotent per run and the loan closes at zero. Employees see their loan at
 `GET /api/v1/me/loans`; the payslip shows the deduction line. There is no
 interest, early payoff, or reversal of past installments.
 
+## Provident fund
+
+Membership is the employee `pf_member` toggle (5% employee/employer in the DAG).
+An approved payroll run exports `GET /api/v1/payroll/runs/:id/pf-remittance.csv`
+with per-employee and employer amounts plus totals, deterministic and
+CSV-injection safe. `/payroll` links it next to the GL export.
+
 ## Reports and GL
 
 `/reports` (HR/payroll) shows headcount by department, payroll cost by

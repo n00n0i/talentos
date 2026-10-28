@@ -735,9 +735,10 @@ async fn intermediate_approval_does_not_change_balance() {
     };
     assert_eq!(used, dec!(2));
 
-    let requests = list_requests(&pool, tenant, entities[2].1, None)
+    let requests = list_requests(&pool, tenant, entities[2].1, None, 50, 0)
         .await
-        .expect("list requests");
+        .expect("list requests")
+        .requests;
     assert_eq!(requests[0].status, "pending");
 
     cleanup(&raw, tenant_id).await;

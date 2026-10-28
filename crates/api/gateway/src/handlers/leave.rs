@@ -38,7 +38,20 @@ pub struct CreateLeaveBody {
 pub struct EmployeeQuery {
     pub employee_id: Option<Uuid>,
     pub year: Option<i32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MeLeaveQuery {
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LeaveListQuery {
+    pub employee_id: Option<Uuid>,
     pub status: Option<String>,
+    pub limit: Option<i64>,
+    pub offset: Option<i64>,
 }
 
 /// Employees may only submit for their own linked employee; submitting for
@@ -115,11 +128,11 @@ pub async fn balances(
     }
 }
 
-/// GET /api/v1/leave/requests?employee_id=&status=
+/// GET /api/v1/leave/requests?employee_id=&status=&limit=&offset=
 pub async fn list(
     State(state): State<AppState>,
     Authed(ctx): Authed,
-    Query(q): Query<EmployeeQuery>,
+    Query(q): Query<LeaveListQuery>,
 ) -> Response {
     if let Err(forbidden) = require(&ctx, "leave_request", "view_team") {
         return forbidden;
@@ -130,22 +143,36 @@ pub async fn list(
             Ok(None) => return not_found(),
             Err(e) => return internal_err(&e),
         };
+    let (limit, offset) = match parse_pagination(q.limit, q.offset) {
+        Ok(v) => v,
+        Err(msg) => return bad_request(&msg),
+    };
 
     match talentos_hr_runner::list_requests(
         &state.pool,
         ctx.tenant_id,
         employee_id,
         q.status.as_deref(),
+        limit,
+        offset,
     )
     .await
     {
-        Ok(list) => (StatusCode::OK, Json(list)).into_response(),
+        Ok(result) => (
+            StatusCode::OK,
+            Json(json!({ "requests": result.requests, "has_more": result.has_more })),
+        )
+            .into_response(),
         Err(e) => map_leave_error(e),
     }
 }
 
-/// GET /api/v1/me/leave
-pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+/// GET /api/v1/me/leave?limit=&offset=
+pub async fn me_leave(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Query(q): Query<MeLeaveQuery>,
+) -> Response {
     if let Err(forbidden) = require(&ctx, "leave_request", "view_self") {
         return forbidden;
     }
@@ -156,12 +183,18 @@ pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Res
             Ok(None) => {
                 return (
                     StatusCode::OK,
-                    Json(json!({ "employee_linked": false, "balances": [], "requests": [] })),
+                    Json(
+                        json!({ "employee_linked": false, "balances": [], "requests": [], "has_more": false }),
+                    ),
                 )
                     .into_response()
             }
             Err(e) => return internal_err(&e.to_string()),
         };
+    let (limit, offset) = match parse_pagination(q.limit, q.offset) {
+        Ok(v) => v,
+        Err(msg) => return bad_request(&msg),
+    };
 
     // Thai business year (UTC+7) without a panic-prone offset conversion.
     let year = (chrono::Utc::now() + chrono::Duration::hours(7)).year();
@@ -176,15 +209,17 @@ pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Res
         Ok(list) => list,
         Err(e) => return map_leave_error(e),
     };
-    let requests = match talentos_hr_runner::list_requests(
+    let result = match talentos_hr_runner::list_requests(
         &state.pool,
         ctx.tenant_id,
         employee_id,
         None,
+        limit,
+        offset,
     )
     .await
     {
-        Ok(list) => list,
+        Ok(result) => result,
         Err(e) => return map_leave_error(e),
     };
 
@@ -193,7 +228,8 @@ pub async fn me_leave(State(state): State<AppState>, Authed(ctx): Authed) -> Res
         Json(json!({
             "employee_linked": true,
             "balances": balances,
-            "requests": requests,
+            "requests": result.requests,
+            "has_more": result.has_more,
         })),
     )
         .into_response()
@@ -438,6 +474,26 @@ pub async fn decide(
             .into_response(),
         Err(e) => map_leave_error(e),
     }
+}
+
+fn parse_pagination(limit: Option<i64>, offset: Option<i64>) -> Result<(i64, i64), String> {
+    let limit = limit.unwrap_or(50);
+    let offset = offset.unwrap_or(0);
+    if !(1..=100).contains(&limit) {
+        return Err("limit must be between 1 and 100".into());
+    }
+    if offset < 0 {
+        return Err("offset must be >= 0".into());
+    }
+    Ok((limit, offset))
+}
+
+fn bad_request(message: &str) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(envelope("invalid_request", message)),
+    )
+        .into_response()
 }
 
 fn envelope(code: &str, message: &str) -> ErrorResponse {

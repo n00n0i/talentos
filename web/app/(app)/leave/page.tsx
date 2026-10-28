@@ -30,6 +30,13 @@ type Pending = LeaveRequest & {
 };
 
 type BalanceImportRow = Record<string, string>;
+type MeLeaveResponse = {
+  employee_linked: boolean;
+  balances: Balance[];
+  requests: LeaveRequest[];
+  has_more: boolean;
+};
+
 type BalanceImportResult = {
   dry_run: boolean;
   total: number;
@@ -165,6 +172,7 @@ export default function LeavePage() {
   const [linked, setLinked] = useState(true);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [requests, setRequests] = useState<LeaveRequest[] | null>(null);
+  const [hasMore, setHasMore] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
   const [leaveType, setLeaveType] = useState("annual");
   const [start, setStart] = useState("");
@@ -182,13 +190,14 @@ export default function LeavePage() {
     const me = await gw<Me>("api/v1/auth/me");
     const hr = me.permissions.includes("leave_request.view_team");
     const [mine, inbox] = await Promise.all([
-      gw<{ employee_linked: boolean; balances: Balance[]; requests: LeaveRequest[] }>("api/v1/me/leave"),
+      gw<MeLeaveResponse>("api/v1/me/leave?limit=50&offset=0"),
       hr ? gw<{ requests: Pending[] }>("api/v1/leave/approvals") : Promise.resolve(null),
     ]);
     setIsHr(hr);
     setLinked(mine.employee_linked);
     setBalances(mine.balances);
     setRequests(mine.requests);
+    setHasMore(mine.has_more);
     setPending(inbox?.requests ?? []);
   }, []);
 
@@ -258,6 +267,21 @@ export default function LeavePage() {
     } catch (e) {
       handleApiError(e, setError);
       return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function loadMore() {
+    if (requests === null || !hasMore) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await gw<MeLeaveResponse>(`api/v1/me/leave?limit=50&offset=${requests.length}`);
+      setRequests((prev) => [...(prev ?? []), ...r.requests]);
+      setHasMore(r.has_more);
+    } catch (err) {
+      handleApiError(err, setError);
     } finally {
       setBusy(false);
     }
@@ -558,6 +582,18 @@ export default function LeavePage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            )}
+            {hasMore && (
+              <div style={{ padding: 12, textAlign: "center" }}>
+                <button
+                  className="btn"
+                  data-testid="load-more-leave"
+                  onClick={loadMore}
+                  disabled={busy}
+                >
+                  โหลดเพิ่ม
+                </button>
               </div>
             )}
           </div>

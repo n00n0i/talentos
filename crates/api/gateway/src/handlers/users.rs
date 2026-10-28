@@ -870,6 +870,17 @@ pub async fn reset_2fa(
         return internal_err(&e.to_string());
     }
 
+    if let Err(e) =
+        sqlx::query("DELETE FROM totp_recovery_codes WHERE user_id = $1 AND tenant_id = $2")
+            .bind(user_id)
+            .bind(ctx.tenant_id.0)
+            .execute(&mut *tx)
+            .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
+
     if let Err(e) = tx.commit().await {
         return internal_err(&e.to_string());
     }

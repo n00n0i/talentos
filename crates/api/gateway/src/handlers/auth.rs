@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use axum::extract::connect_info::ConnectInfo;
 use axum::{
-    extract::State,
-    http::StatusCode,
+    extract::{Path, State},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -12,11 +12,12 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::Error as SqlxError;
+use uuid::Uuid;
 
-use talentos_authz::{jwt, password, rbac, totp, AuthError};
+use talentos_authz::{jwt, password, rbac, recovery_codes, totp, AuthError};
 use talentos_kernel::{EntityId, TenantContext, TenantId, UserId};
 
-use crate::dto::requests::{LoginRequest, RefreshRequest};
+use crate::dto::requests::{LoginRequest, RecoveryTotpBody, RefreshRequest};
 use crate::dto::responses::{ErrorResponse, FieldError, MeResponse, TokenResponse};
 use crate::middleware::auth::Authed;
 use crate::ratelimit;
@@ -32,6 +33,7 @@ const EMAIL_MAX: u32 = 5;
 pub async fn login(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(body): Json<LoginRequest>,
 ) -> Response {
     let errs = body.validate();
@@ -58,6 +60,9 @@ pub async fn login(
 
     let email = body.email.to_lowercase();
     let ip = addr.ip();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
     let ip_key = format!("rl:login:ip:{ip}");
     let email_key = format!("rl:login:email:{}:{}", body.tenant_slug, email);
 
@@ -94,7 +99,7 @@ pub async fn login(
             ratelimit::reset(&state.redis, &[ip_key.clone(), email_key.clone()]).await;
             // M1: update last_login_at and insert audit_log row on success.
             record_login_success(&state, &ctx, &addr).await;
-            match issue_tokens(&state, &ctx).await {
+            match issue_tokens(&state, &ctx, Some(addr.ip()), user_agent).await {
                 Ok(resp) => (StatusCode::OK, Json(resp)).into_response(),
                 Err(e) => auth_err_to_response(e),
             }
@@ -173,7 +178,11 @@ async fn authenticate(
 
         match totp_code {
             Some(code) => {
-                if !totp::verify(&secret, code, now_unix()) {
+                if totp::verify(&secret, code, now_unix()) {
+                    // TOTP accepted.
+                } else if verify_recovery_code_tx(state, row.tenant_id, row.user_id, code).await? {
+                    // Recovery code accepted and marked used.
+                } else {
                     return Err(AuthError::InvalidTotp);
                 }
             }
@@ -213,10 +222,48 @@ async fn record_login_success(state: &AppState, ctx: &TenantContext, addr: &Sock
     .map_err(|e| tracing::warn!(error = %e, "failed to write audit_log for login"));
 }
 
-async fn issue_tokens(state: &AppState, ctx: &TenantContext) -> Result<TokenResponse, AuthError> {
+async fn verify_recovery_code_tx(
+    state: &AppState,
+    tenant_id: Uuid,
+    user_id: Uuid,
+    code: &str,
+) -> Result<bool, AuthError> {
+    let normalized = recovery_codes::normalize(code);
+    if normalized.len() != 8 {
+        return Ok(false);
+    }
+    let hash = recovery_codes::hash_code(&normalized);
+    let mut tx = state
+        .pool
+        .begin_tenant(TenantId(tenant_id))
+        .await
+        .map_err(internal_db_err)?;
+    let updated = sqlx::query!(
+        "UPDATE totp_recovery_codes SET used_at = now() \
+         WHERE user_id = $1 AND tenant_id = $2 AND code_hash = $3 AND used_at IS NULL \
+         RETURNING id",
+        user_id,
+        tenant_id,
+        hash
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(internal_db_err)?;
+    if updated.is_some() {
+        tx.commit().await.map_err(internal_db_err)?;
+    }
+    Ok(updated.is_some())
+}
+
+async fn issue_tokens(
+    state: &AppState,
+    ctx: &TenantContext,
+    ip: Option<std::net::IpAddr>,
+    user_agent: Option<&str>,
+) -> Result<TokenResponse, AuthError> {
     let access = jwt::issue_access_token(ctx, &state.jwt_secret, state.access_ttl_secs)?;
     let raw_refresh = jwt::generate_refresh_token();
-    store_refresh_token(state, ctx, &raw_refresh).await?;
+    store_refresh_token(state, ctx, &raw_refresh, ip, user_agent).await?;
     Ok(TokenResponse {
         access_token: access,
         refresh_token: raw_refresh,
@@ -235,16 +282,21 @@ async fn store_refresh_token(
     state: &AppState,
     ctx: &TenantContext,
     raw: &str,
+    ip: Option<std::net::IpAddr>,
+    user_agent: Option<&str>,
 ) -> Result<(), AuthError> {
     let hashed = hash_refresh(raw);
+    let ip_net = ip.map(sqlx::types::ipnetwork::IpNetwork::from);
     sqlx::query!(
-        r#"INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at)
-           VALUES ($1, $2, $3, $4, now() + make_interval(days => $5))"#,
+        r#"INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at, ip_address, user_agent)
+           VALUES ($1, $2, $3, $4, now() + make_interval(days => $5), $6, $7)"#,
         hashed,
         ctx.user_id.0,
         ctx.tenant_id.0,
         ctx.entity_id.map(|e| e.0),
-        state.refresh_ttl_days as i32
+        state.refresh_ttl_days as i32,
+        ip_net,
+        user_agent
     )
     .execute(&state.auth_pool)
     .await
@@ -257,10 +309,14 @@ async fn store_refresh_token(
 pub async fn refresh(
     State(state): State<AppState>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Json(body): Json<RefreshRequest>,
 ) -> Response {
     // M6: apply IP-based rate limiting to refresh endpoint too.
     let ip = addr.ip();
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
     let rl_key = format!("rl:refresh:ip:{ip}");
     if let Err(retry_after) =
         ratelimit::check(&state.redis, &rl_key, 30, Duration::from_secs(60)).await
@@ -339,14 +395,15 @@ pub async fn refresh(
     let new_hashed = hash_refresh(&raw_new);
 
     // Atomic rotation: revoke old + insert successor in ONE CTE.
+    let ip_net = Some(sqlx::types::ipnetwork::IpNetwork::from(ip));
     let tx_result = sqlx::query!(
         r#"WITH rotated AS (
                UPDATE refresh_tokens SET revoked_at = now()
                WHERE token_hash = $1 AND revoked_at IS NULL
                RETURNING 1
            )
-           INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at, parent_hash)
-           SELECT $2, $3, $4, $5, now() + make_interval(days => $6), $1
+           INSERT INTO refresh_tokens (token_hash, user_id, tenant_id, entity_id, expires_at, parent_hash, ip_address, user_agent)
+           SELECT $2, $3, $4, $5, now() + make_interval(days => $6), $1, $7, $8
            FROM rotated
            RETURNING id"#,
         hashed,
@@ -355,6 +412,8 @@ pub async fn refresh(
         ctx.tenant_id.0,
         ctx.entity_id.map(|e| e.0),
         state.refresh_ttl_days as i32,
+        ip_net,
+        user_agent
     )
     .fetch_optional(&state.auth_pool)
     .await;
@@ -647,11 +706,146 @@ pub async fn enable_2fa(
         return internal_err_to_response(e);
     }
 
+    // Generate recovery codes in the same transaction so enable is atomic.
+    let codes = match rotate_recovery_codes_tx(&mut tx, ctx.tenant_id, ctx.user_id).await {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err_to_response(e);
+        }
+    };
+
     if let Err(e) = tx.commit().await {
         return internal_err_to_response(e);
     }
 
-    (StatusCode::OK, Json(json!({ "totp_enabled": true }))).into_response()
+    (
+        StatusCode::OK,
+        Json(json!({
+            "totp_enabled": true,
+            "recovery_codes": codes,
+        })),
+    )
+        .into_response()
+}
+
+/// Rotate recovery codes: delete old ones and insert 10 fresh hashes.
+/// Returns the plaintext codes; this is the only time they are visible.
+async fn rotate_recovery_codes_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: TenantId,
+    user_id: UserId,
+) -> Result<Vec<String>, sqlx::Error> {
+    sqlx::query!(
+        "DELETE FROM totp_recovery_codes WHERE user_id = $1 AND tenant_id = $2",
+        user_id.0,
+        tenant_id.0
+    )
+    .execute(&mut **tx)
+    .await?;
+
+    let codes = recovery_codes::generate_codes(10);
+    for code in &codes {
+        let hash = recovery_codes::hash_code(code);
+        sqlx::query!(
+            "INSERT INTO totp_recovery_codes (tenant_id, user_id, code_hash) VALUES ($1, $2, $3)",
+            tenant_id.0,
+            user_id.0,
+            hash
+        )
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(codes)
+}
+
+/// POST /api/v1/auth/2fa/recovery-codes — regenerate recovery codes after TOTP check.
+pub async fn regenerate_recovery_codes(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<RecoveryTotpBody>,
+) -> Response {
+    if body.code.len() != 6 || !body.code.chars().all(|c| c.is_ascii_digit()) {
+        return bad_request("code must be 6 digits");
+    }
+    if let Err(retry_after) = ratelimit::check(
+        &state.redis,
+        &format!("rl:2fa:{}", ctx.user_id.0),
+        10,
+        Duration::from_secs(300),
+    )
+    .await
+    {
+        return too_many_2fa_attempts(retry_after);
+    }
+
+    let cipher = match pii_cipher(&state) {
+        Ok(c) => c,
+        Err(e) => return auth_err_to_response(e),
+    };
+
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
+
+    let row = match sqlx::query!(
+        "SELECT totp_secret, totp_enabled FROM users WHERE id = $1 AND tenant_id = $2 AND is_active FOR UPDATE",
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err_to_response(e);
+        }
+    };
+
+    let Some(row) = row else {
+        let _ = tx.rollback().await;
+        return auth_err_to_response(AuthError::AccountDisabled);
+    };
+
+    if !row.totp_enabled {
+        let _ = tx.rollback().await;
+        return bad_request("2FA is not enabled");
+    }
+
+    let Some(secret_encrypted) = row.totp_secret else {
+        let _ = tx.rollback().await;
+        return bad_request("2FA is not set up");
+    };
+
+    let secret_plain = match cipher.decrypt(&secret_encrypted) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to decrypt totp_secret");
+            let _ = tx.rollback().await;
+            return auth_err_to_response(AuthError::Internal("decryption failed".into()));
+        }
+    };
+
+    if !totp::verify(&secret_plain, &body.code, now_unix()) {
+        let _ = tx.rollback().await;
+        return bad_request("invalid TOTP code");
+    }
+
+    let codes = match rotate_recovery_codes_tx(&mut tx, ctx.tenant_id, ctx.user_id).await {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err_to_response(e);
+        }
+    };
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
+    (StatusCode::OK, Json(json!({ "codes": codes }))).into_response()
 }
 
 /// POST /api/v1/auth/2fa/disable
@@ -764,11 +958,134 @@ pub async fn disable_2fa(
         return internal_err_to_response(e);
     }
 
+    if let Err(e) =
+        sqlx::query("DELETE FROM totp_recovery_codes WHERE user_id = $1 AND tenant_id = $2")
+            .bind(ctx.user_id.0)
+            .bind(ctx.tenant_id.0)
+            .execute(&mut *tx)
+            .await
+    {
+        let _ = tx.rollback().await;
+        return internal_err_to_response(e);
+    }
+
     if let Err(e) = tx.commit().await {
         return internal_err_to_response(e);
     }
 
     (StatusCode::OK, Json(json!({ "totp_enabled": false }))).into_response()
+}
+
+/// GET /api/v1/auth/sessions — caller's active refresh-token sessions.
+pub async fn list_sessions(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
+    let rows = match sqlx::query!(
+        r#"SELECT id, created_at, expires_at, ip_address, user_agent
+           FROM refresh_tokens
+           WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL AND expires_at > now()
+           ORDER BY created_at DESC"#,
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .fetch_all(&mut *tx)
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => return internal_err_to_response(e),
+    };
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
+    let sessions: Vec<_> = rows
+        .into_iter()
+        .map(|r| {
+            json!({
+                "id": r.id,
+                "created_at": r.created_at.to_rfc3339(),
+                "expires_at": r.expires_at.to_rfc3339(),
+                "ip_address": r.ip_address.map(|ip| ip.to_string()),
+                "user_agent": r.user_agent,
+            })
+        })
+        .collect();
+
+    (StatusCode::OK, Json(json!({ "sessions": sessions }))).into_response()
+}
+
+/// DELETE /api/v1/auth/sessions/:id — revoke one of the caller's own sessions.
+pub async fn revoke_session(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(session_id): Path<i64>,
+) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
+    let done = match sqlx::query!(
+        "UPDATE refresh_tokens SET revoked_at = now() \
+         WHERE id = $1 AND user_id = $2 AND tenant_id = $3 AND revoked_at IS NULL",
+        session_id,
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .execute(&mut *tx)
+    .await
+    {
+        Ok(r) => r.rows_affected(),
+        Err(e) => return internal_err_to_response(e),
+    };
+
+    if done == 0 {
+        let _ = tx.rollback().await;
+        return (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "not_found".into(),
+                message: "session not found".into(),
+                details: vec![],
+                request_id: uuid::Uuid::new_v4().to_string(),
+                retry_after_seconds: None,
+            }),
+        )
+            .into_response();
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
+    StatusCode::OK.into_response()
+}
+
+/// POST /api/v1/auth/sessions/revoke-all — revoke all of the caller's sessions.
+pub async fn revoke_all_sessions(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err_to_response(e),
+    };
+    if let Err(e) = sqlx::query!(
+        "UPDATE refresh_tokens SET revoked_at = now() \
+         WHERE user_id = $1 AND tenant_id = $2 AND revoked_at IS NULL",
+        ctx.user_id.0,
+        ctx.tenant_id.0
+    )
+    .execute(&mut *tx)
+    .await
+    {
+        return internal_err_to_response(e);
+    }
+
+    if let Err(e) = tx.commit().await {
+        return internal_err_to_response(e);
+    }
+
+    StatusCode::OK.into_response()
 }
 
 fn pii_cipher(state: &AppState) -> Result<&talentos_db::pii::PiiCipher, AuthError> {

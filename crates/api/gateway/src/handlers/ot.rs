@@ -201,6 +201,9 @@ fn map_ot_error(e: talentos_hr_runner::OtError) -> Response {
         talentos_hr_runner::OtError::DuplicateDate => {
             conflict("a request already exists for this work date")
         }
+        talentos_hr_runner::OtError::DayAlreadyApproved => {
+            conflict("attendance day is already approved; revoke approval before changing OT")
+        }
         talentos_hr_runner::OtError::InvalidMinutes
         | talentos_hr_runner::OtError::InvalidReason
         | talentos_hr_runner::OtError::InvalidStatus => unprocessable(&e.to_string()),

@@ -14,6 +14,7 @@ type Day = {
   late_minutes: number;
   early_leave_minutes: number;
   ot_minutes: number;
+  derived_ot_minutes: number;
   ot_kind: string;
   incomplete: boolean;
   status: string;
@@ -219,7 +220,12 @@ export default function AttendancePage() {
                       <td className="num">{hm(d.worked_minutes)}</td>
                       <td className="num">{d.late_minutes}</td>
                       <td className="num">{d.early_leave_minutes}</td>
-                      <td className="num">{hm(d.ot_minutes)}</td>
+                      <td className="num">
+                        {hm(d.ot_minutes)}
+                        {d.ot_minutes > d.derived_ot_minutes && (
+                          <span className="hint"> · OT ตามคำขอ</span>
+                        )}
+                      </td>
                       <td>{d.ot_minutes > 0 ? (OT_KIND[d.ot_kind] ?? d.ot_kind) : "—"}</td>
                       <td>
                         <span className={`badge ${st.tone}`}>{st.label}</span>

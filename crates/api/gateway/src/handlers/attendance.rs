@@ -613,6 +613,7 @@ pub(crate) fn map_attendance_error(e: AttendanceError) -> Response {
         | AttendanceError::NoGeofence
         | AttendanceError::EmployeeNotLinked => not_found_message(&e.to_string()),
         AttendanceError::OutsideGeofence { .. } => bad_request(&e.to_string()),
+        AttendanceError::DayAlreadyApproved => conflict(&e.to_string()),
         AttendanceError::Rule(_) | AttendanceError::Db(_) => internal_err(&e.to_string()),
     }
 }
@@ -799,6 +800,10 @@ fn not_found_message(message: &str) -> Response {
 
 fn unprocessable(message: &str) -> Response {
     error_response(StatusCode::UNPROCESSABLE_ENTITY, message)
+}
+
+fn conflict(message: &str) -> Response {
+    error_response(StatusCode::CONFLICT, message)
 }
 
 fn internal_err(message: &str) -> Response {

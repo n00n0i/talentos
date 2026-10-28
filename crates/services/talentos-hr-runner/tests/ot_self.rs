@@ -3,11 +3,11 @@
 //! Skips when DATABASE_URL is unset so `cargo test` passes offline.
 
 use chrono::NaiveDate;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
 use talentos_hr_runner::ot::{
     cancel_request, create_request, decide_request, employee_of_user, list_requests,
-    pending_approvals, tenant_requests, OtInput,
+    pending_approvals, tenant_requests, OtError, OtInput,
 };
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -605,6 +605,300 @@ async fn tenant_requests_clamps_limit_and_rejects_bad_status() {
         err,
         talentos_hr_runner::ot::OtError::InvalidStatus
     ));
+
+    cleanup(&raw, tenant_id).await;
+}
+
+async fn seed_attendance_day(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    employee_id: Uuid,
+    work_date: NaiveDate,
+    derived_ot_minutes: i32,
+    status: &str,
+) {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        r#"INSERT INTO attendance_days
+             (tenant_id, employee_id, work_date, shift_id,
+              worked_minutes, late_minutes, early_leave_minutes,
+              derived_ot_minutes, ot_minutes, ot_kind, incomplete, status)
+           VALUES ($1, $2, $3, NULL, 480, 0, 0, $4, $4, 'weekday', false, $5)
+           ON CONFLICT (employee_id, work_date) DO UPDATE SET
+               derived_ot_minutes = EXCLUDED.derived_ot_minutes,
+               ot_minutes = EXCLUDED.ot_minutes,
+               status = EXCLUDED.status,
+               approved_at = CASE WHEN EXCLUDED.status = 'approved' THEN now() ELSE NULL END,
+               updated_at = now()"#,
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .bind(work_date)
+    .bind(derived_ot_minutes)
+    .bind(status)
+    .execute(&mut *tx)
+    .await
+    .expect("upsert day");
+    tx.commit().await.expect("commit day");
+}
+
+async fn day_ot_minutes(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    employee_id: Uuid,
+    work_date: NaiveDate,
+) -> Option<(i32, i32, String)> {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query(
+        r#"SELECT derived_ot_minutes, ot_minutes, status
+             FROM attendance_days
+            WHERE tenant_id = $1 AND employee_id = $2 AND work_date = $3"#,
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .bind(work_date)
+    .fetch_optional(&mut *tx)
+    .await
+    .expect("fetch day");
+    let _ = tx.rollback().await;
+    row.map(|r| {
+        (
+            r.get::<i32, _>("derived_ot_minutes"),
+            r.get::<i32, _>("ot_minutes"),
+            r.get::<String, _>("status"),
+        )
+    })
+}
+
+#[tokio::test]
+async fn approved_request_raises_pending_day_ot() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+
+    let requester = entities[0].1;
+    let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+    let requester_user = user_id_of(&raw, tenant_id, requester).await;
+
+    seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "pending").await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester_user,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 120,
+            reason: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    let status = decide_request(&pool, tenant, approver, req.id, true)
+        .await
+        .expect("approve");
+    assert_eq!(status, "approved");
+
+    let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
+        .await
+        .expect("day exists");
+    assert_eq!(derived, 60);
+    assert_eq!(effective, 120);
+    assert_eq!(status, "pending");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn rejected_request_keeps_pending_day_at_derived() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+
+    let requester = entities[0].1;
+    let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+    let requester_user = user_id_of(&raw, tenant_id, requester).await;
+
+    seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "pending").await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester_user,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 120,
+            reason: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    let status = decide_request(&pool, tenant, approver, req.id, false)
+        .await
+        .expect("reject");
+    assert_eq!(status, "rejected");
+
+    let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
+        .await
+        .expect("day exists");
+    assert_eq!(derived, 60);
+    assert_eq!(effective, 60);
+    assert_eq!(status, "pending");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn cancelled_request_keeps_pending_day_at_derived() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+
+    let requester = entities[0].1;
+    let requester_user = user_id_of(&raw, tenant_id, requester).await;
+
+    seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "pending").await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester_user,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 120,
+            reason: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    cancel_request(&pool, tenant, requester_user, req.id)
+        .await
+        .expect("cancel");
+
+    let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
+        .await
+        .expect("day exists");
+    assert_eq!(derived, 60);
+    assert_eq!(effective, 60);
+    assert_eq!(status, "pending");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn approved_day_blocks_request_that_would_raise_ot() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+
+    let requester = entities[0].1;
+    let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+    let requester_user = user_id_of(&raw, tenant_id, requester).await;
+
+    seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "approved").await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester_user,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 120,
+            reason: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    let err = decide_request(&pool, tenant, approver, req.id, true)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, OtError::DayAlreadyApproved));
+
+    let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
+        .await
+        .expect("day exists");
+    assert_eq!(derived, 60);
+    assert_eq!(effective, 60);
+    assert_eq!(status, "approved");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn request_not_exceeding_derived_is_no_op_on_approved_day() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let tenant = TenantId(tenant_id);
+
+    let requester = entities[0].1;
+    let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+    let requester_user = user_id_of(&raw, tenant_id, requester).await;
+
+    seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "approved").await;
+
+    let req = create_request(
+        &pool,
+        tenant,
+        requester_user,
+        OtInput {
+            work_date: d(2026, 10, 5),
+            minutes: 30,
+            reason: None,
+        },
+    )
+    .await
+    .expect("create request");
+
+    let status = decide_request(&pool, tenant, approver, req.id, true)
+        .await
+        .expect("approve no-op");
+    assert_eq!(status, "approved");
+
+    let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
+        .await
+        .expect("day exists");
+    assert_eq!(derived, 60);
+    assert_eq!(effective, 60);
+    assert_eq!(status, "approved");
 
     cleanup(&raw, tenant_id).await;
 }

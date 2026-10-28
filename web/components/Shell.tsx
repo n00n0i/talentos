@@ -69,13 +69,17 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const isAdmin = me?.roles.includes("hr_admin") ?? false;
   const canHr = me?.permissions.includes("employee.read_all") ?? true;
+  const canReports = me?.roles.some((r) => ["hr_admin", "payroll_manager"].includes(r)) ?? false;
   const displayName = me?.full_name_th || me?.email || "TalentOS";
   const roleLabel = me?.roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ") || "";
+  const baseNav = canReports
+    ? [...NAV, { href: "/reports", label: "รายงาน", icon: "file" as IconName }]
+    : NAV;
   const items = !me
-    ? NAV
+    ? baseNav
     : canHr
-      ? [...NAV, ...(isAdmin ? ADMIN_NAV : [])]
-      : NAV.filter((i) => i.href === "/clock" || i.href === "/leave" || i.href === "/ot" || i.href === "/me/payslips");
+      ? [...baseNav, ...(isAdmin ? ADMIN_NAV : [])]
+      : baseNav.filter((i) => i.href === "/clock" || i.href === "/leave" || i.href === "/ot" || i.href === "/me/payslips");
 
   return (
     <div className="shell">

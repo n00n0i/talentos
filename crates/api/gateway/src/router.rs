@@ -8,7 +8,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, attendance, audit, auth, employees, graphql, health, leave, mcp, me, memory, ot, payroll,
-    plugins, settings, users,
+    plugins, reports, settings, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -95,6 +95,13 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/payroll/runs/:id/export.csv",
             get(payroll::export_payroll_csv),
         )
+        .route(
+            "/api/v1/payroll/runs/:id/export.gl.csv",
+            get(reports::export_gl_csv),
+        )
+        .route("/api/v1/reports/headcount", get(reports::headcount))
+        .route("/api/v1/reports/payroll-cost", get(reports::payroll_cost))
+        .route("/api/v1/reports/ot-trend", get(reports::ot_trend))
         .route(
             "/api/v1/leave/requests",
             get(leave::list).post(leave::create),

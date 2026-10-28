@@ -492,6 +492,19 @@ test("HR opens reports and sees headcount totals", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("HR creates a loan for an employee", async ({ page }) => {
+  await login(page);
+  await page.goto("/loans");
+  await page.getByTestId("loan-employee").selectOption({ label: "E2E001 · สมชาย ทดสอบ" });
+  await page.getByTestId("loan-principal").fill("10000");
+  await page.getByTestId("loan-installment").fill("1000");
+  await page.getByTestId("loan-start").fill("2026-12-01");
+  await page.getByTestId("create-loan").click();
+  await expect(page.getByText("สร้างเงินกู้แล้ว")).toBeVisible();
+  const row = page.getByTestId("loan-row").filter({ hasText: "E2E001" });
+  await expect(row).toContainText("กำลังผ่อน");
+});
+
 test("HR imports opening leave balance and employee sees quota", async ({ page }) => {
   async function loginAs(email: string, password: string) {
     await page.getByLabel("ออกจากระบบ").click();

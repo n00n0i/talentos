@@ -75,7 +75,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const baseNav = canReports
     ? [
         ...NAV,
-        { href: "/loans", label: "เงินกู้", icon: "wallet" as IconName },
+        ...(isAdmin
+          ? [{ href: "/loans", label: "เงินกู้", icon: "wallet" as IconName }]
+          : []),
         { href: "/reports", label: "รายงาน", icon: "file" as IconName },
       ]
     : NAV;

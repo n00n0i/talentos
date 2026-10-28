@@ -29,7 +29,7 @@ punch/correct/approve; the rest seed approved records directly), attendance 30
 self-service 14 (me/leave, notification outbox, cancel, approvals, balance debit/restore, multi-level chain, legacy
 pending isolation, RBAC; service-level DB + handler-helper units — cancel/reject
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
-purge, stats), reports 7 (headcount, cost, OT trend, balanced/deterministic GL), leave balances 6 (dry-run, upsert, duplicates, bounds), leave approvals 12 (default one-step, manager→HR, role denial, override, skip, snapshot), notify 1 (payslip recipients and rendered body), OT self-service 13
+purge, stats), reports 8 (headcount, cost, OT trend, balanced/deterministic GL), leave balances 6 (dry-run, upsert, duplicates, bounds), leave approvals 12 (default one-step, manager→HR, role denial, override, skip, snapshot), notify 1 (payslip recipients and rendered body), OT self-service 13
 (own create/list/cancel, duplicates, decisions, inbox, approved history, reason/minute bounds), wasm-host 6 (real guest module: sandbox, capability refusal,
 tenant scoping). Total: 276 passed, 1 ignored (`load.rs`).
 

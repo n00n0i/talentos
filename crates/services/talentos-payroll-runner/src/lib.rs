@@ -465,7 +465,8 @@ async fn load_active_loans(
            WHERE tenant_id = $1
              AND employee_id = ANY($2)
              AND status = 'active'
-             AND start_date <= $3"#,
+             AND start_date <= $3
+           FOR UPDATE"#,
     )
     .bind(tenant_id)
     .bind(&ids)

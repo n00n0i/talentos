@@ -66,6 +66,31 @@ struct ActiveLoan {
     amount: Decimal,
 }
 
+/// Approved expense claims selected for this run, grouped by employee.
+#[derive(Debug, Default, Clone)]
+struct ApprovedClaims {
+    /// Total reimbursement amount per employee.
+    amounts: HashMap<Uuid, Decimal>,
+    /// Claim IDs per employee, used to mark them paid after a successful payslip.
+    claim_ids: HashMap<Uuid, Vec<Uuid>>,
+}
+
+impl ApprovedClaims {
+    fn reimbursement_for(&self, employee_id: Uuid) -> Option<Decimal> {
+        self.amounts
+            .get(&employee_id)
+            .copied()
+            .filter(|a| !a.is_zero())
+    }
+
+    fn claim_ids_for(&self, employee_id: Uuid) -> &[Uuid] {
+        self.claim_ids
+            .get(&employee_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+}
+
 /// Calculate and persist payslips for `run_id`.
 ///
 /// `draft|calculating` → `pending_approval`. A single employee failure is stored
@@ -207,6 +232,12 @@ pub async fn execute_run(
     // remaining balance so the final installment closes the loan cleanly.
     let active_loans = load_active_loans(&mut tx, tenant_id.0, &employees, period_end).await?;
 
+    // Approved expense claims inside the pay period. Claims already tied to this
+    // run (e.g. crash recovery) are included again so the reimbursement amount is
+    // stable on re-run, and marking them paid again is idempotent.
+    let approved_claims =
+        load_approved_claims(&mut tx, tenant_id.0, period_start, period_end, run_id).await?;
+
     let inputs: Vec<EmployeePayrollInput> = employees
         .iter()
         .map(|row| -> Result<EmployeePayrollInput, sqlx::Error> {
@@ -220,6 +251,10 @@ pub async fn execute_run(
             let loan_deduction = active_loans
                 .get(&employee_id)
                 .map(|loan| Money::from_baht(loan.amount))
+                .unwrap_or(Money::ZERO);
+            let reimbursement = approved_claims
+                .reimbursement_for(employee_id)
+                .map(Money::from_baht)
                 .unwrap_or(Money::ZERO);
             Ok(EmployeePayrollInput {
                 employee_id,
@@ -241,6 +276,7 @@ pub async fn execute_run(
                 is_sso_enrolled: sso_enrolled,
                 is_pf_member: pf_member,
                 loan_deduction,
+                reimbursement,
             })
         })
         .collect::<Result<_, _>>()?;
@@ -299,6 +335,13 @@ pub async fn execute_run(
                 if let Some(loan) = active_loans.get(&input.employee_id) {
                     apply_loan_deduction(&mut tx, tenant_id, run_id, loan).await?;
                 }
+                mark_claims_paid(
+                    &mut tx,
+                    tenant_id,
+                    run_id,
+                    approved_claims.claim_ids_for(input.employee_id),
+                )
+                .await?;
                 write_event(&mut tx, run_id, tenant_id, input.employee_id, &trace).await?;
             }
             Err(e) => {
@@ -361,8 +404,8 @@ async fn write_payslip(
                payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings,
                ot_amount, total_deductions, net_pay, tax_withheld,
                sso_employee, sso_employer, pf_employee, pf_employer,
-               loan_deduction, anomalies, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'calculated')
+               loan_deduction, reimbursement, anomalies, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'calculated')
            ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
                gross_earnings = EXCLUDED.gross_earnings,
                ot_amount = EXCLUDED.ot_amount,
@@ -372,6 +415,7 @@ async fn write_payslip(
                sso_employee = EXCLUDED.sso_employee,
                pf_employee = EXCLUDED.pf_employee,
                loan_deduction = EXCLUDED.loan_deduction,
+               reimbursement = EXCLUDED.reimbursement,
                anomalies = EXCLUDED.anomalies"#,
     )
     .bind(run_id)
@@ -388,6 +432,7 @@ async fn write_payslip(
     .bind(out.pf_employee.amount())
     .bind(out.pf_employee.amount())
     .bind(out.loan_deduction.amount())
+    .bind(out.reimbursement.amount())
     .bind(anomalies)
     .execute(&mut **tx)
     .await?;
@@ -408,8 +453,8 @@ async fn write_failed_payslip(
                payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings,
                ot_amount, total_deductions, net_pay, tax_withheld,
                sso_employee, sso_employer, pf_employee, pf_employer,
-               loan_deduction, anomalies, status)
-           VALUES ($1,$2,$3,0,0,0,0,0,0,0,0,0,0,0,$4,'calculated')
+               loan_deduction, reimbursement, anomalies, status)
+           VALUES ($1,$2,$3,0,0,0,0,0,0,0,0,0,0,0,0,$4,'calculated')
            ON CONFLICT (payroll_run_id, employee_id) DO NOTHING"#,
     )
     .bind(run_id)
@@ -489,6 +534,69 @@ async fn load_active_loans(
         );
     }
     Ok(map)
+}
+
+/// Load approved expense claims inside the pay period. Claims already tied to
+/// this payroll run are included so re-runs recover the same reimbursement total
+/// and marking them paid again is idempotent.
+async fn load_approved_claims(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: Uuid,
+    period_start: chrono::NaiveDate,
+    period_end: chrono::NaiveDate,
+    run_id: Uuid,
+) -> Result<ApprovedClaims, RunError> {
+    let rows = sqlx::query(
+        r#"SELECT id, employee_id, amount
+           FROM expense_claims
+           WHERE tenant_id = $1
+             AND expense_date BETWEEN $2 AND $3
+             AND (
+               (status = 'approved' AND payroll_run_id IS NULL)
+               OR payroll_run_id = $4
+             )"#,
+    )
+    .bind(tenant_id)
+    .bind(period_start)
+    .bind(period_end)
+    .bind(run_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut claims = ApprovedClaims::default();
+    for row in &rows {
+        let id: Uuid = row.try_get("id")?;
+        let employee_id: Uuid = row.try_get("employee_id")?;
+        let amount: Decimal = row.try_get("amount")?;
+        *claims.amounts.entry(employee_id).or_insert(Decimal::ZERO) += amount;
+        claims.claim_ids.entry(employee_id).or_default().push(id);
+    }
+    Ok(claims)
+}
+
+/// Mark the selected employee's claims as paid in the same transaction as the
+/// payslip write. Idempotent: a claim already paid for this run is untouched.
+async fn mark_claims_paid(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: TenantId,
+    run_id: Uuid,
+    claim_ids: &[Uuid],
+) -> Result<(), RunError> {
+    if claim_ids.is_empty() {
+        return Ok(());
+    }
+
+    sqlx::query(
+        r#"UPDATE expense_claims
+           SET status = 'paid', payroll_run_id = $1, paid_at = now(), updated_at = now()
+           WHERE id = ANY($2) AND tenant_id = $3 AND status <> 'paid'"#,
+    )
+    .bind(run_id)
+    .bind(claim_ids)
+    .bind(tenant_id.0)
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 /// Record one loan installment and reduce the balance only when the installment
@@ -629,8 +737,8 @@ pub async fn render_payslip(
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let row = sqlx::query(
         r#"SELECT p.base_salary, p.ot_amount, p.gross_earnings, p.sso_employee,
-                  p.tax_withheld, p.pf_employee, p.loan_deduction, p.total_deductions,
-                  p.net_pay, p.anomalies,
+                  p.tax_withheld, p.pf_employee, p.loan_deduction, p.reimbursement,
+                  p.total_deductions, p.net_pay, p.anomalies,
                   e.employee_code, e.first_name_th, e.last_name_th, e.position_title,
                   e.department, e.bank_name, e.bank_account_number,
                   r.period_start, r.period_end, r.payment_date,
@@ -675,6 +783,7 @@ pub async fn render_payslip(
         tax_withheld: row.try_get("tax_withheld")?,
         pf_employee: row.try_get("pf_employee")?,
         loan_deduction: row.try_get("loan_deduction")?,
+        reimbursement: row.try_get("reimbursement")?,
         total_deductions: row.try_get("total_deductions")?,
         net_pay: row.try_get("net_pay")?,
         bank_name: row.try_get("bank_name")?,

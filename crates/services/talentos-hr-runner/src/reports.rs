@@ -340,7 +340,8 @@ pub async fn export_gl_csv(
                 COALESCE(SUM(p.tax_withheld), 0) AS tax, \
                 COALESCE(SUM(p.sso_employee), 0) AS sso_employee, \
                 COALESCE(SUM(p.pf_employee), 0) AS pf_employee, \
-                COALESCE(SUM(p.loan_deduction), 0) AS loan_deduction \
+                COALESCE(SUM(p.loan_deduction), 0) AS loan_deduction, \
+                COALESCE(SUM(p.reimbursement), 0) AS reimbursement \
          FROM payslips p \
          JOIN employees e ON e.id = p.employee_id \
          WHERE p.payroll_run_id = $2 \
@@ -367,6 +368,7 @@ pub async fn export_gl_csv(
         let sso_employee: Decimal = row.get("sso_employee");
         let pf_employee: Decimal = row.get("pf_employee");
         let loan_deduction: Decimal = row.get("loan_deduction");
+        let reimbursement: Decimal = row.get("reimbursement");
 
         let debit = gross + sso_employer + pf_employer;
         lines.push(GlLine {
@@ -415,6 +417,14 @@ pub async fn export_gl_csv(
             department: department.clone(),
             debit: Decimal::ZERO,
             credit: loan_deduction,
+            description: description.clone(),
+        });
+        lines.push(GlLine {
+            account_code: "5200".into(),
+            account_name: "ค่าใช้จ่ายพนักงาน".into(),
+            department: department.clone(),
+            debit: reimbursement,
+            credit: Decimal::ZERO,
             description: description.clone(),
         });
     }

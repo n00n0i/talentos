@@ -32,6 +32,10 @@ pub struct EmployeePayrollInput {
     /// keeps existing inputs and tests working without changes.
     #[serde(default = "zero_money")]
     pub loan_deduction: Money,
+    /// Approved expense-claim reimbursement to add to net pay this run.
+    /// Non-taxable; default zero keeps existing inputs and tests working.
+    #[serde(default = "zero_money")]
+    pub reimbursement: Money,
 }
 
 /// Immutable snapshot of a payroll run. The DAG is a pure function of this.

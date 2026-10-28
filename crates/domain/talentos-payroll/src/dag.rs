@@ -139,9 +139,18 @@ impl PayrollDag {
             error: None,
         });
 
-        // 7. Net pay — must never go negative
+        // 7. Expense-claim reimbursement (non-taxable).
+        let reimbursement = input.reimbursement;
+        trace.push(StepResult {
+            step: "reimbursement".into(),
+            input: serde_json::to_value(reimbursement)?,
+            output: serde_json::to_value(reimbursement)?,
+            error: None,
+        });
+
+        // 8. Net pay — must never go negative
         let total_deductions = sso_money + tax_money + pf_money + loan_deduction;
-        let net_pay = gross_with_ot - total_deductions;
+        let net_pay = gross_with_ot - total_deductions + reimbursement;
         if net_pay.is_negative() {
             return Err(PayrollError::NegativeNetPay {
                 employee_id: input.employee_id.to_string(),
@@ -157,12 +166,13 @@ impl PayrollDag {
                 "tax": tax_money.to_string(),
                 "pf": pf_money.to_string(),
                 "loan": loan_deduction.to_string(),
+                "reimbursement": reimbursement.to_string(),
             }),
             output: serde_json::to_value(net_pay)?,
             error: None,
         });
 
-        // 8. Payslip
+        // 9. Payslip
         let output = EmployeePayrollOutput {
             employee_id: input.employee_id,
             base_salary: input.base_salary,
@@ -173,6 +183,7 @@ impl PayrollDag {
             tax_withheld: tax_money,
             pf_employee: pf_money,
             loan_deduction,
+            reimbursement,
             net_pay,
             anomalies: Self::detect_anomalies(&input, &gross_with_ot, &net_pay),
         };
@@ -284,6 +295,7 @@ mod tests {
             is_sso_enrolled: true,
             is_pf_member: false,
             loan_deduction: Money::ZERO,
+            reimbursement: Money::ZERO,
         }
     }
 
@@ -342,22 +354,44 @@ mod tests {
     }
 
     #[test]
-    fn trace_has_eight_steps() {
+    fn trace_has_nine_steps() {
         let (_, trace) = PayrollDag::calculate(&ctx(), input(dec!(30000))).unwrap();
         let names: Vec<_> = trace.iter().map(|s| s.step.as_str()).collect();
         assert_eq!(
             names,
-            vec!["gross", "overtime", "sso", "tax", "pf", "loan", "net", "payslip"]
+            vec![
+                "gross",
+                "overtime",
+                "sso",
+                "tax",
+                "pf",
+                "loan",
+                "reimbursement",
+                "net",
+                "payslip"
+            ]
         );
     }
 
     #[test]
-    fn net_equals_gross_minus_deductions() {
+    fn net_equals_gross_minus_deductions_plus_reimbursement() {
         let (out, _) = PayrollDag::calculate(&ctx(), input(dec!(50000))).unwrap();
         assert_eq!(
             out.net_pay.amount(),
             out.gross_earnings.amount() - out.total_deductions.amount()
+                + out.reimbursement.amount()
         );
+    }
+
+    #[test]
+    fn reimbursement_increases_net_pay() {
+        let base = input(dec!(30000));
+        let (without, _) = PayrollDag::calculate(&ctx(), base.clone()).unwrap();
+        let mut with = base;
+        with.reimbursement = Money::from_baht(dec!(1500));
+        let (out, _) = PayrollDag::calculate(&ctx(), with).unwrap();
+        assert_eq!(out.reimbursement.amount(), dec!(1500));
+        assert_eq!(out.net_pay.amount(), without.net_pay.amount() + dec!(1500));
     }
 
     #[test]

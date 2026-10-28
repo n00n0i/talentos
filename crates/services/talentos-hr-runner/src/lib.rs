@@ -9,6 +9,7 @@ pub mod leave;
 pub mod notify;
 pub mod ot;
 pub mod reports;
+pub mod settlement;
 
 pub use attendance::{
     active_shift, assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError,
@@ -30,4 +31,7 @@ pub use ot::{
     decide_request as decide_ot_request, list_requests as list_ot_requests,
     pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests, OtError,
     OtInput, OtRequestView, PendingOt,
+};
+pub use settlement::{
+    compute_and_store, list_settlements, SettlementError, SettlementInput, SettlementView,
 };

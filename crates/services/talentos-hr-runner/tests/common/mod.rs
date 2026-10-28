@@ -181,6 +181,7 @@ pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
         .await
         .expect("set tenant");
     for stmt in [
+        "DELETE FROM final_settlements WHERE tenant_id = $1",
         "DELETE FROM leave_approval_steps WHERE tenant_id = $1",
         "DELETE FROM leave_requests WHERE tenant_id = $1",
         "DELETE FROM leave_balances WHERE tenant_id = $1",

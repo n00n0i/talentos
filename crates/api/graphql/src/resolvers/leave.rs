@@ -1,6 +1,8 @@
 use async_graphql::{Context, ID, Object};
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
+use talentos_db::TenantPool;
+use talentos_hr_runner::{cancel_request, create_request, decide_request, LeaveError, LeaveInput};
 use uuid::Uuid;
 
 use crate::context::{pool, tenant_ctx};
@@ -252,43 +254,99 @@ pub struct LeaveMutations;
 impl LeaveMutations {
     async fn request_leave(
         &self,
-        _ctx: &Context<'_>,
-        _input: RequestLeaveInput,
+        ctx: &Context<'_>,
+        input: RequestLeaveInput,
     ) -> async_graphql::Result<LeaveRequest> {
-        Err(async_graphql::Error::new(
-            "Leave requests must be created via the REST API: POST /api/v1/leave/requests",
-        ))
+        let tc = tenant_ctx(ctx)?;
+        require_permission(&tc.roles, "leave_request", "submit_self")?;
+        let p = pool(ctx)?;
+
+        let view = create_request(
+            p.as_ref(),
+            tc.tenant_id,
+            tc.user_id.0,
+            LeaveInput {
+                leave_type: leave_type_str(input.leave_type),
+                start_date: input.start_date,
+                end_date: input.end_date,
+                reason: input.reason,
+                employee_id: None,
+            },
+        )
+        .await
+        .map_err(map_leave_error)?;
+
+        let row = fetch_request_row(p.as_ref(), tc.tenant_id, view.id).await?;
+        Ok(row.into())
     }
 
     async fn approve_leave_request(
         &self,
-        _ctx: &Context<'_>,
-        _id: ID,
+        ctx: &Context<'_>,
+        id: ID,
     ) -> async_graphql::Result<LeaveRequest> {
-        Err(async_graphql::Error::new(
-            "Leave approvals must be performed via the REST API: POST /api/v1/leave/requests/:id/decision",
-        ))
+        let tc = tenant_ctx(ctx)?;
+        require_permission(&tc.roles, "leave_request", "approve_team")?;
+        let p = pool(ctx)?;
+        let request_id = parse_uuid(&id)?;
+
+        decide_request(
+            p.as_ref(),
+            tc.tenant_id,
+            tc.user_id.0,
+            &tc.roles,
+            request_id,
+            true,
+        )
+        .await
+        .map_err(map_leave_error)?;
+
+        let row = fetch_request_row(p.as_ref(), tc.tenant_id, request_id).await?;
+        Ok(row.into())
     }
 
     async fn reject_leave_request(
         &self,
-        _ctx: &Context<'_>,
-        _id: ID,
-        _reason: String,
+        ctx: &Context<'_>,
+        id: ID,
+        #[graphql(desc = "Not persisted; the service does not store extra rejection text.")] _reason: String,
     ) -> async_graphql::Result<LeaveRequest> {
-        Err(async_graphql::Error::new(
-            "Leave rejections must be performed via the REST API: POST /api/v1/leave/requests/:id/decision",
-        ))
+        let tc = tenant_ctx(ctx)?;
+        require_permission(&tc.roles, "leave_request", "approve_team")?;
+        let p = pool(ctx)?;
+        let request_id = parse_uuid(&id)?;
+
+        decide_request(
+            p.as_ref(),
+            tc.tenant_id,
+            tc.user_id.0,
+            &tc.roles,
+            request_id,
+            false,
+        )
+        .await
+        .map_err(map_leave_error)?;
+
+        let row = fetch_request_row(p.as_ref(), tc.tenant_id, request_id).await?;
+        Ok(row.into())
     }
 
     async fn cancel_leave_request(
         &self,
-        _ctx: &Context<'_>,
-        _id: ID,
+        ctx: &Context<'_>,
+        id: ID,
     ) -> async_graphql::Result<LeaveRequest> {
-        Err(async_graphql::Error::new(
-            "Leave cancellations must be performed via the REST API: POST /api/v1/me/leave/:id/cancel",
-        ))
+        let tc = tenant_ctx(ctx)?;
+        require_permission(&tc.roles, "leave_request", "submit_self")?;
+        let p = pool(ctx)?;
+        let request_id = parse_uuid(&id)?;
+
+        cancel_request(p.as_ref(), tc.tenant_id, tc.user_id.0, request_id)
+            .await
+            .map_err(map_leave_error)?;
+
+        let row = fetch_request_row(p.as_ref(), tc.tenant_id, request_id).await?;
+        Ok(row.into())
     }
 }
 
@@ -393,4 +451,82 @@ fn parse_leave_status(s: &str) -> LeaveStatus {
         "cancelled" => LeaveStatus::Cancelled,
         _ => LeaveStatus::Pending,
     }
+}
+
+fn leave_type_str(t: LeaveType) -> String {
+    match t {
+        LeaveType::Annual => "annual".to_string(),
+        LeaveType::Sick => "sick".to_string(),
+        LeaveType::Personal => "personal".to_string(),
+        LeaveType::Maternity => "maternity".to_string(),
+        LeaveType::Paternity => "paternity".to_string(),
+        LeaveType::Bereavement => "bereavement".to_string(),
+        LeaveType::Unpaid => "unpaid".to_string(),
+    }
+}
+
+fn map_leave_error(e: LeaveError) -> async_graphql::Error {
+    let (code, msg) = match e {
+        LeaveError::UnknownType
+        | LeaveError::BadRange
+        | LeaveError::TooLong
+        | LeaveError::InsufficientBalance { .. } => (codes::VALIDATION_ERROR, e.to_string()),
+        LeaveError::EmployeeNotFound | LeaveError::NotFound => (codes::NOT_FOUND, e.to_string()),
+        LeaveError::Forbidden => (codes::FORBIDDEN, e.to_string()),
+        LeaveError::Overlap(_, _)
+        | LeaveError::NotActive
+        | LeaveError::NotCancellable => (codes::INVALID_STATE, e.to_string()),
+        LeaveError::Db(err) => {
+            tracing::error!(error = %err, "graphql leave mutation failed");
+            (
+                codes::INTERNAL_ERROR,
+                "An unexpected error occurred".to_string(),
+            )
+        }
+    };
+    gql_error(code, &msg)
+}
+
+async fn fetch_request_row(
+    pool: &TenantPool,
+    tenant_id: talentos_kernel::TenantId,
+    id: Uuid,
+) -> Result<LeaveRequestRow, async_graphql::Error> {
+    let mut tx = pool
+        .begin_tenant(tenant_id)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "graphql leave query failed");
+            gql_error(codes::INTERNAL_ERROR, "An unexpected error occurred")
+        })?;
+
+    let row = sqlx::query_as!(
+        LeaveRequestRow,
+        r#"SELECT lr.id, lr.employee_id, lr.leave_type, lr.start_date, lr.end_date,
+                  lr.days, lr.reason, lr.status, lr.approver_id, lr.approved_at,
+                  lr.created_at, lr.updated_at,
+                  e.employee_code, e.first_name_th, e.last_name_th,
+                  e.first_name_en, e.last_name_en, e.position_title, e.department,
+                  u.email, u.full_name_th, u.full_name_en
+           FROM leave_requests lr
+           JOIN employees e ON e.id = lr.employee_id
+           LEFT JOIN users u ON u.id = lr.approver_id
+           WHERE lr.id = $1"#,
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| {
+            tracing::error!(error = %e, "graphql leave query failed");
+            gql_error(codes::INTERNAL_ERROR, "An unexpected error occurred")
+        })?;
+
+    tx.commit()
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "graphql leave query failed");
+            gql_error(codes::INTERNAL_ERROR, "An unexpected error occurred")
+        })?;
+
+    row.ok_or_else(|| async_graphql::Error::new("leave request not found"))
 }

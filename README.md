@@ -235,6 +235,13 @@ receipt). Receipts are JPEG/PNG/PDF up to 5 MB, stored under
 HR. HR approves/rejects from the same page. **Reimbursement is not wired to
 payroll in this slice**; HR pays outside the payroll run.
 
+### Notification outbox
+
+`/settings` shows pending/failed/sent counts and failed rows (masked recipients)
+with a retry button. `GET /api/v1/notifications` and
+`POST /api/v1/notifications/:id/retry` are hr_admin-only; retry resets a failed
+row to pending for the worker.
+
 ## Loans and advances
 
 HR records a loan/advance at `/loans` (one active loan per employee):

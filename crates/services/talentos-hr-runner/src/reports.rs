@@ -263,7 +263,7 @@ pub async fn export_gl_csv(
     .await?;
 
     let description = format!("รอบเงินเดือน {period_start} ถึง {period_end}");
-    let filename = format!("gl-journal-{period_start}-{period_end}.csv");
+    let filename = format!("gl-journal-{run_id}-{period_start}-{period_end}.csv");
 
     let mut lines: Vec<GlLine> = Vec::with_capacity(rows.len() * 5);
     for row in &rows {

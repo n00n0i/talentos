@@ -215,6 +215,25 @@ and green primary actions. Headings use a display serif; numbers stay tabular.
 - Responsive: below 1000px the top bar wraps into brand + pills, stat cards go
   2×2, the right rail stacks, and wide tables scroll inside their card.
 
+## Reports and GL
+
+`/reports` (HR/payroll) shows headcount by department, payroll cost by
+department for a period, and the monthly OT trend. An approved payroll run
+exports a deterministic journal at
+`GET /api/v1/payroll/runs/:id/export.gl.csv`:
+
+```
+account_code,account_name,department,debit,credit,description
+5100 ค่าแรง                    debit  gross + employer SSO/PF
+2100 เงินเดือนค้างจ่าย          credit net
+2200 ภาษีหัก ณ ที่จ่าย          credit tax
+2210 ประกันสังคม               credit employee + employer SSO
+2220 กองทุนสำรองเลี้ยงชีพ       credit employee + employer PF
+```
+
+Department is the cost center in v1; account codes are fixed defaults. Text
+fields are CSV-injection safe.
+
 ## Deploy (on-prem)
 
 ```bash

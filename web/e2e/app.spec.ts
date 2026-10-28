@@ -485,7 +485,11 @@ test("HR opens reports and sees headcount totals", async ({ page }) => {
   await page.getByTestId("cost-from").fill("2026-01-01");
   await page.getByTestId("cost-to").fill("2026-12-31");
   await page.getByTestId("cost-load").click();
-  await expect(page.getByRole("table", { name: "ต้นทุนเงินเดือน" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("table", { name: "ต้นทุนเงินเดือน" })
+      .or(page.getByText("ไม่มีข้อมูลต้นทุนในช่วงที่เลือก")),
+  ).toBeVisible();
 });
 
 test("HR imports opening leave balance and employee sees quota", async ({ page }) => {

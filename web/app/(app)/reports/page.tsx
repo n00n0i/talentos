@@ -177,7 +177,7 @@ export default function ReportsPage() {
               <tr>
                 <th>แผนก</th>
                 <th className="num">คน</th>
-                <th className="num">รายรับ</th>
+                <th className="num">รายได้รวม</th>
                 <th className="num">สุทธิ</th>
                 <th className="num">ภาษี</th>
                 <th className="num">ประกันสังคม</th>

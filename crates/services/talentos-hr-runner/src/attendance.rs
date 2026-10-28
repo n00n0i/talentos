@@ -503,6 +503,11 @@ async fn check_geofence(
     Ok((distance, allowed))
 }
 
+/// Effective OT for payroll: requested OT can raise a day, never add to it.
+pub fn effective_ot(derived_ot_minutes: i32, approved_request_minutes: i32) -> i32 {
+    derived_ot_minutes.max(approved_request_minutes)
+}
+
 /// Haversine distance in metres between two WGS-84 points.
 fn haversine_m(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
     const R: f64 = 6_371_000.0;
@@ -586,7 +591,7 @@ async fn recompute_day(
     .bind(work_date)
     .fetch_one(&mut **tx)
     .await?;
-    let effective_ot_minutes = derived_ot_minutes.max(approved_ot_minutes);
+    let effective_ot_minutes = effective_ot(derived_ot_minutes, approved_ot_minutes);
 
     // Re-opening an approved day withdraws its payroll row until re-approved.
     sqlx::query(
@@ -667,7 +672,8 @@ pub async fn reapply_ot_request(
              FROM attendance_days
             WHERE tenant_id = current_tenant_id()
               AND employee_id = $1
-              AND work_date = $2"#,
+              AND work_date = $2
+           FOR UPDATE"#,
     )
     .bind(employee_id)
     .bind(work_date)
@@ -694,7 +700,7 @@ pub async fn reapply_ot_request(
     .fetch_one(&mut **tx)
     .await?;
 
-    let effective_ot_minutes = derived_ot_minutes.max(approved_ot_minutes);
+    let effective_ot_minutes = effective_ot(derived_ot_minutes, approved_ot_minutes);
     if effective_ot_minutes == current_ot_minutes {
         return Ok(());
     }
@@ -1289,5 +1295,18 @@ mod tests {
             input(0, 61).validate(),
             Err(AttendanceError::InvalidImport)
         ));
+    }
+}
+
+#[cfg(test)]
+mod effective_ot_tests {
+    use super::effective_ot;
+
+    #[test]
+    fn request_raises_but_never_adds() {
+        assert_eq!(effective_ot(60, 120), 120);
+        assert_eq!(effective_ot(180, 120), 180);
+        assert_eq!(effective_ot(0, 120), 120);
+        assert_eq!(effective_ot(60, 0), 60);
     }
 }

@@ -311,8 +311,8 @@ pub async fn pending_approvals(
 }
 
 /// Approve or reject a pending OT request.
-/// shortcut: approved OT is authorization only; payroll still uses attendance-derived OT,
-/// and auto-apply to attendance/payroll is a future slice.
+/// Approved OT raises the attendance day's effective OT to
+/// `max(derived, approved request minutes)`; days already approved reject changes.
 pub async fn decide_request(
     pool: &TenantPool,
     tenant_id: TenantId,

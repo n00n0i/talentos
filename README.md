@@ -190,10 +190,11 @@ POST /api/v1/ot/requests/:id/decision    {approve}
 ```
 
 One live request per employee per date; rejected/cancelled frees the date.
-Minutes are 1..720 and the `/ot` page takes hours in 0.5 steps. **Approved OT is
-an authorization record only**: payroll continues to use attendance-derived OT,
-so the same minutes cannot be paid twice. A future slice can auto-apply an
-approved request to a pending attendance day.
+Minutes are 1..720 and the `/ot` page takes hours in 0.5 steps. An approved
+request raises that attendance day's effective OT to
+`max(punch-derived OT, approved request minutes)` — never adds, so it cannot be
+paid twice. A day already approved rejects a request that would change its OT;
+reject/cancel restores the derived value.
 
 ## Custom payslip
 

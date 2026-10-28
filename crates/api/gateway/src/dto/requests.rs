@@ -27,12 +27,23 @@ impl LoginRequest {
             errs.push(("tenant_slug", "must match [a-z0-9-]{2,63}"));
         }
         if let Some(code) = &self.totp_code {
-            if code.len() != 6 || !code.chars().all(|c| c.is_ascii_digit()) {
-                errs.push(("totp_code", "must be 6 digits"));
+            let normalized = code.to_ascii_uppercase().replace(['-', ' '], "");
+            let is_totp = code.len() == 6 && code.chars().all(|c| c.is_ascii_digit());
+            let is_recovery = normalized.len() == 8
+                && normalized
+                    .chars()
+                    .all(|c| c.is_ascii_uppercase() || ('2'..='7').contains(&c));
+            if !is_totp && !is_recovery {
+                errs.push(("totp_code", "must be 6 digits or a valid recovery code"));
             }
         }
         errs
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RecoveryTotpBody {
+    pub code: String,
 }
 
 #[cfg(test)]
@@ -68,6 +79,13 @@ mod tests {
                 "code {code} should be rejected"
             );
         }
+    }
+
+    #[test]
+    fn recovery_code_format_is_valid() {
+        assert!(req(Some("abcd-2345")).validate().is_empty());
+        assert!(req(Some("ABCD 2345")).validate().is_empty());
+        assert!(req(Some("ABCD2345")).validate().is_empty());
     }
 }
 

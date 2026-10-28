@@ -41,11 +41,17 @@ export default function SettingsPage() {
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [enroll, setEnroll] = useState<{ secret: string; otpauth_url: string } | null>(null);
   const [totpCode, setTotpCode] = useState("");
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [recoveryTotp, setRecoveryTotp] = useState("");
+  const [sessions, setSessions] = useState<
+    { id: number; created_at: string; expires_at: string; ip_address: string | null; user_agent: string | null }[]
+  >([]);
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
       .then((me) => setTotpEnabled(Boolean(me.totp_enabled)))
       .catch((e) => handleApiError(e, setError));
+    loadSessions();
     Promise.all([
       gw<System>("api/v1/settings/system"),
       gw<{ tenant: Tenant; entities: Entity[] }>("api/v1/settings/organization"),
@@ -59,6 +65,17 @@ export default function SettingsPage() {
       })
       .catch((e) => handleApiError(e, setError));
   }, []);
+
+  async function loadSessions() {
+    try {
+      const res = await gw<{ sessions: { id: number; created_at: string; expires_at: string; ip_address: string | null; user_agent: string | null }[] }>(
+        "api/v1/auth/sessions"
+      );
+      setSessions(res.sessions);
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
 
   async function savePolicy(e: React.FormEvent) {
     e.preventDefault();
@@ -137,13 +154,22 @@ export default function SettingsPage() {
     setNotice("");
     const enabling = !totpEnabled;
     try {
-      await gw(`api/v1/auth/2fa/${enabling ? "enable" : "disable"}`, {
-        method: "POST",
-        body: JSON.stringify({ code: totpCode }),
-      });
-      setTotpEnabled(enabling);
+      const res = await gw<{ totp_enabled: boolean; recovery_codes?: string[] }>(
+        `api/v1/auth/2fa/${enabling ? "enable" : "disable"}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ code: totpCode }),
+        }
+      );
+      setTotpEnabled(res.totp_enabled);
       setEnroll(null);
       setTotpCode("");
+      if (enabling && res.recovery_codes) {
+        setRecoveryCodes(res.recovery_codes);
+      }
+      if (!enabling) {
+        setRecoveryCodes(null);
+      }
       setNotice(enabling ? "เปิดใช้ 2FA แล้ว" : "ปิด 2FA แล้ว");
     } catch (e) {
       handleApiError(e, setError);
@@ -154,6 +180,46 @@ export default function SettingsPage() {
 
   function setPolicyValue(key: keyof PayrollSettings, value: string) {
     setPolicy((p) => ({ ...p, [key]: value }));
+  }
+
+  async function regenerateRecoveryCodes(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await gw<{ codes: string[] }>("api/v1/auth/2fa/recovery-codes", {
+        method: "POST",
+        body: JSON.stringify({ code: recoveryTotp }),
+      });
+      setRecoveryCodes(res.codes);
+      setRecoveryTotp("");
+      setNotice("สร้างรหัสสำรองใหม่แล้ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeSession(id: number) {
+    setError("");
+    try {
+      await gw(`api/v1/auth/sessions/${id}`, { method: "DELETE" });
+      await loadSessions();
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function revokeAllSessions() {
+    setError("");
+    try {
+      await gw("api/v1/auth/sessions/revoke-all", { method: "POST" });
+      await loadSessions();
+    } catch (e) {
+      handleApiError(e, setError);
+    }
   }
 
   return (
@@ -341,6 +407,44 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
+
+            {recoveryCodes && (
+              <div data-testid="recovery-codes">
+                <p className="badge warning">เก็บรหัสนี้ไว้ในที่ปลอดภัย จะแสดงครั้งเดียว</p>
+                <ul style={{ fontFamily: "monospace", paddingLeft: 20 }}>
+                  {recoveryCodes.map((c) => (
+                    <li key={c}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <form onSubmit={regenerateRecoveryCodes} style={{ display: "grid", gap: 12, marginTop: 12 }}>
+              <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
+                <div className="field">
+                  <label htmlFor="recovery-totp">รหัส TOTP เพื่อสร้างรหัสสำรองใหม่</label>
+                  <input
+                    id="recovery-totp"
+                    data-testid="recovery-totp"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={recoveryTotp}
+                    onChange={(e) => setRecoveryTotp(e.target.value)}
+                    required
+                  />
+                </div>
+                <div style={{ display: "flex", alignItems: "end" }}>
+                  <button
+                    className="btn btn-primary"
+                    data-testid="regenerate-recovery"
+                    type="submit"
+                    disabled={busy}
+                  >
+                    สร้างรหัสสำรองใหม่
+                  </button>
+                </div>
+              </div>
+            </form>
           </>
         ) : enroll ? (
           <>
@@ -380,6 +484,48 @@ export default function SettingsPage() {
           </div>
         )}
       </form>
+
+      <div className="card">
+        <div className="card-head">
+          <h2>อุปกรณ์และเซสชัน</h2>
+          <span className="hint">{sessions.length} เซสชันใช้งานอยู่</span>
+        </div>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>เริ่ม</th>
+              <th>หมดอายุ</th>
+              <th>IP</th>
+              <th>อุปกรณ์</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map((s) => (
+              <tr key={s.id} data-testid="session-row">
+                <td>{new Date(s.created_at).toLocaleString("th-TH")}</td>
+                <td>{new Date(s.expires_at).toLocaleString("th-TH")}</td>
+                <td>{s.ip_address || "—"}</td>
+                <td className="hint">{s.user_agent || "—"}</td>
+                <td className="num">
+                  <button
+                    className="btn btn-sm btn-danger"
+                    data-testid="revoke-session"
+                    onClick={() => revokeSession(s.id)}
+                  >
+                    ออกจากอุปกรณ์นี้
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ padding: 12 }}>
+          <button className="btn btn-danger" data-testid="revoke-all-sessions" onClick={revokeAllSessions}>
+            ออกจากทุกอุปกรณ์
+          </button>
+        </div>
+      </div>
 
       <form className="card card-pad" onSubmit={saveTenant} style={{ display: "grid", gap: 12 }}>
         <h2>องค์กร</h2>

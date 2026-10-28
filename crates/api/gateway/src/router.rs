@@ -7,8 +7,8 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, employees, graphql, health, leave, loans, mcp, me, memory, ot,
-    payroll, plugins, reports, settings, users,
+    ai, attendance, audit, auth, claims, employees, graphql, health, leave, loans, mcp, me, memory,
+    ot, payroll, plugins, reports, settings, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -157,6 +157,23 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/me/ot/:id/cancel", post(ot::me_cancel))
         .route("/api/v1/ot/approvals", get(ot::approvals))
         .route("/api/v1/ot/requests/:id/decision", post(ot::decide))
+        .route(
+            "/api/v1/me/claims",
+            get(claims::me_claims).post(claims::create_claim),
+        )
+        .route("/api/v1/me/claims/:id/cancel", post(claims::me_cancel))
+        .route(
+            "/api/v1/me/claims/:id/receipt",
+            get(claims::me_download_receipt)
+                .post(claims::me_upload_receipt)
+                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
+        .route("/api/v1/claims/approvals", get(claims::approvals))
+        .route("/api/v1/claims/:id/decision", post(claims::decide))
+        .route(
+            "/api/v1/claims/:id/receipt",
+            get(claims::hr_download_receipt),
+        )
         .route("/api/v1/ai/tools", get(ai::list_tools))
         .route("/api/v1/graphql", post(graphql::execute))
         .route(

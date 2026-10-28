@@ -2,6 +2,7 @@ pub mod ai;
 pub mod attendance;
 pub mod audit;
 pub mod auth;
+pub mod claims;
 pub mod employees;
 pub mod graphql;
 pub mod health;

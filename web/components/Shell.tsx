@@ -13,6 +13,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/clock", label: "ลงเวลา", icon: "clock" },
   { href: "/leave", label: "การลา", icon: "clock" },
   { href: "/ot", label: "OT", icon: "clock" },
+  { href: "/claims", label: "ค่าใช้จ่าย", icon: "wallet" },
   { href: "/payroll", label: "รอบเงินเดือน", icon: "wallet" },
   { href: "/payslip", label: "แบบฟอร์มสลิป", icon: "file" },
   { href: "/me/payslips", label: "สลิปของฉัน", icon: "file" },

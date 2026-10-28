@@ -670,3 +670,16 @@ test("HR computes a final settlement for an employee", async ({ page }) => {
   await page.goto("/payroll");
   await expect(page.getByTestId("create-run")).toBeVisible();
 });
+
+test("HR opens settings and sees the notification summary without error", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "การแจ้งเตือน" })).toBeVisible();
+  await expect(page.getByTestId("notify-summary")).toContainText(/รอส่ง/);
+  await expect(page.getByTestId("notify-summary")).toContainText(/ล้มเหลว/);
+  await expect(page.getByTestId("notify-summary")).toContainText(/ส่งแล้ว/);
+
+  const empty = page.getByTestId("notify-empty");
+  const rows = page.getByTestId("notification-row");
+  await expect(empty.or(rows.first())).toBeVisible();
+});

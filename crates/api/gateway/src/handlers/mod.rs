@@ -11,6 +11,7 @@ pub mod loans;
 pub mod mcp;
 pub mod me;
 pub mod memory;
+pub mod notifications;
 pub mod ot;
 pub mod payroll;
 pub mod plugins;

@@ -189,6 +189,7 @@ async fn seed_approved_payroll_run(
         dec!(0),
         dec!(0),
         dec!(27750),
+        dec!(0),
     )
     .await?;
     insert_payslip(
@@ -204,6 +205,7 @@ async fn seed_approved_payroll_run(
         dec!(0),
         dec!(0),
         dec!(22875),
+        dec!(0),
     )
     .await?;
 
@@ -250,6 +252,7 @@ async fn seed_draft_payroll_run(
         dec!(0),
         dec!(0),
         dec!(27000),
+        dec!(0),
     )
     .await?;
 
@@ -271,14 +274,15 @@ async fn insert_payslip(
     pf_ee: Decimal,
     pf_er: Decimal,
     net: Decimal,
+    loan_deduction: Decimal,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let gross = base_salary + ot;
     sqlx::query(
         "INSERT INTO payslips \
            (id, payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings, \
             total_deductions, net_pay, tax_withheld, sso_employee, sso_employer, \
-            pf_employee, pf_employer, anomalies, status, created_at) \
-         VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'[]','approved',now())",
+            pf_employee, pf_employer, loan_deduction, anomalies, status, created_at) \
+         VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'[]','approved',now())",
     )
     .bind(run_id)
     .bind(tenant_id)
@@ -292,6 +296,7 @@ async fn insert_payslip(
     .bind(sso_er)
     .bind(pf_ee)
     .bind(pf_er)
+    .bind(loan_deduction)
     .execute(&mut **tx)
     .await?;
     Ok(())
@@ -574,6 +579,81 @@ async fn gl_export_is_not_visible_to_other_tenant() -> Result<(), Box<dyn std::e
 
     cleanup_tenant(&pool, seed_a.tenant_id).await;
     cleanup_tenant(&pool, seed_b.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn gl_export_balances_with_loan_deduction() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    let run_id = Uuid::new_v4();
+    let period_start = NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
+    let period_end = NaiveDate::from_ymd_opt(2026, 3, 31).unwrap();
+    let payment_date = NaiveDate::from_ymd_opt(2026, 4, 5).unwrap();
+    let loan = dec!(1000);
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    sqlx::query(
+        "INSERT INTO payroll_runs \
+           (id, tenant_id, entity_id, period_start, period_end, payment_date, status, \
+            total_employees, created_by, created_at) \
+         VALUES ($1,$2,$3,$4,$5,$6,'approved',1,$7,now())",
+    )
+    .bind(run_id)
+    .bind(seed.tenant_id)
+    .bind(seed.entity_id)
+    .bind(period_start)
+    .bind(period_end)
+    .bind(payment_date)
+    .bind(seed.user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // gross 30,000; sso 750; tax 2,000; loan 1,000; net 26,250
+    insert_payslip(
+        &mut tx,
+        seed.tenant_id,
+        run_id,
+        seed.emp_active_it,
+        dec!(30000),
+        dec!(0),
+        dec!(750),
+        dec!(750),
+        dec!(2000),
+        dec!(0),
+        dec!(0),
+        dec!(26250),
+        loan,
+    )
+    .await?;
+    tx.commit().await?;
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    let (_, body) = export_gl_csv(&mut *tx, run_id).await?;
+    tx.rollback().await?;
+
+    assert!(body.contains("2230"));
+    assert!(body.contains("เงินให้กู้พนักงาน"));
+
+    let mut total_debit = dec!(0);
+    let mut total_credit = dec!(0);
+    for line in body.lines().skip(1) {
+        if line.is_empty() {
+            continue;
+        }
+        let cols: Vec<&str> = line.split(',').collect();
+        let debit = Decimal::from_str(strip_csv_quotes(cols[3])).unwrap_or_default();
+        let credit = Decimal::from_str(strip_csv_quotes(cols[4])).unwrap_or_default();
+        total_debit += debit;
+        total_credit += credit;
+    }
+    assert!((total_debit - total_credit).abs() <= dec!(0.01));
+
+    cleanup_tenant(&pool, seed.tenant_id).await;
     Ok(())
 }
 

@@ -7,8 +7,8 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, employees, graphql, health, leave, mcp, me, memory, ot, payroll,
-    plugins, reports, settings, users,
+    ai, attendance, audit, auth, employees, graphql, health, leave, loans, mcp, me, memory, ot,
+    payroll, plugins, reports, settings, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -47,6 +47,9 @@ pub fn build(state: AppState) -> Router {
                 .delete(employees::terminate),
         )
         .route("/api/v1/employees/import", post(employees::import))
+        .route("/api/v1/loans", get(loans::list).post(loans::create))
+        .route("/api/v1/loans/:id/cancel", post(loans::cancel))
+        .route("/api/v1/me/loans", get(loans::me_loans))
         .route(
             "/api/v1/settings/payroll",
             get(settings::get_payroll).put(settings::put_payroll),

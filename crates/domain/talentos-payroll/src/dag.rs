@@ -130,8 +130,17 @@ impl PayrollDag {
             error: None,
         });
 
-        // 6. Net pay — must never go negative
-        let total_deductions = sso_money + tax_money + pf_money;
+        // 6. Loan / advance deduction
+        let loan_deduction = input.loan_deduction;
+        trace.push(StepResult {
+            step: "loan".into(),
+            input: serde_json::to_value(loan_deduction)?,
+            output: serde_json::to_value(loan_deduction)?,
+            error: None,
+        });
+
+        // 7. Net pay — must never go negative
+        let total_deductions = sso_money + tax_money + pf_money + loan_deduction;
         let net_pay = gross_with_ot - total_deductions;
         if net_pay.is_negative() {
             return Err(PayrollError::NegativeNetPay {
@@ -147,12 +156,13 @@ impl PayrollDag {
                 "sso": sso_money.to_string(),
                 "tax": tax_money.to_string(),
                 "pf": pf_money.to_string(),
+                "loan": loan_deduction.to_string(),
             }),
             output: serde_json::to_value(net_pay)?,
             error: None,
         });
 
-        // 7. Payslip
+        // 8. Payslip
         let output = EmployeePayrollOutput {
             employee_id: input.employee_id,
             base_salary: input.base_salary,
@@ -162,6 +172,7 @@ impl PayrollDag {
             sso_employee: sso_money,
             tax_withheld: tax_money,
             pf_employee: pf_money,
+            loan_deduction,
             net_pay,
             anomalies: Self::detect_anomalies(&input, &gross_with_ot, &net_pay),
         };
@@ -272,6 +283,7 @@ mod tests {
             pf_rate: dec!(0.05),
             is_sso_enrolled: true,
             is_pf_member: false,
+            loan_deduction: Money::ZERO,
         }
     }
 
@@ -330,12 +342,12 @@ mod tests {
     }
 
     #[test]
-    fn trace_has_seven_steps() {
+    fn trace_has_eight_steps() {
         let (_, trace) = PayrollDag::calculate(&ctx(), input(dec!(30000))).unwrap();
         let names: Vec<_> = trace.iter().map(|s| s.step.as_str()).collect();
         assert_eq!(
             names,
-            vec!["gross", "overtime", "sso", "tax", "pf", "net", "payslip"]
+            vec!["gross", "overtime", "sso", "tax", "pf", "loan", "net", "payslip"]
         );
     }
 
@@ -363,5 +375,35 @@ mod tests {
         let (a, _) = PayrollDag::calculate(&c, i.clone()).unwrap();
         let (b, _) = PayrollDag::calculate(&c, i).unwrap();
         assert_eq!(a.net_pay.amount(), b.net_pay.amount());
+    }
+
+    #[test]
+    fn loan_deduction_reduces_net_and_total() {
+        let mut i = input(dec!(30000));
+        i.loan_deduction = Money::from_baht(dec!(2000));
+        let (out, _) = PayrollDag::calculate(&ctx(), i).unwrap();
+        assert_eq!(out.loan_deduction.amount(), dec!(2000));
+        assert_eq!(
+            out.total_deductions.amount(),
+            out.sso_employee.amount()
+                + out.tax_withheld.amount()
+                + out.pf_employee.amount()
+                + dec!(2000)
+        );
+        assert_eq!(
+            out.net_pay.amount(),
+            out.gross_earnings.amount() - out.total_deductions.amount()
+        );
+    }
+
+    #[test]
+    fn oversized_loan_installment_rejects_negative_net() {
+        let mut i = input(dec!(5000));
+        i.loan_deduction = Money::from_baht(dec!(6000));
+        let err = PayrollDag::calculate(&ctx(), i).unwrap_err();
+        assert!(
+            matches!(err, PayrollError::NegativeNetPay { .. }),
+            "expected negative net error, got {err:?}"
+        );
     }
 }

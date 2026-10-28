@@ -3,6 +3,10 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use talentos_kernel::{EntityId, Money, TenantId, UserId};
 
+fn zero_money() -> Money {
+    Money::ZERO
+}
+
 /// Immutable per-employee input to the payroll DAG.
 /// All quantities are `Decimal` — payroll input never uses floats.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +28,10 @@ pub struct EmployeePayrollInput {
     /// Social Security Act §33 coverage. Independent of the provident fund.
     pub is_sso_enrolled: bool,
     pub is_pf_member: bool,
+    /// Employee loan / advance installment to deduct this run. Default zero
+    /// keeps existing inputs and tests working without changes.
+    #[serde(default = "zero_money")]
+    pub loan_deduction: Money,
 }
 
 /// Immutable snapshot of a payroll run. The DAG is a pure function of this.

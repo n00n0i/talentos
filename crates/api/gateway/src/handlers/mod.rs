@@ -6,6 +6,7 @@ pub mod employees;
 pub mod graphql;
 pub mod health;
 pub mod leave;
+pub mod loans;
 pub mod mcp;
 pub mod me;
 pub mod memory;

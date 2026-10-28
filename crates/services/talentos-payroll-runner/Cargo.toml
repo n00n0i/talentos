@@ -22,3 +22,4 @@ rust_decimal = { workspace = true }
 tokio = { workspace = true }
 talentos-hr-runner = { path = "../talentos-hr-runner" }
 talentos-attendance = { path = "../../domain/talentos-attendance" }
+rust_decimal_macros = { workspace = true }

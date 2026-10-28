@@ -55,7 +55,15 @@ pub struct RunSummary {
     pub total_tax: Decimal,
     pub total_sso: Decimal,
     pub total_pf: Decimal,
+    pub total_loan: Decimal,
     pub duration_ms: u128,
+}
+
+/// Loan record attached to one employee for the current run.
+#[derive(Debug, Clone, Copy)]
+struct ActiveLoan {
+    loan_id: Uuid,
+    amount: Decimal,
 }
 
 /// Calculate and persist payslips for `run_id`.
@@ -195,6 +203,10 @@ pub async fn execute_run(
         })
         .collect::<Result<_, _>>()?;
 
+    // Active loans for employees in this run. The deduction is capped at the
+    // remaining balance so the final installment closes the loan cleanly.
+    let active_loans = load_active_loans(&mut tx, tenant_id.0, &employees, period_end).await?;
+
     let inputs: Vec<EmployeePayrollInput> = employees
         .iter()
         .map(|row| -> Result<EmployeePayrollInput, sqlx::Error> {
@@ -205,6 +217,10 @@ pub async fn execute_run(
                 .get(&employee_id)
                 .copied()
                 .unwrap_or((Decimal::ZERO, Decimal::ZERO, Decimal::ZERO));
+            let loan_deduction = active_loans
+                .get(&employee_id)
+                .map(|loan| Money::from_baht(loan.amount))
+                .unwrap_or(Money::ZERO);
             Ok(EmployeePayrollInput {
                 employee_id,
                 base_salary: Money::from_baht(row.try_get::<Decimal, _>("base_salary")?),
@@ -224,6 +240,7 @@ pub async fn execute_run(
                 },
                 is_sso_enrolled: sso_enrolled,
                 is_pf_member: pf_member,
+                loan_deduction,
             })
         })
         .collect::<Result<_, _>>()?;
@@ -265,6 +282,7 @@ pub async fn execute_run(
         Decimal::ZERO,
         Decimal::ZERO,
         Decimal::ZERO,
+        Decimal::ZERO,
     );
 
     for (input, outcome) in inputs.iter().zip(computed) {
@@ -276,7 +294,11 @@ pub async fn execute_run(
                 totals.2 += out.tax_withheld.amount();
                 totals.3 += out.sso_employee.amount();
                 totals.4 += out.pf_employee.amount();
+                totals.5 += out.loan_deduction.amount();
                 write_payslip(&mut tx, run_id, tenant_id, input.employee_id, &out).await?;
+                if let Some(loan) = active_loans.get(&input.employee_id) {
+                    apply_loan_deduction(&mut tx, tenant_id, run_id, loan).await?;
+                }
                 write_event(&mut tx, run_id, tenant_id, input.employee_id, &trace).await?;
             }
             Err(e) => {
@@ -321,6 +343,7 @@ pub async fn execute_run(
         total_tax: totals.2,
         total_sso: totals.3,
         total_pf: totals.4,
+        total_loan: totals.5,
         duration_ms: started.elapsed().as_millis(),
     })
 }
@@ -337,8 +360,9 @@ async fn write_payslip(
         r#"INSERT INTO payslips (
                payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings,
                ot_amount, total_deductions, net_pay, tax_withheld,
-               sso_employee, sso_employer, pf_employee, pf_employer, anomalies, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'calculated')
+               sso_employee, sso_employer, pf_employee, pf_employer,
+               loan_deduction, anomalies, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'calculated')
            ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
                gross_earnings = EXCLUDED.gross_earnings,
                ot_amount = EXCLUDED.ot_amount,
@@ -347,6 +371,7 @@ async fn write_payslip(
                tax_withheld = EXCLUDED.tax_withheld,
                sso_employee = EXCLUDED.sso_employee,
                pf_employee = EXCLUDED.pf_employee,
+               loan_deduction = EXCLUDED.loan_deduction,
                anomalies = EXCLUDED.anomalies"#,
     )
     .bind(run_id)
@@ -362,6 +387,7 @@ async fn write_payslip(
     .bind(out.sso_employee.amount())
     .bind(out.pf_employee.amount())
     .bind(out.pf_employee.amount())
+    .bind(out.loan_deduction.amount())
     .bind(anomalies)
     .execute(&mut **tx)
     .await?;
@@ -381,8 +407,9 @@ async fn write_failed_payslip(
         r#"INSERT INTO payslips (
                payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings,
                ot_amount, total_deductions, net_pay, tax_withheld,
-               sso_employee, sso_employer, pf_employee, pf_employer, anomalies, status)
-           VALUES ($1,$2,$3,0,0,0,0,0,0,0,0,0,0,$4,'calculated')
+               sso_employee, sso_employer, pf_employee, pf_employer,
+               loan_deduction, anomalies, status)
+           VALUES ($1,$2,$3,0,0,0,0,0,0,0,0,0,0,0,$4,'calculated')
            ON CONFLICT (payroll_run_id, employee_id) DO NOTHING"#,
     )
     .bind(run_id)
@@ -414,6 +441,96 @@ async fn write_event(
     .bind(&payload)
     .execute(&mut **tx)
     .await?;
+    Ok(())
+}
+
+/// Load active loans whose start date has fallen due by the end of the pay period.
+async fn load_active_loans(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: Uuid,
+    employees: &[sqlx::postgres::PgRow],
+    period_end: chrono::NaiveDate,
+) -> Result<HashMap<Uuid, ActiveLoan>, RunError> {
+    let ids: Vec<Uuid> = employees
+        .iter()
+        .map(|row| row.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, _>>()?;
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let rows = sqlx::query(
+        r#"SELECT id, employee_id, balance, installment_amount
+           FROM employee_loans
+           WHERE tenant_id = $1
+             AND employee_id = ANY($2)
+             AND status = 'active'
+             AND start_date <= $3"#,
+    )
+    .bind(tenant_id)
+    .bind(&ids)
+    .bind(period_end)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut map = HashMap::new();
+    for row in &rows {
+        let loan_id: Uuid = row.try_get("id")?;
+        let employee_id: Uuid = row.try_get("employee_id")?;
+        let balance: Decimal = row.try_get("balance")?;
+        let installment: Decimal = row.try_get("installment_amount")?;
+        map.insert(
+            employee_id,
+            ActiveLoan {
+                loan_id,
+                amount: installment.min(balance),
+            },
+        );
+    }
+    Ok(map)
+}
+
+/// Record one loan installment and reduce the balance only when the installment
+/// row was actually inserted. The unique `(loan_id, payroll_run_id)` key makes
+/// re-runs and crash recovery idempotent.
+async fn apply_loan_deduction(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: TenantId,
+    run_id: Uuid,
+    loan: &ActiveLoan,
+) -> Result<(), RunError> {
+    if loan.amount.is_zero() {
+        return Ok(());
+    }
+
+    let inserted: Option<i64> = sqlx::query_scalar(
+        r#"INSERT INTO loan_installments (tenant_id, loan_id, payroll_run_id, amount)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (loan_id, payroll_run_id) DO NOTHING
+           RETURNING id"#,
+    )
+    .bind(tenant_id.0)
+    .bind(loan.loan_id)
+    .bind(run_id)
+    .bind(loan.amount)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    if inserted.is_some() {
+        sqlx::query(
+            r#"UPDATE employee_loans
+               SET balance = GREATEST(balance - $1, 0),
+                   status = CASE WHEN balance <= $1 THEN 'closed' ELSE status END,
+                   updated_at = now()
+               WHERE id = $2 AND tenant_id = $3"#,
+        )
+        .bind(loan.amount)
+        .bind(loan.loan_id)
+        .bind(tenant_id.0)
+        .execute(&mut **tx)
+        .await?;
+    }
+
     Ok(())
 }
 
@@ -511,8 +628,8 @@ pub async fn render_payslip(
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let row = sqlx::query(
         r#"SELECT p.base_salary, p.ot_amount, p.gross_earnings, p.sso_employee,
-                  p.tax_withheld, p.pf_employee, p.total_deductions, p.net_pay,
-                  p.anomalies,
+                  p.tax_withheld, p.pf_employee, p.loan_deduction, p.total_deductions,
+                  p.net_pay, p.anomalies,
                   e.employee_code, e.first_name_th, e.last_name_th, e.position_title,
                   e.department, e.bank_name, e.bank_account_number,
                   r.period_start, r.period_end, r.payment_date,
@@ -556,6 +673,7 @@ pub async fn render_payslip(
         sso_employee: row.try_get("sso_employee")?,
         tax_withheld: row.try_get("tax_withheld")?,
         pf_employee: row.try_get("pf_employee")?,
+        loan_deduction: row.try_get("loan_deduction")?,
         total_deductions: row.try_get("total_deductions")?,
         net_pay: row.try_get("net_pay")?,
         bank_name: row.try_get("bank_name")?,

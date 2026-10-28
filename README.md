@@ -215,6 +215,14 @@ and green primary actions. Headings use a display serif; numbers stay tabular.
 - Responsive: below 1000px the top bar wraps into brand + pills, stat cards go
   2×2, the right rail stacks, and wide tables scroll inside their card.
 
+## Expense claims
+
+Employees submit claims at `/claims` (category, amount, date, description,
+receipt). Receipts are JPEG/PNG/PDF up to 5 MB, stored under
+`CLAIM_UPLOAD_DIR` with a server-generated name and served only to the owner or
+HR. HR approves/rejects from the same page. **Reimbursement is not wired to
+payroll in this slice**; HR pays outside the payroll run.
+
 ## Loans and advances
 
 HR records a loan/advance at `/loans` (one active loan per employee):

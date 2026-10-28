@@ -164,7 +164,9 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/me/claims/:id/cancel", post(claims::me_cancel))
         .route(
             "/api/v1/me/claims/:id/receipt",
-            get(claims::me_download_receipt).post(claims::me_upload_receipt),
+            get(claims::me_download_receipt)
+                .post(claims::me_upload_receipt)
+                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
         )
         .route("/api/v1/claims/approvals", get(claims::approvals))
         .route("/api/v1/claims/:id/decision", post(claims::decide))

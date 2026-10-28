@@ -8,7 +8,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, attendance, audit, auth, claims, employees, graphql, health, leave, loans, mcp, me, memory,
-    ot, payroll, plugins, reports, settings, settlement, users,
+    notifications, ot, payroll, plugins, reports, settings, settlement, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -83,6 +83,11 @@ pub fn build(state: AppState) -> Router {
         )
         .route("/api/v1/settings/system", get(settings::system))
         .route("/api/v1/audit", get(audit::list))
+        .route("/api/v1/notifications", get(notifications::list))
+        .route(
+            "/api/v1/notifications/:id/retry",
+            post(notifications::retry),
+        )
         .route("/api/v1/users", get(users::list))
         .route("/api/v1/users/invite", post(users::invite))
         .route(

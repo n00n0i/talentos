@@ -21,6 +21,18 @@ type System = {
   pii_encryption: { configured: boolean };
   notifications: { email: boolean; line: boolean };
 };
+type Notification = {
+  id: string;
+  channel: string;
+  recipient_masked: string;
+  subject: string;
+  status: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: string;
+  sent_at: string | null;
+};
+type NotificationSummary = { pending: number; failed: number; sent: number };
 
 const DEFAULTS: PayrollSettings = {
   unpaid_leave_divisor: "30",
@@ -46,12 +58,15 @@ export default function SettingsPage() {
   const [sessions, setSessions] = useState<
     { id: number; created_at: string; expires_at: string; ip_address: string | null; user_agent: string | null }[]
   >([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifySummary, setNotifySummary] = useState<NotificationSummary | null>(null);
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
       .then((me) => setTotpEnabled(Boolean(me.totp_enabled)))
       .catch((e) => handleApiError(e, setError));
     loadSessions();
+    loadNotifications();
     Promise.all([
       gw<System>("api/v1/settings/system"),
       gw<{ tenant: Tenant; entities: Entity[] }>("api/v1/settings/organization"),
@@ -72,6 +87,16 @@ export default function SettingsPage() {
         "api/v1/auth/sessions"
       );
       setSessions(res.sessions);
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function loadNotifications() {
+    try {
+      const res = await gw<{ summary: NotificationSummary; rows: Notification[] }>("api/v1/notifications");
+      setNotifySummary(res.summary);
+      setNotifications(res.rows);
     } catch (e) {
       handleApiError(e, setError);
     }
@@ -217,6 +242,17 @@ export default function SettingsPage() {
     try {
       await gw("api/v1/auth/sessions/revoke-all", { method: "POST" });
       await loadSessions();
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function retryNotification(id: string) {
+    setError("");
+    try {
+      await gw(`api/v1/notifications/${id}/retry`, { method: "POST" });
+      await loadNotifications();
+      setNotice("ส่งซ้ำการแจ้งเตือนแล้ว");
     } catch (e) {
       handleApiError(e, setError);
     }
@@ -373,6 +409,69 @@ export default function SettingsPage() {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h2>การแจ้งเตือน</h2>
+          <span className="hint" data-testid="notify-summary">
+            {notifySummary ? (
+              <>
+                <span className="badge warning">รอส่ง {notifySummary.pending}</span>{" "}
+                <span className="badge danger">ล้มเหลว {notifySummary.failed}</span>{" "}
+                <span className="badge success">ส่งแล้ว {notifySummary.sent}</span>
+              </>
+            ) : (
+              "…"
+            )}
+          </span>
+        </div>
+        {notifications.length === 0 ? (
+          <p className="hint" data-testid="notify-empty" style={{ padding: "12px 16px" }}>
+            ไม่มีรายการแจ้งเตือน
+          </p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ช่องทาง</th>
+                <th>ผู้รับ</th>
+                <th>หัวข้อ</th>
+                <th>สถานะ</th>
+                <th>ครั้ง</th>
+                <th>ข้อผิดพลาดล่าสุด</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {notifications.map((n) => (
+                <tr key={n.id} data-testid="notification-row">
+                  <td>{n.channel === "email" ? "อีเมล" : "LINE"}</td>
+                  <td>{n.recipient_masked}</td>
+                  <td>{n.subject}</td>
+                  <td>
+                    <span className={`badge ${n.status === "sent" ? "success" : n.status === "failed" ? "danger" : "warning"}`}>
+                      {n.status === "sent" ? "ส่งแล้ว" : n.status === "failed" ? "ล้มเหลว" : "รอส่ง"}
+                    </span>
+                  </td>
+                  <td className="num">{n.attempts}</td>
+                  <td className="hint">{n.last_error || "—"}</td>
+                  <td className="num">
+                    {n.status === "failed" && (
+                      <button
+                        className="btn btn-sm"
+                        data-testid="retry-notification"
+                        onClick={() => retryNotification(n.id)}
+                      >
+                        ส่งซ้ำ
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <form className="card card-pad" onSubmit={toggle2fa} style={{ display: "grid", gap: 12 }}>

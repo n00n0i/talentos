@@ -87,6 +87,13 @@ pub struct LeaveBalanceView {
     pub provisioned: bool,
 }
 
+/// Paginated leave requests for an employee.
+#[derive(Debug, Serialize)]
+pub struct ListRequestsResult {
+    pub requests: Vec<LeaveRequestView>,
+    pub has_more: bool,
+}
+
 /// Result of approving/rejecting a leave request.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct DecideOutcome {
@@ -352,24 +359,41 @@ pub async fn list_requests(
     tenant_id: TenantId,
     employee_id: Uuid,
     status: Option<&str>,
-) -> Result<Vec<LeaveRequestView>, LeaveError> {
+    limit: i64,
+    offset: i64,
+) -> Result<ListRequestsResult, LeaveError> {
+    const DEFAULT_LIMIT: i64 = 50;
+    const MAX_LIMIT: i64 = 100;
+    let limit = if limit <= 0 {
+        DEFAULT_LIMIT
+    } else {
+        limit.min(MAX_LIMIT)
+    };
+    let offset = offset.max(0);
+    let fetch_limit = limit + 1;
+
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let rows = sqlx::query(
         r#"SELECT id, employee_id, leave_type, start_date, end_date, days, status, reason
            FROM leave_requests
            WHERE tenant_id = $1 AND employee_id = $2
              AND ($3::text IS NULL OR status = $3)
-           ORDER BY start_date DESC
-           LIMIT 200"#,
+           ORDER BY (status = 'pending') DESC, start_date DESC, created_at DESC
+           LIMIT $4 OFFSET $5"#,
     )
     .bind(tenant_id.0)
     .bind(employee_id)
     .bind(status)
+    .bind(fetch_limit)
+    .bind(offset)
     .fetch_all(&mut *tx)
     .await?;
     tx.commit().await?;
 
-    rows.into_iter()
+    let has_more = rows.len() > limit as usize;
+    let requests = rows
+        .into_iter()
+        .take(limit as usize)
         .map(|row| {
             Ok(LeaveRequestView {
                 id: row.try_get("id")?,
@@ -383,7 +407,9 @@ pub async fn list_requests(
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()
-        .map_err(Into::into)
+        .map_err(LeaveError::from)?;
+
+    Ok(ListRequestsResult { requests, has_more })
 }
 
 /// Pending leave request for an HR/manager inbox.

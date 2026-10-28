@@ -68,6 +68,53 @@ async fn seed_balance(
     tx.commit().await.expect("commit seed");
 }
 
+async fn seed_leave_requests(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    entity_id: Uuid,
+    employee_id: Uuid,
+    user_id: Uuid,
+    n: usize,
+) -> Vec<Uuid> {
+    use chrono::{TimeZone, Utc};
+    let mut ids = Vec::with_capacity(n);
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    for i in 0..n {
+        let id = Uuid::new_v4();
+        // First 10 rows are pending with older start dates; remaining rows are
+        // approved with newer start dates. Ordering must still put pending first.
+        let status = if i < 10 { "pending" } else { "approved" };
+        let start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap() + chrono::Duration::days(i as i64);
+        let created_at = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, i as u32).unwrap();
+        sqlx::query(
+            r#"INSERT INTO leave_requests
+                 (id, tenant_id, entity_id, employee_id, leave_type, start_date, end_date, days,
+                  reason, status, requested_by, balance_debited, created_at)
+               VALUES ($1,$2,$3,$4,'annual',$5,$6,1,'x',$7,$8,FALSE,$9)"#,
+        )
+        .bind(id)
+        .bind(tenant_id)
+        .bind(entity_id)
+        .bind(employee_id)
+        .bind(start)
+        .bind(start)
+        .bind(status)
+        .bind(user_id)
+        .bind(created_at)
+        .execute(&mut *tx)
+        .await
+        .expect("seed request");
+        ids.push(id);
+    }
+    tx.commit().await.expect("commit seed");
+    ids
+}
+
 async fn pending_notifications(
     pool: &PgPool,
     tenant_id: Uuid,
@@ -171,9 +218,10 @@ async fn linked_user_sees_only_own_balances_and_requests() {
     assert_eq!(annual.used_days, dec!(2));
     assert_eq!(annual.remaining_days, dec!(4));
 
-    let requests = list_requests(&pool, tenant, my_emp, None)
+    let requests = list_requests(&pool, tenant, my_emp, None, 50, 0)
         .await
-        .expect("requests");
+        .expect("requests")
+        .requests;
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].id, req.id);
 
@@ -192,9 +240,10 @@ async fn linked_user_sees_only_own_balances_and_requests() {
     assert_eq!(other_annual.used_days, dec!(0));
     assert_eq!(other_annual.remaining_days, dec!(6));
 
-    let other_requests = list_requests(&pool, tenant, other_emp, None)
+    let other_requests = list_requests(&pool, tenant, other_emp, None, 50, 0)
         .await
-        .expect("requests");
+        .expect("requests")
+        .requests;
     assert!(other_requests.is_empty());
 
     cleanup(&raw, tenant_id).await;
@@ -358,9 +407,10 @@ async fn cancel_pending_succeeds_and_restores_balance() {
         .expect("cancel");
     assert_eq!(status, "cancelled");
 
-    let requests = list_requests(&pool, tenant, entities[0].1, Some("cancelled"))
+    let requests = list_requests(&pool, tenant, entities[0].1, Some("cancelled"), 50, 0)
         .await
-        .expect("list cancelled");
+        .expect("list cancelled")
+        .requests;
     assert_eq!(requests.len(), 1);
 
     assert_eq!(
@@ -882,6 +932,105 @@ async fn rejected_request_creates_notification_for_employee() {
     let lines = pending_notifications(&raw, tenant_id, "line").await;
     assert_eq!(lines.len(), 1, "employee with line id should receive LINE");
     assert_eq!(lines[0].0, "U_EMP");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn pagination_orders_and_pages_requests() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let tenant = TenantId(tenant_id);
+    let (entity_id, employee_id) = entities[0];
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    let ids = seed_leave_requests(&raw, tenant_id, entity_id, employee_id, user_id, 60).await;
+
+    // Page 1: pending rows come first even though approved rows have later dates.
+    let page1 = list_requests(&pool, tenant, employee_id, None, 10, 0)
+        .await
+        .expect("page 1");
+    assert_eq!(page1.requests.len(), 10);
+    assert!(page1.has_more);
+    for r in &page1.requests {
+        assert_eq!(r.status, "pending", "pending rows must come first");
+    }
+
+    // Page 2 must not overlap page 1 and starts the approved rows.
+    let page2 = list_requests(&pool, tenant, employee_id, None, 10, 10)
+        .await
+        .expect("page 2");
+    assert_eq!(page2.requests.len(), 10);
+    let page1_ids: std::collections::HashSet<_> = page1.requests.iter().map(|r| r.id).collect();
+    let overlap: Vec<_> = page2
+        .requests
+        .iter()
+        .map(|r| r.id)
+        .filter(|id| page1_ids.contains(id))
+        .collect();
+    assert!(overlap.is_empty(), "pages must not overlap");
+
+    // Approved rows are ordered newest-first.
+    for i in 1..page2.requests.len() {
+        assert!(
+            page2.requests[i - 1].start_date >= page2.requests[i].start_date,
+            "approved rows should be ordered by start_date DESC"
+        );
+    }
+
+    // Last page (offset 50, limit 10): exactly 10 remaining rows, no more.
+    let last = list_requests(&pool, tenant, employee_id, None, 10, 50)
+        .await
+        .expect("last page");
+    assert_eq!(last.requests.len(), 10);
+    assert!(!last.has_more, "last page must report has_more=false");
+
+    // Limit clamping: 0 clamps to the default (50), >100 clamps to 100.
+    let clamp_low = list_requests(&pool, tenant, employee_id, None, 0, 0)
+        .await
+        .expect("clamp low");
+    assert_eq!(clamp_low.requests.len(), 50);
+    assert!(clamp_low.has_more);
+
+    let clamp_high = list_requests(&pool, tenant, employee_id, None, 200, 0)
+        .await
+        .expect("clamp high");
+    assert_eq!(clamp_high.requests.len(), 60);
+    assert!(!clamp_high.has_more);
+
+    // Negative offset is treated as 0 (service-level defence).
+    let negative_offset = list_requests(&pool, tenant, employee_id, None, 10, -1)
+        .await
+        .expect("negative offset");
+    assert_eq!(negative_offset.requests.len(), 10);
+    assert_eq!(
+        negative_offset
+            .requests
+            .iter()
+            .map(|r| r.id)
+            .collect::<Vec<_>>(),
+        page1.requests.iter().map(|r| r.id).collect::<Vec<_>>(),
+        "negative offset should start from 0"
+    );
+
+    // Status filter still works across pages.
+    let pending_page = list_requests(&pool, tenant, employee_id, Some("pending"), 5, 0)
+        .await
+        .expect("pending page");
+    assert_eq!(pending_page.requests.len(), 5);
+    assert!(pending_page.has_more);
+    let pending_ids: std::collections::HashSet<_> = ids[..10].iter().copied().collect();
+    for r in &pending_page.requests {
+        assert!(
+            pending_ids.contains(&r.id),
+            "status filter must return pending rows only"
+        );
+    }
 
     cleanup(&raw, tenant_id).await;
 }

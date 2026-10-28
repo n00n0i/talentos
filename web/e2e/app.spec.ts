@@ -535,3 +535,58 @@ test("HR imports opening leave balance and employee sees quota", async ({ page }
   await page.goto("/leave");
   await expect(page.getByText("10 / 10").first()).toBeVisible();
 });
+
+test("employee submits an expense claim with receipt and HR approves it", async ({ page }) => {
+  async function loginAs(email: string, password: string) {
+    await page.getByLabel("ออกจากระบบ").click();
+    await expect(page.getByRole("button", { name: "เข้าสู่ระบบ" })).toBeVisible();
+    await page.getByLabel("องค์กร").fill("e2e");
+    await page.getByLabel("อีเมล").fill(email);
+    await page.getByLabel("รหัสผ่าน").fill(password);
+    await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+    await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+  }
+
+  // Tiny 1x1 PNG.
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=",
+    "base64",
+  );
+
+  await login(page);
+  await loginAs(invitedEmail, "ResetPass123!");
+  await page.goto("/claims");
+  await expect(page.getByRole("heading", { name: "ค่าใช้จ่าย" })).toBeVisible();
+
+  await page.getByTestId("claim-category").selectOption("meal");
+  await page.getByTestId("claim-amount").fill("500");
+  await page.getByTestId("claim-date").fill("2026-12-10");
+  await page.getByTestId("claim-description").fill("E2E team lunch");
+  await page.getByTestId("claim-receipt").setInputFiles({
+    name: "receipt.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await page.getByTestId("submit-claim").click();
+  await expect(page.getByText("ส่งคำขอเบิกค่าใช้จ่ายและแนบใบเสร็จแล้ว")).toBeVisible();
+
+  const mine = page.getByTestId("claim-row").filter({ hasText: "E2E team lunch" });
+  await expect(mine).toContainText("รออนุมัติ");
+  await expect(mine).toContainText("500.00");
+  await expect(mine.getByRole("link", { name: "ดูใบเสร็จ" })).toBeVisible();
+
+  await loginAs("e2e@example.com", "E2ePassword123!");
+  await page.goto("/claims");
+  const inbox = page.getByTestId("claim-approval-row").filter({ hasText: "E2E001" }).filter({ hasText: "E2E team lunch" });
+  await expect(inbox).toBeVisible();
+  await expect(inbox.getByRole("link", { name: "ดูใบเสร็จ" })).toBeVisible();
+  await inbox.getByTestId("approve-claim").click();
+  await expect(inbox).toHaveCount(0);
+
+  await loginAs(invitedEmail, "ResetPass123!");
+  await page.goto("/claims");
+  await expect(page.getByTestId("claim-row").filter({ hasText: "E2E team lunch" })).toContainText("อนุมัติแล้ว");
+
+  await page.reload();
+  await expect(page.getByTestId("claim-row").filter({ hasText: "E2E team lunch" })).toContainText("อนุมัติแล้ว");
+});

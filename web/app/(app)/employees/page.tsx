@@ -13,6 +13,7 @@ type Employee = {
   last_name_en: string | null;
   position_title: string;
   department: string | null;
+  cost_center: string | null;
   base_salary: string;
   hire_date: string;
   termination_date: string | null;
@@ -32,6 +33,7 @@ type FormState = {
   last_name_th: string;
   position_title: string;
   department: string;
+  cost_center: string;
   base_salary: string;
   hire_date: string;
   pf_member: boolean;
@@ -49,6 +51,7 @@ const EMPTY: FormState = {
   last_name_th: "",
   position_title: "",
   department: "",
+  cost_center: "",
   base_salary: "",
   hire_date: new Date().toISOString().slice(0, 10),
   pf_member: false,
@@ -232,6 +235,7 @@ export default function EmployeesPage() {
       last_name_th: editing.last_name_th,
       position_title: editing.position_title,
       department: editing.department ?? "",
+      cost_center: editing.cost_center ?? "",
       base_salary: editing.base_salary,
       hire_date: editing.hire_date,
       pf_member: editing.pf_member,
@@ -258,6 +262,7 @@ export default function EmployeesPage() {
       const body = {
         ...form,
         department: form.department.trim() || null,
+        cost_center: form.cost_center.trim() || null,
         bank_name: form.bank_name.trim() || null,
         bank_account_number: form.bank_account_number.trim() || null,
         national_id: form.national_id.trim() || null,
@@ -412,6 +417,14 @@ export default function EmployeesPage() {
             <div className="field">
               <label>แผนก</label>
               <input value={form.department} onChange={(e) => set("department", e.target.value)} />
+            </div>
+            <div className="field">
+              <label>ศูนย์ต้นทุน (Cost Center)</label>
+              <input
+                data-testid="employee-cost-center"
+                value={form.cost_center}
+                onChange={(e) => set("cost_center", e.target.value)}
+              />
             </div>
             <div className="field">
               <label>เงินเดือน (บาท)</label>

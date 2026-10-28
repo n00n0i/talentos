@@ -132,6 +132,11 @@
         "ordinal": 25,
         "name": "sso_enrolled",
         "type_info": "Bool"
+      },
+      {
+        "ordinal": 26,
+        "name": "cost_center",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -166,7 +171,8 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
   "hash": "3ca43286c460b8926baf49ff61cac32bc2cf8c2c9fb006946bd97769e21091c2"

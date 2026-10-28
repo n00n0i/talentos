@@ -145,7 +145,7 @@ pub async fn payroll_cost(
     to: NaiveDate,
 ) -> Result<PayrollCostReport, ReportError> {
     let rows = sqlx::query(
-        "SELECT COALESCE(e.department, $1) AS department, \
+        "SELECT COALESCE(e.cost_center, e.department, $1) AS department, \
                 COUNT(DISTINCT p.employee_id)::bigint AS employees, \
                 COALESCE(SUM(p.gross_earnings), 0) AS gross, \
                 COALESCE(SUM(p.net_pay), 0) AS net, \
@@ -158,7 +158,7 @@ pub async fn payroll_cost(
          WHERE r.status = 'approved' \
            AND r.tenant_id = current_tenant_id() \
            AND r.period_end BETWEEN $2 AND $3 \
-         GROUP BY e.department \
+         GROUP BY COALESCE(e.cost_center, e.department, $1) \
          ORDER BY department",
     )
     .bind(UNKNOWN_DEPARTMENT)
@@ -301,6 +301,54 @@ pub async fn export_pf_remittance_csv(
     Ok((filename, body))
 }
 
+/// Tenant GL account codes, defaulting to the Thai standard mapping.
+#[derive(Debug, Clone)]
+struct GlAccounts {
+    salary: String,
+    net: String,
+    tax: String,
+    sso: String,
+    pf: String,
+    loan: String,
+    claim: String,
+}
+
+impl Default for GlAccounts {
+    fn default() -> Self {
+        Self {
+            salary: "5100".into(),
+            net: "2100".into(),
+            tax: "2200".into(),
+            sso: "2210".into(),
+            pf: "2220".into(),
+            loan: "2230".into(),
+            claim: "5200".into(),
+        }
+    }
+}
+
+async fn load_gl_accounts(conn: &mut PgConnection) -> Result<GlAccounts, ReportError> {
+    let row = sqlx::query(
+        "SELECT gl_salary_account, gl_net_account, gl_tax_account, gl_sso_account,
+                gl_pf_account, gl_loan_account, gl_claim_account
+           FROM tenant_payroll_settings WHERE tenant_id = current_tenant_id()",
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    Ok(match row {
+        Some(row) => GlAccounts {
+            salary: row.get("gl_salary_account"),
+            net: row.get("gl_net_account"),
+            tax: row.get("gl_tax_account"),
+            sso: row.get("gl_sso_account"),
+            pf: row.get("gl_pf_account"),
+            loan: row.get("gl_loan_account"),
+            claim: row.get("gl_claim_account"),
+        },
+        None => GlAccounts::default(),
+    })
+}
+
 /// GL journal CSV for an approved payroll run.
 /// Returns `(filename, body)`. Only `approved` runs are exported; anything else
 /// or a run not visible to the tenant yields `NotFound`.
@@ -331,8 +379,10 @@ pub async fn export_gl_csv(
         None => return Err(ReportError::NotFound),
     };
 
+    let accounts = load_gl_accounts(conn).await?;
+
     let rows = sqlx::query(
-        "SELECT COALESCE(e.department, $1) AS department, \
+        "SELECT COALESCE(e.cost_center, e.department, $1) AS department, \
                 COALESCE(SUM(p.gross_earnings), 0) AS gross, \
                 COALESCE(SUM(p.sso_employer), 0) AS sso_employer, \
                 COALESCE(SUM(p.pf_employer), 0) AS pf_employer, \
@@ -346,7 +396,7 @@ pub async fn export_gl_csv(
          JOIN employees e ON e.id = p.employee_id \
          WHERE p.payroll_run_id = $2 \
            AND p.tenant_id = current_tenant_id() \
-         GROUP BY e.department \
+         GROUP BY COALESCE(e.cost_center, e.department, $1) \
          ORDER BY department",
     )
     .bind(UNKNOWN_DEPARTMENT)
@@ -372,7 +422,7 @@ pub async fn export_gl_csv(
 
         let debit = gross + sso_employer + pf_employer;
         lines.push(GlLine {
-            account_code: "5100".into(),
+            account_code: accounts.salary.clone(),
             account_name: "ค่าแรง".into(),
             department: department.clone(),
             debit,
@@ -380,7 +430,7 @@ pub async fn export_gl_csv(
             description: description.clone(),
         });
         lines.push(GlLine {
-            account_code: "2100".into(),
+            account_code: accounts.net.clone(),
             account_name: "เงินเดือนค้างจ่าย".into(),
             department: department.clone(),
             debit: Decimal::ZERO,
@@ -388,7 +438,7 @@ pub async fn export_gl_csv(
             description: description.clone(),
         });
         lines.push(GlLine {
-            account_code: "2200".into(),
+            account_code: accounts.tax.clone(),
             account_name: "ภาษีหัก ณ ที่จ่าย".into(),
             department: department.clone(),
             debit: Decimal::ZERO,
@@ -396,7 +446,7 @@ pub async fn export_gl_csv(
             description: description.clone(),
         });
         lines.push(GlLine {
-            account_code: "2210".into(),
+            account_code: accounts.sso.clone(),
             account_name: "ประกันสังคม".into(),
             department: department.clone(),
             debit: Decimal::ZERO,
@@ -404,7 +454,7 @@ pub async fn export_gl_csv(
             description: description.clone(),
         });
         lines.push(GlLine {
-            account_code: "2220".into(),
+            account_code: accounts.pf.clone(),
             account_name: "กองทุนสำรองเลี้ยงชีพ".into(),
             department: department.clone(),
             debit: Decimal::ZERO,
@@ -412,7 +462,7 @@ pub async fn export_gl_csv(
             description: description.clone(),
         });
         lines.push(GlLine {
-            account_code: "2230".into(),
+            account_code: accounts.loan.clone(),
             account_name: "เงินให้กู้พนักงาน".into(),
             department: department.clone(),
             debit: Decimal::ZERO,
@@ -420,7 +470,7 @@ pub async fn export_gl_csv(
             description: description.clone(),
         });
         lines.push(GlLine {
-            account_code: "5200".into(),
+            account_code: accounts.claim.clone(),
             account_name: "ค่าใช้จ่ายพนักงาน".into(),
             department: department.clone(),
             debit: reimbursement,

@@ -279,10 +279,19 @@ account_code,account_name,department,debit,credit,description
 2200 ภาษีหัก ณ ที่จ่าย          credit tax
 2210 ประกันสังคม               credit employee + employer SSO
 2220 กองทุนสำรองเลี้ยงชีพ       credit employee + employer PF
+2230 เงินให้กู้พนักงาน           credit loan deduction
+5200 ค่าใช้จ่ายพนักงาน          debit  reimbursement
 ```
 
-Department is the cost center in v1; account codes are fixed defaults. Text
-fields are CSV-injection safe.
+The seven account codes are tenant-configurable under **ตั้งค่า → รหัสบัญชี GL**
+(`GET/PUT /api/v1/settings/payroll`, non-empty, ≤20 alphanumeric chars); the
+table above shows the defaults, so tenants without a settings row keep the
+classic mapping. Each journal row is grouped by `COALESCE(cost_center,
+department, 'ไม่ระบุ')` — an employee's **cost center** (`employees.cost_center`,
+set on the employee form) wins, falling back to their department. Payroll-cost
+reports group by the same value; headcount stays by department. Account names
+and text fields remain Thai and CSV-injection safe. The CSV export is the only
+supported format; Excel/PDF reports are out of scope.
 
 ## Deploy (on-prem)
 
@@ -368,6 +377,9 @@ any row is invalid. The `/employees` page parses the CSV in the browser, shows
 the per-row report, and enables the commit only when the file is clean.
 Duplicate codes (in the file or per entity) and foreign entities are reported
 on the row. PII (national id, bank account, SSO number) is not imported in v1.
+Bulk CSV import does not set `cost_center` — imported employees fall back to
+their department in GL grouping until an HR admin sets a cost center on the
+employee form.
 
 HR admins can enroll an authenticator app from `/settings` (RFC 6238, 6 digits,
 30 s, ±1 step). The secret is shown once and stored AES-256-GCM-encrypted; logins

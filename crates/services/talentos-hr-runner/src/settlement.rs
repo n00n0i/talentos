@@ -113,8 +113,15 @@ pub async fn compute_and_store(
     let leave_pay = (daily_rate * Decimal::from(input.unused_leave_days)).round_dp(2);
     let notice_pay = (daily_rate * Decimal::from(input.notice_days)).round_dp(2);
 
-    let service_days = (input.termination_date - hire_date).num_days();
-    let years_decimal = Decimal::from(service_days) / dec!(365);
+    // Completed calendar years, not 365-day blocks: an employee reaches the
+    // next service tier on the anniversary, not after 365 days.
+    let mut completed_years = input.termination_date.year() - hire_date.year();
+    if (input.termination_date.month(), input.termination_date.day())
+        < (hire_date.month(), hire_date.day())
+    {
+        completed_years -= 1;
+    }
+    let years_decimal = Decimal::from(completed_years.max(0));
     let years_of_service = years_decimal.to_f64().unwrap_or(0.0);
 
     let severance_pay = if input.include_severance {

@@ -130,7 +130,7 @@ async fn severance_tier_two_years() {
     let tenant = TenantId(tenant_id);
     let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
 
-    // 730 days exactly -> 2.0 years of service.
+    // Hired 2024-01-01; terminated 2025-12-31 is one completed year.
     let view = compute_and_store(
         &pool,
         tenant,
@@ -141,8 +141,8 @@ async fn severance_tier_two_years() {
     .await
     .expect("compute settlement");
 
-    // 2 years -> 90 days -> 30,000 * 90 / 30 = 90,000
-    assert_eq!(view.years_of_service, 2.0);
+    // 1 completed year -> the 1–3 year tier is 90 days -> 30,000 * 90 / 30.
+    assert_eq!(view.years_of_service, 1.0);
     assert_eq!(view.severance_pay, dec!(90000.00));
     assert_eq!(view.breakdown["severance_days"], 90);
     // termination day 31 is capped at 30 days -> 30,000 + severance 90,000.

@@ -73,7 +73,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const displayName = me?.full_name_th || me?.email || "TalentOS";
   const roleLabel = me?.roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ") || "";
   const baseNav = canReports
-    ? [...NAV, { href: "/reports", label: "รายงาน", icon: "file" as IconName }]
+    ? [
+        ...NAV,
+        ...(isAdmin
+          ? [{ href: "/loans", label: "เงินกู้", icon: "wallet" as IconName }]
+          : []),
+        { href: "/reports", label: "รายงาน", icon: "file" as IconName },
+      ]
     : NAV;
   const items = !me
     ? baseNav

@@ -250,7 +250,8 @@ pub async fn export_gl_csv(
                 COALESCE(SUM(p.net_pay), 0) AS net, \
                 COALESCE(SUM(p.tax_withheld), 0) AS tax, \
                 COALESCE(SUM(p.sso_employee), 0) AS sso_employee, \
-                COALESCE(SUM(p.pf_employee), 0) AS pf_employee \
+                COALESCE(SUM(p.pf_employee), 0) AS pf_employee, \
+                COALESCE(SUM(p.loan_deduction), 0) AS loan_deduction \
          FROM payslips p \
          JOIN employees e ON e.id = p.employee_id \
          WHERE p.payroll_run_id = $2 \
@@ -265,7 +266,7 @@ pub async fn export_gl_csv(
     let description = format!("รอบเงินเดือน {period_start} ถึง {period_end}");
     let filename = format!("gl-journal-{run_id}-{period_start}-{period_end}.csv");
 
-    let mut lines: Vec<GlLine> = Vec::with_capacity(rows.len() * 5);
+    let mut lines: Vec<GlLine> = Vec::with_capacity(rows.len() * 6);
     for row in &rows {
         let department: String = row.get("department");
         let gross: Decimal = row.get("gross");
@@ -275,6 +276,7 @@ pub async fn export_gl_csv(
         let tax: Decimal = row.get("tax");
         let sso_employee: Decimal = row.get("sso_employee");
         let pf_employee: Decimal = row.get("pf_employee");
+        let loan_deduction: Decimal = row.get("loan_deduction");
 
         let debit = gross + sso_employer + pf_employer;
         lines.push(GlLine {
@@ -315,6 +317,14 @@ pub async fn export_gl_csv(
             department: department.clone(),
             debit: Decimal::ZERO,
             credit: pf_employee + pf_employer,
+            description: description.clone(),
+        });
+        lines.push(GlLine {
+            account_code: "2230".into(),
+            account_name: "เงินให้กู้พนักงาน".into(),
+            department: department.clone(),
+            debit: Decimal::ZERO,
+            credit: loan_deduction,
             description: description.clone(),
         });
     }

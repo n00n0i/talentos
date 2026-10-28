@@ -50,6 +50,7 @@ pub struct PayslipRenderData {
     pub sso_employee: Decimal,
     pub tax_withheld: Decimal,
     pub pf_employee: Decimal,
+    pub loan_deduction: Decimal,
     pub total_deductions: Decimal,
     pub net_pay: Decimal,
     pub bank_name: Option<String>,
@@ -262,6 +263,13 @@ pub fn render_html(t: &PayslipTemplate, d: &PayslipRenderData) -> String {
             baht(d.pf_employee)
         );
     }
+    if !d.loan_deduction.is_zero() {
+        let _ = writeln!(
+            h,
+            "<tr><td>หักเงินกู้/เบิกล่วงหน้า</td><td class=\"num\">-{}</td></tr>",
+            baht(d.loan_deduction)
+        );
+    }
     let _ = writeln!(
         h,
         "<tr><td>รวมรายการหัก</td><td class=\"num\">-{}</td></tr>",
@@ -320,6 +328,7 @@ mod tests {
             sso_employee: dec!(750),
             tax_withheld: dec!(9416.67),
             pf_employee: dec!(4250),
+            loan_deduction: dec!(0),
             total_deductions: dec!(14416.67),
             net_pay: dec!(72083.33),
             bank_name: Some("BBL".into()),
@@ -384,6 +393,17 @@ mod tests {
         assert!(html.contains("บริษัท ตัวอย่าง จำกัด"));
         assert!(html.contains("#b91c1c"));
         assert!(html.contains("https://example.com/logo.png"));
+    }
+
+    #[test]
+    fn renders_loan_deduction_line_when_present() {
+        let mut d = data();
+        d.loan_deduction = dec!(1500);
+        d.total_deductions += dec!(1500);
+        d.net_pay -= dec!(1500);
+        let html = render_html(&PayslipTemplate::default(), &d);
+        assert!(html.contains("หักเงินกู้/เบิกล่วงหน้า"));
+        assert!(html.contains("1,500.00"));
     }
 
     #[test]

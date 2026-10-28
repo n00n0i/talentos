@@ -102,6 +102,10 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/payroll/runs/:id/export.gl.csv",
             get(reports::export_gl_csv),
         )
+        .route(
+            "/api/v1/payroll/runs/:id/pf-remittance.csv",
+            get(reports::export_pf_remittance_csv),
+        )
         .route("/api/v1/reports/headcount", get(reports::headcount))
         .route("/api/v1/reports/payroll-cost", get(reports::payroll_cost))
         .route("/api/v1/reports/ot-trend", get(reports::ot_trend))

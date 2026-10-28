@@ -6,7 +6,9 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sqlx::PgPool;
 use std::str::FromStr;
-use talentos_hr_runner::reports::{export_gl_csv, headcount, ot_trend, payroll_cost, ReportError};
+use talentos_hr_runner::reports::{
+    export_gl_csv, export_pf_remittance_csv, headcount, ot_trend, payroll_cost, ReportError,
+};
 use uuid::Uuid;
 
 async fn tenant_tx(
@@ -74,6 +76,7 @@ async fn seed_tenant(pool: &PgPool) -> Result<Seed, Box<dyn std::error::Error>> 
         "ไอที",
         "active",
         dec!(30000),
+        false,
     )
     .await?;
     let emp_probation_sales = seed_employee(
@@ -85,6 +88,7 @@ async fn seed_tenant(pool: &PgPool) -> Result<Seed, Box<dyn std::error::Error>> 
         "Sales",
         "probation",
         dec!(25000),
+        false,
     )
     .await?;
 
@@ -107,6 +111,7 @@ async fn seed_employee(
     department: &str,
     status: &str,
     base_salary: Decimal,
+    pf_member: bool,
 ) -> Result<Uuid, Box<dyn std::error::Error>> {
     let employee_id = Uuid::new_v4();
     let mut tx = tenant_tx(pool, tenant_id).await?;
@@ -114,7 +119,7 @@ async fn seed_employee(
         "INSERT INTO employees \
            (id, tenant_id, entity_id, user_id, employee_code, first_name_th, last_name_th, \
             hire_date, position_title, department, base_salary, tax_filing_status, pf_member, status) \
-         VALUES ($1,$2,$3,$4,$5,'ทดสอบ','พนักงาน','2024-01-01','Staff',$6,$7,1,false,$8)",
+         VALUES ($1,$2,$3,$4,$5,'ทดสอบ','พนักงาน','2024-01-01','Staff',$6,$7,1,$8,$9)",
     )
     .bind(employee_id)
     .bind(tenant_id)
@@ -123,6 +128,7 @@ async fn seed_employee(
     .bind(code)
     .bind(department)
     .bind(base_salary)
+    .bind(pf_member)
     .bind(status)
     .execute(&mut *tx)
     .await?;
@@ -347,6 +353,7 @@ async fn headcount_counts_active_probation_leave_and_terminated_last_12m(
         "HR",
         "leave",
         dec!(20000),
+        false,
     )
     .await?;
     let terminated_emp = seed_employee(
@@ -358,6 +365,7 @@ async fn headcount_counts_active_probation_leave_and_terminated_last_12m(
         "",
         "active",
         dec!(20000),
+        false,
     )
     .await?;
     let today = chrono::Utc::now().date_naive();
@@ -652,6 +660,161 @@ async fn gl_export_balances_with_loan_deduction() -> Result<(), Box<dyn std::err
         total_credit += credit;
     }
     assert!((total_debit - total_credit).abs() <= dec!(0.01));
+
+    cleanup_tenant(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pf_remittance_csv_includes_only_pf_members_and_totals(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    let pf_a = seed_employee(
+        &pool,
+        seed.tenant_id,
+        seed.entity_id,
+        seed.user_id,
+        "E101",
+        "IT",
+        "active",
+        dec!(30000),
+        true,
+    )
+    .await?;
+    let pf_b = seed_employee(
+        &pool,
+        seed.tenant_id,
+        seed.entity_id,
+        seed.user_id,
+        "E102",
+        "Sales",
+        "active",
+        dec!(25000),
+        true,
+    )
+    .await?;
+
+    let run_id = Uuid::new_v4();
+    let period_start = NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+    let period_end = NaiveDate::from_ymd_opt(2026, 4, 30).unwrap();
+    let payment_date = NaiveDate::from_ymd_opt(2026, 5, 5).unwrap();
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    sqlx::query(
+        "INSERT INTO payroll_runs \
+           (id, tenant_id, entity_id, period_start, period_end, payment_date, status, \
+            total_employees, created_by, created_at) \
+         VALUES ($1,$2,$3,$4,$5,$6,'approved',3,$7,now())",
+    )
+    .bind(run_id)
+    .bind(seed.tenant_id)
+    .bind(seed.entity_id)
+    .bind(period_start)
+    .bind(period_end)
+    .bind(payment_date)
+    .bind(seed.user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // Non-member: no PF contribution.
+    insert_payslip(
+        &mut tx,
+        seed.tenant_id,
+        run_id,
+        seed.emp_active_it,
+        dec!(30000),
+        dec!(0),
+        dec!(750),
+        dec!(750),
+        dec!(2000),
+        dec!(0),
+        dec!(0),
+        dec!(27750),
+        dec!(0),
+    )
+    .await?;
+    // Member A: employee 1,500 + employer 1,500.
+    insert_payslip(
+        &mut tx,
+        seed.tenant_id,
+        run_id,
+        pf_a,
+        dec!(30000),
+        dec!(0),
+        dec!(750),
+        dec!(750),
+        dec!(2000),
+        dec!(1500),
+        dec!(1500),
+        dec!(24750),
+        dec!(0),
+    )
+    .await?;
+    // Member B: employee 1,250 + employer 1,250.
+    insert_payslip(
+        &mut tx,
+        seed.tenant_id,
+        run_id,
+        pf_b,
+        dec!(25000),
+        dec!(0),
+        dec!(625),
+        dec!(625),
+        dec!(1500),
+        dec!(1250),
+        dec!(1250),
+        dec!(21000),
+        dec!(0),
+    )
+    .await?;
+    tx.commit().await?;
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    let (filename, body1) = export_pf_remittance_csv(&mut *tx, run_id).await?;
+    let (_, body2) = export_pf_remittance_csv(&mut *tx, run_id).await?;
+    tx.rollback().await?;
+
+    assert!(filename.starts_with("pf-remittance-"));
+    assert_eq!(body1, body2);
+
+    let lines: Vec<&str> = body1.lines().collect();
+    assert_eq!(lines.len(), 4);
+    assert_eq!(
+        lines[0],
+        "\u{feff}employee_code,name,employee_amount,employer_amount,total"
+    );
+    assert!(lines[1].starts_with("\"E101\""));
+    assert!(lines[2].starts_with("\"E102\""));
+
+    let totals: Vec<&str> = lines[3].split(',').collect();
+    assert_eq!(totals.len(), 5);
+    assert_eq!(strip_csv_quotes(totals[2]), "2750.00");
+    assert_eq!(strip_csv_quotes(totals[3]), "2750.00");
+    assert_eq!(strip_csv_quotes(totals[4]), "5500.00");
+
+    cleanup_tenant(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pf_remittance_csv_rejects_draft_run() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+    let run_id = seed_draft_payroll_run(&pool, &seed).await?;
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    let result = export_pf_remittance_csv(&mut *tx, run_id).await;
+    tx.rollback().await?;
+
+    assert!(matches!(result, Err(ReportError::NotFound)));
 
     cleanup_tenant(&pool, seed.tenant_id).await;
     Ok(())

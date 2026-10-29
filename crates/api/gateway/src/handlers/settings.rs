@@ -280,7 +280,7 @@ pub async fn put_entity(
     let done = sqlx::query(
         "UPDATE entities
             SET name = $1, tax_id = $2, address = COALESCE($3, address),
-                sso_account = $4, branch = COALESCE($5, branch), updated_at = now()
+                sso_account = COALESCE($4, sso_account), branch = COALESCE($5, branch), updated_at = now()
           WHERE id = $6 AND tenant_id = $7",
     )
     .bind(body.name.trim())

@@ -679,17 +679,38 @@ fn resolve_column_value(
     pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
 ) -> String {
     match source {
-        "national_id" => decrypt(pii, row.get("national_id")).unwrap_or_default(),
+        "national_id" => decrypt(
+            pii,
+            row.try_get::<Option<String>, _>("national_id")
+                .ok()
+                .flatten(),
+        )
+        .unwrap_or_default(),
         "employee_name" => format!(
             "{} {}",
-            row.get::<String, _>("first_name_th"),
-            row.get::<String, _>("last_name_th")
+            row.try_get::<String, _>("first_name_th")
+                .unwrap_or_default(),
+            row.try_get::<String, _>("last_name_th").unwrap_or_default()
         ),
-        "employee_code" => row.get("employee_code"),
-        "gross" => format_money(row.get("gross_earnings")),
-        "tax" => format_money(row.get("tax_withheld")),
-        "sso_employee" => format_money(row.get("sso_employee")),
-        "sso_employer" => format_money(row.get("sso_employer")),
+        "employee_code" => row
+            .try_get::<String, _>("employee_code")
+            .unwrap_or_default(),
+        "gross" => row
+            .try_get::<rust_decimal::Decimal, _>("gross_earnings")
+            .map(format_money)
+            .unwrap_or_default(),
+        "tax" => row
+            .try_get::<rust_decimal::Decimal, _>("tax_withheld")
+            .map(format_money)
+            .unwrap_or_default(),
+        "sso_employee" => row
+            .try_get::<rust_decimal::Decimal, _>("sso_employee")
+            .map(format_money)
+            .unwrap_or_default(),
+        "sso_employer" => row
+            .try_get::<rust_decimal::Decimal, _>("sso_employer")
+            .map(format_money)
+            .unwrap_or_default(),
         "annual_income" => row
             .try_get::<rust_decimal::Decimal, _>("annual_income")
             .map(format_money)

@@ -277,12 +277,15 @@ installment from a not-yet-approved run can be reversed
 
 ## Statutory form templates
 
-`/forms` (HR) edits versioned 50 ทวิ and สปส.1-10 templates: labels, header
+`/forms` (HR) edits versioned 50 ทวิ, สปส.1-10, ภ.ง.ด.1, and ภ.ง.ด.1ก templates: labels, header
 values (employer account/branch), and CSV columns mapped to payroll data. The
 global defaults follow public RD/SSO field structures; tenants save their own
 version, which overrides the default. Generate a printable 50 ทวิ per payslip
-(`GET /payroll/payslips/:id/50tawi`) and the 1-10 CSV per approved run
-(`GET /payroll/runs/:id/sso1-10.csv`). Official layouts change and must be
+(`GET /payroll/payslips/:id/50tawi`), the 1-10 CSV per approved run
+(`GET /payroll/runs/:id/sso1-10.csv`), monthly ภ.ง.ด.1
+(`GET /payroll/runs/:id/pnd1.csv`), and annual ภ.ง.ด.1ก
+(`GET /reports/pnd1a.csv?year=`). Entity settings now include the employer SSO
+account and branch used by 1-10. Official layouts change and must be
 signed off by an accountant before filing; the editor exists so fields can be
 corrected without a code change.
 

@@ -35,6 +35,7 @@ export default function PayrollPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pfStates, setPfStates] = useState<Record<string, { status: string; last_error?: string }>>({});
 
   const load = useCallback(async () => {
     const r = await gql<{ payrollRuns: PayrollRun[] }>(RUNS_QUERY);
@@ -104,6 +105,23 @@ export default function PayrollPage() {
       });
       setNotice("อนุมัติรอบเงินเดือนแล้ว");
       await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendPf(run: PayrollRun) {
+    setBusy(true);
+    setError("");
+    try {
+      const r = await gw<{ status: string; attempts: number; sent_at?: string; last_error?: string }>(
+        `api/v1/payroll/runs/${run.id}/pf-remittance/send`,
+        { method: "POST" },
+      );
+      setPfStates((prev) => ({ ...prev, [run.id]: { status: r.status, last_error: r.last_error } }));
+      setNotice(r.status === "sent" ? "ส่งข้อมูล PF แล้ว" : "การส่งข้อมูล PF ล้มเหลว");
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -191,8 +209,10 @@ export default function PayrollPage() {
                     open={open}
                     payslips={payslips[run.id]}
                     busy={busy}
+                    pfState={pfStates[run.id]}
                     onToggle={() => toggle(run)}
                     onApprove={() => approve(run)}
+                    onSendPf={() => sendPf(run)}
                   />
                 );
               })}
@@ -210,16 +230,20 @@ function RunRow({
   open,
   payslips,
   busy,
+  pfState,
   onToggle,
   onApprove,
+  onSendPf,
 }: {
   run: PayrollRun;
   status: { label: string; tone: string };
   open: boolean;
   payslips: Payslip[] | undefined;
   busy: boolean;
+  pfState?: { status: string; last_error?: string };
   onToggle: () => void;
   onApprove: () => void;
+  onSendPf: () => void;
 }) {
   return (
     <>
@@ -267,6 +291,23 @@ function RunRow({
               >
                 ดาวน์โหลด PF (CSV)
               </a>
+              <button
+                className="btn btn-sm btn-primary"
+                data-testid="send-pf"
+                disabled={busy || pfState?.status === "sent"}
+                onClick={onSendPf}
+              >
+                ส่ง PF
+              </button>
+              {pfState && (
+                <span
+                  className={`badge ${pfState.status === "sent" ? "success" : "danger"}`}
+                  data-testid="pf-status"
+                  style={{ marginLeft: 6 }}
+                >
+                  {pfState.status === "sent" ? "ส่งแล้ว" : "ส่งไม่สำเร็จ"}
+                </span>
+              )}
             </>
           )}
           {run.status === "pending_approval" && (

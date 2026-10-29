@@ -4021,6 +4021,7 @@ dependencies = [
  "talentos-rag",
  "talentos-tools",
  "talentos-wasm-host",
+ "thiserror 2.0.21",
  "tokio",
  "tower",
  "tower-http",

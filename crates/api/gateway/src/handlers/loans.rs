@@ -17,7 +17,10 @@ use uuid::Uuid;
 use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
-use talentos_hr_runner::loans::{list_payments, payoff as record_payoff, PayoffError};
+use talentos_hr_runner::loans::{
+    list_installments, list_payments, payoff as record_payoff, reverse_installment, PayoffError,
+    ReverseError,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
@@ -64,6 +67,19 @@ pub struct PaymentDto {
     pub paid_at: String,
     pub note: Option<String>,
     pub created_by: Uuid,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InstallmentDto {
+    pub id: i64,
+    pub loan_id: Uuid,
+    pub payroll_run_id: Uuid,
+    pub amount: String,
+    pub created_at: String,
+    pub reversed_at: Option<String>,
+    pub run_status: String,
+    pub period_start: String,
+    pub period_end: String,
 }
 
 /// GET /api/v1/loans?employee_id=&status=
@@ -313,6 +329,67 @@ pub async fn payments(
                 .into_response()
         }
         Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+/// GET /api/v1/loans/:id/installments
+pub async fn installments(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+
+    match list_installments(&state.pool, ctx.tenant_id, id).await {
+        Ok(rows) => {
+            let installments: Vec<InstallmentDto> = rows
+                .into_iter()
+                .map(|i| InstallmentDto {
+                    id: i.id,
+                    loan_id: i.loan_id,
+                    payroll_run_id: i.payroll_run_id,
+                    amount: i.amount.to_string(),
+                    created_at: i.created_at.to_rfc3339(),
+                    reversed_at: i.reversed_at.map(|d| d.to_rfc3339()),
+                    run_status: i.run_status,
+                    period_start: i.period_start.to_string(),
+                    period_end: i.period_end.to_string(),
+                })
+                .collect();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "installments": installments })),
+            )
+                .into_response()
+        }
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+/// POST /api/v1/loans/:id/installments/:run_id/reverse
+pub async fn reverse(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path((id, run_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+
+    match reverse_installment(&state.pool, ctx.tenant_id, ctx.user_id.0, id, run_id).await {
+        Ok(()) => match fetch_one(&state, ctx.tenant_id.0, id).await {
+            Ok(Some(loan)) => (StatusCode::OK, Json(loan)).into_response(),
+            Ok(None) => not_found(),
+            Err(e) => internal_err(&e),
+        },
+        Err(ReverseError::NotFound) => not_found(),
+        Err(ReverseError::AlreadyReversed) => conflict("installment already reversed"),
+        Err(ReverseError::InvalidRunState(status)) => conflict(&format!(
+            "payroll run cannot be reversed in state '{status}'"
+        )),
+        Err(ReverseError::Db(e)) => internal_err(&e.to_string()),
     }
 }
 

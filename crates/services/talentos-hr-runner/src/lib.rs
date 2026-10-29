@@ -39,7 +39,10 @@ pub use leave::{
     list_balances, list_requests, pending_approvals, DecideOutcome, LeaveBalanceView, LeaveError,
     LeaveInput, LeaveRequestView, PendingLeave,
 };
-pub use loans::{list_payments, payoff, PaymentView, PayoffError};
+pub use loans::{
+    list_installments, list_payments, payoff, reverse_installment, InstallmentView, PaymentView,
+    PayoffError, ReverseError,
+};
 pub use ot::{
     cancel_request as cancel_ot_request, create_request as create_ot_request,
     decide_request as decide_ot_request, list_requests as list_ot_requests,

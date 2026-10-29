@@ -655,8 +655,9 @@ async fn mark_claims_paid(
 }
 
 /// Record one loan installment and reduce the balance only when the installment
-/// row was actually inserted. The unique `(loan_id, payroll_run_id)` key makes
-/// re-runs and crash recovery idempotent.
+/// row was actually inserted. The partial unique `(loan_id, payroll_run_id)
+/// WHERE reversed_at IS NULL` key makes re-runs idempotent while allowing a
+/// recalculated run to create a fresh installment after a reversal.
 async fn apply_loan_deduction(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: TenantId,
@@ -670,7 +671,7 @@ async fn apply_loan_deduction(
     let inserted: Option<i64> = sqlx::query_scalar(
         r#"INSERT INTO loan_installments (tenant_id, loan_id, payroll_run_id, amount)
            VALUES ($1, $2, $3, $4)
-           ON CONFLICT (loan_id, payroll_run_id) DO NOTHING
+           ON CONFLICT (loan_id, payroll_run_id) WHERE reversed_at IS NULL DO NOTHING
            RETURNING id"#,
     )
     .bind(tenant_id.0)

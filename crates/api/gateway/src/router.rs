@@ -70,6 +70,11 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/loans/:id/cancel", post(loans::cancel))
         .route("/api/v1/loans/:id/payoff", post(loans::payoff))
         .route("/api/v1/loans/:id/payments", get(loans::payments))
+        .route("/api/v1/loans/:id/installments", get(loans::installments))
+        .route(
+            "/api/v1/loans/:id/installments/:run_id/reverse",
+            post(loans::reverse),
+        )
         .route("/api/v1/me/loans", get(loans::me_loans))
         .route(
             "/api/v1/settings/payroll",

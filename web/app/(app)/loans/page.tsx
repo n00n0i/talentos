@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { gw, handleApiError, thb, thDate } from "@/lib/api";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { gw, handleApiError, thb, thDate, RUN_STATUS } from "@/lib/api";
 
 type Employee = {
   id: string;
@@ -24,6 +24,20 @@ type Loan = {
   note: string | null;
 };
 
+type Installment = {
+  id: number;
+  loan_id: string;
+  payroll_run_id: string;
+  amount: string;
+  created_at: string;
+  reversed_at: string | null;
+  run_status: string;
+  period_start: string;
+  period_end: string;
+};
+
+const REVERSIBLE_RUN_STATUS = ["draft", "calculating", "pending_approval"];
+
 const STATUS_LABEL: Record<string, string> = {
   active: "กำลังผ่อน",
   paid: "ชำระครบ",
@@ -41,6 +55,7 @@ export default function LoansPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [installments, setInstallments] = useState<Record<string, Installment[] | null>>({});
 
   const load = useCallback(async () => {
     const r = await gw<{ loans: Loan[] }>("api/v1/loans");
@@ -122,6 +137,46 @@ export default function LoansPage() {
         body: JSON.stringify({ amount, note: null }),
       });
       setNotice("บันทึกการชำระแล้ว");
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleInstallments(loan: Loan) {
+    if (installments[loan.id]) {
+      setInstallments((prev) => ({ ...prev, [loan.id]: null }));
+      return;
+    }
+    try {
+      const r = await gw<{ installments: Installment[] }>(
+        `api/v1/loans/${loan.id}/installments`,
+      );
+      setInstallments((prev) => ({ ...prev, [loan.id]: r.installments }));
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function reverseInstallment(loan: Loan, installment: Installment) {
+    if (
+      !confirm(
+        `ยืนยันกลับรายการงวดผ่อนของ ${loan.employee_code} ฿${thb(installment.amount)}?`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(
+        `api/v1/loans/${loan.id}/installments/${installment.payroll_run_id}/reverse`,
+        { method: "POST" },
+      );
+      setNotice("กลับรายการแล้ว — ต้องคำนวณรอบเงินเดือนใหม่");
+      setInstallments((prev) => ({ ...prev, [loan.id]: null }));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -237,33 +292,82 @@ export default function LoansPage() {
             </thead>
             <tbody>
               {loans.map((l) => (
-                <tr key={l.id} data-testid="loan-row">
-                  <td>
-                    {l.employee_code} · {l.employee_name}
-                  </td>
-                  <td className="num">฿{thb(l.principal)}</td>
-                  <td className="num">฿{thb(l.paid_amount)}</td>
-                  <td className="num">฿{thb(l.balance)}</td>
-                  <td className="num">฿{thb(l.installment_amount)}</td>
-                  <td>{thDate(l.start_date)}</td>
-                  <td>
-                    <span className={`badge ${l.status === "active" ? "warning" : l.status === "paid" ? "success" : ""}`}>
-                      {STATUS_LABEL[l.status] ?? l.status}
-                    </span>
-                  </td>
-                  <td className="num">
-                    {l.status === "active" && (
-                      <button className="btn btn-sm" data-testid="payoff-loan" onClick={() => payoffLoan(l)} disabled={busy}>
-                        จ่ายปิด/จ่ายบางส่วน
+                <Fragment key={l.id}>
+                  <tr data-testid="loan-row">
+                    <td>
+                      {l.employee_code} · {l.employee_name}
+                    </td>
+                    <td className="num">฿{thb(l.principal)}</td>
+                    <td className="num">฿{thb(l.paid_amount)}</td>
+                    <td className="num">฿{thb(l.balance)}</td>
+                    <td className="num">฿{thb(l.installment_amount)}</td>
+                    <td>{thDate(l.start_date)}</td>
+                    <td>
+                      <span className={`badge ${l.status === "active" ? "warning" : l.status === "paid" ? "success" : ""}`}>
+                        {STATUS_LABEL[l.status] ?? l.status}
+                      </span>
+                    </td>
+                    <td className="num">
+                      <button className="btn btn-sm" data-testid="toggle-installments" onClick={() => toggleInstallments(l)} disabled={busy}>
+                        {installments[l.id] ? "ซ่อนงวด" : "ดูงวด"}
                       </button>
-                    )}
-                    {l.status === "active" && (
-                      <button className="btn btn-sm" data-testid="cancel-loan" onClick={() => cancel(l)} disabled={busy}>
-                        ยกเลิก
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                      {l.status === "active" && (
+                        <button className="btn btn-sm" data-testid="payoff-loan" onClick={() => payoffLoan(l)} disabled={busy}>
+                          จ่ายปิด/จ่ายบางส่วน
+                        </button>
+                      )}
+                      {l.status === "active" && (
+                        <button className="btn btn-sm" data-testid="cancel-loan" onClick={() => cancel(l)} disabled={busy}>
+                          ยกเลิก
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {installments[l.id] && (
+                    <tr data-testid="loan-installments">
+                      <td colSpan={8}>
+                        {installments[l.id]!.length === 0 ? (
+                          <div className="empty">ยังไม่มีงวดผ่อน</div>
+                        ) : (
+                          <table className="table table-inner">
+                            <thead>
+                              <tr>
+                                <th>รอบเงินเดือน</th>
+                                <th>รันไอดี</th>
+                                <th className="num">งวด</th>
+                                <th>สถานะรอบ</th>
+                                <th />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {installments[l.id]!.map((ins) => (
+                                <tr key={ins.id}>
+                                  <td>{thDate(ins.period_start)} – {thDate(ins.period_end)}</td>
+                                  <td className="mono">{ins.payroll_run_id.slice(0, 8)}…</td>
+                                  <td className="num">฿{thb(ins.amount)}</td>
+                                  <td>
+                                    {ins.reversed_at ? (
+                                      <span className="badge">กลับรายการแล้ว</span>
+                                    ) : (
+                                      <span className="badge">{RUN_STATUS[ins.run_status]?.label ?? ins.run_status}</span>
+                                    )}
+                                  </td>
+                                  <td className="num">
+                                    {!ins.reversed_at && REVERSIBLE_RUN_STATUS.includes(ins.run_status) && (
+                                      <button className="btn btn-sm" data-testid="reverse-installment" onClick={() => reverseInstallment(l, ins)} disabled={busy}>
+                                        กลับรายการ
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>

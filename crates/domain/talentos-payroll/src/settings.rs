@@ -14,6 +14,9 @@ pub struct PayrollSettings {
     pub ot_holiday_rate: Decimal,
     #[serde(default = "default_leave_approval_chain")]
     pub leave_approval_chain: Vec<String>,
+    /// Hours a leave approval step may stay pending before HR is notified. 0 = off.
+    #[serde(default = "default_approval_sla_hours")]
+    pub approval_sla_hours: i32,
     #[serde(default = "default_gl_salary_account")]
     pub gl_salary_account: String,
     #[serde(default = "default_gl_net_account")]
@@ -32,6 +35,10 @@ pub struct PayrollSettings {
 
 fn default_leave_approval_chain() -> Vec<String> {
     vec!["hr_admin".to_string()]
+}
+
+fn default_approval_sla_hours() -> i32 {
+    48
 }
 
 fn default_gl_salary_account() -> String {
@@ -75,6 +82,7 @@ impl PayrollSettings {
             ot_weekend_rate: dec!(2.00),
             ot_holiday_rate: dec!(3.00),
             leave_approval_chain: default_leave_approval_chain(),
+            approval_sla_hours: default_approval_sla_hours(),
             gl_salary_account: default_gl_salary_account(),
             gl_net_account: default_gl_net_account(),
             gl_tax_account: default_gl_tax_account(),
@@ -93,6 +101,7 @@ impl PayrollSettings {
             && (one..=five).contains(&self.ot_weekend_rate)
             && (one..=five).contains(&self.ot_holiday_rate)
             && self.leave_approval_chain_is_valid()
+            && (0..=720).contains(&self.approval_sla_hours)
             && self.gl_accounts_are_valid()
     }
 
@@ -176,5 +185,19 @@ mod tests {
         assert!(!s.is_valid());
         s.gl_salary_account = "5100A".into();
         assert!(s.is_valid(), "alphanumeric codes are accepted");
+    }
+
+    #[test]
+    fn rejects_out_of_range_approval_sla() {
+        let mut s = PayrollSettings::standard();
+        assert_eq!(s.approval_sla_hours, 48);
+        s.approval_sla_hours = -1;
+        assert!(!s.is_valid());
+        s.approval_sla_hours = 721;
+        assert!(!s.is_valid());
+        s.approval_sla_hours = 0;
+        assert!(s.is_valid(), "0 disables escalation");
+        s.approval_sla_hours = 720;
+        assert!(s.is_valid());
     }
 }

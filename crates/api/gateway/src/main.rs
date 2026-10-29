@@ -206,6 +206,25 @@ async fn main() {
         });
     }
 
+    // Approval SLA escalation: notify HR for pending approval steps past the
+    // tenant SLA. Every 15 min, list tenants and sweep each.
+    {
+        let esc_auth = auth_pool.clone();
+        let esc_pool = pool.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(15 * 60));
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            loop {
+                ticker.tick().await;
+                match run_escalation_sweep(&esc_auth, &esc_pool).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(count = n, "approval SLA escalations processed"),
+                    Err(e) => tracing::warn!(error = %e, "approval SLA sweep failed"),
+                }
+            }
+        });
+    }
+
     let app = router::build(state);
 
     let listener = tokio::net::TcpListener::bind(bind_addr)
@@ -220,6 +239,34 @@ async fn main() {
     .with_graceful_shutdown(shutdown_signal())
     .await
     .expect("server error");
+}
+
+/// Sweep every tenant's overdue approval steps. Returns total steps escalated.
+async fn run_escalation_sweep(
+    auth_pool: &sqlx::PgPool,
+    tenant_pool: &TenantPool,
+) -> Result<usize, sqlx::Error> {
+    use sqlx::Row;
+    let tenants = sqlx::query("SELECT id FROM tenants")
+        .fetch_all(auth_pool)
+        .await?;
+    let mut total = 0usize;
+    for row in tenants {
+        let tenant_id: uuid::Uuid = row.get("id");
+        match talentos_hr_runner::escalate_overdue(
+            tenant_pool,
+            talentos_kernel::TenantId(tenant_id),
+            100,
+        )
+        .await
+        {
+            Ok(n) => total += n,
+            Err(e) => {
+                tracing::warn!(tenant = %tenant_id, error = %e, "escalation sweep failed for tenant")
+            }
+        }
+    }
+    Ok(total)
 }
 
 async fn shutdown_signal() {

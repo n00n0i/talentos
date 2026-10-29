@@ -160,6 +160,9 @@ Managers/HR can delegate approval authority to another active user for a date
 range (`/leave` “มอบหมายการอนุมัติ”); the delegate can act on the delegator's
 step, and expiry removes the right automatically. HR retains override.
 
+Pending steps older than the tenant SLA (`approval_sla_hours`, default 48, 0 =
+off) escalate once to active HR admins via the notification outbox.
+
 Tenants can add approval rules by leave type and minimum days
 (`/settings` “เงื่อนไขการอนุมัติ”); the most specific rule wins, then the default
 chain. Rules are snapshotted when a request is created.

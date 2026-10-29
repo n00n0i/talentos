@@ -644,6 +644,73 @@ Example guest: `plugins/bonus-calculator-thai` (Thai annual bonus, pure JSON in/
 cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 ```
 
+## TODO / known gaps
+
+### Compliance & statutory
+
+- [ ] Phase 0 discovery: collect accepted sample files + written field mappings
+      for ภ.ง.ด.1, ภ.ง.ด.1ก, 50 ทวิ, สปส. 1-10/1-03/1-09, bank payout/K-Cash,
+      and get accountant sign-off on one real payroll month.
+- [ ] Replace the editable HTML/CSV templates with official byte-exact PDF/XML
+      layouts per form version (current templates follow public field structures,
+      not certified layouts; `/forms` lets HR adjust them before sign-off).
+- [ ] e-filing submission / credentials for RD and SSO (current output is
+      download-only; no upload channels).
+- [ ] ภ.ง.ด.1ก multi-entity: the annual header currently uses the tenant's first
+      active entity; make payer entity selectable/reportable per entity.
+- [ ] สปส. 1-03 / 1-09 (registration/termination) and bank payout files +
+      "mark paid" reconciliation (Phase 1).
+- [ ] 50 ทวิ official certificate layout + per-employee download portal.
+- [ ] Final settlement withholding: tax/SSO on the final month, 50 ทวิ/SSO
+      termination docs, and posting the settlement to a payroll run. Blocked on
+      Phase 0/accountant sign-off.
+
+### Workflow / payroll
+
+- [ ] Notifications: set real Resend/LINE credentials; current E2E uses a stub
+      and rows stay pending without credentials.
+- [ ] Approval SLA sweep runs every 15 minutes; make the interval configurable or
+      event-driven if faster escalation is required.
+- [ ] OT delegation: leave approvals support delegation, OT approvals do not.
+- [ ] Leave conditions are type/min-days only; no amount conditions, per-entity
+      chains, or holiday-aware thresholds.
+- [ ] PF: provider payload is provider-agnostic; add per-fund field mapping,
+      mid-period rate splits, and a provider retry dashboard.
+- [ ] Loans: manual payoff does not recompute accrued interest; no early-payoff
+      interest waiver, and a cancelled loan keeps already-deducted amounts.
+- [ ] Expense claims: no receipt replacement/delete, no OCR, no multi-currency,
+      no per-category limits.
+- [ ] Reports/GL: CSV only (no Excel/PDF), fixed GL account names, cost center is
+      free text without length validation, no accounting-system sync.
+- [ ] GraphQL: employee `cost_center` and the newer leave/OT/PF surfaces are not
+      exposed; leave mutations call the REST service layer.
+
+### Trust & ops
+
+- [ ] SSO (Google/Microsoft/Azure AD), WebAuthn/passkeys, IP allowlist.
+- [ ] PDPA consent/DSAR/retention tooling; data-export and deletion workflows.
+- [ ] Prometheus metrics/tracing/alerting, backup-restore drill, soak/load test
+      beyond 500 employees, secrets rotation runbook.
+- [ ] English UI and TH/EN toggle.
+
+### Phase 5 (not started)
+
+- [ ] Recruitment pipeline, offer letters/e-signature, onboarding checklist.
+- [ ] Employee documents with expiry alerts (contracts, work permits, visas).
+- [ ] Performance reviews/OKRs, training records.
+- [ ] Mobile PWA offline support; native app if required.
+
+### Dev environment notes
+
+- [ ] `talentos-postgres-1` was replaced by the `loans-postgres-1` container
+      volume (`loans_pgdata`) during worktree work; rename/recreate consistently.
+- [ ] The dev DB is hand-migrated (no reliable `_sqlx_migrations` history);
+      production/CI uses fresh `sqlx migrate run`.
+- [ ] `next start` warns with `output: standalone`; copy `.next/static` and
+      `public` into `.next/standalone` when running the built server.
+- [ ] E2E gateway needs `PII_ENCRYPTION_KEY` (2FA enrollment) and
+      `TALENTOS_COOKIE_SECURE=false` on plain HTTP.
+
 ## Layout
 
 ```

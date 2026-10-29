@@ -105,6 +105,14 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
             (("user_management", "reset_2fa"), &["hr_admin"][..]),
             (("user_management", "update"), &["hr_admin"][..]),
             (("audit_log", "read"), &["hr_admin"][..]),
+            (
+                ("approval_delegation", "manage"),
+                &["hr_admin", "manager"][..],
+            ),
+            (
+                ("approval_delegation", "view_self"),
+                &["hr_admin", "payroll_manager", "manager", "employee"][..],
+            ),
         ])
     });
 
@@ -215,8 +223,26 @@ mod tests {
         assert!(perms.contains(&"ot_request.submit_self".to_string()));
         assert!(perms.contains(&"ot_request.view_self".to_string()));
         assert!(perms.contains(&"claim.submit_self".to_string()));
+        assert!(perms.contains(&"approval_delegation.view_self".to_string()));
         assert!(!perms.contains(&"employee.create".to_string()));
-        assert_eq!(perms.len(), 8); // update_self + payslip.view_self + leave_request.submit_self + leave_request.view_self + ot_request.submit_self + ot_request.view_self + claim.submit_self + punch_self
+        assert!(!perms.contains(&"approval_delegation.manage".to_string()));
+        assert_eq!(perms.len(), 9); // update_self + payslip.view_self + leave_request.submit_self + leave_request.view_self + ot_request.submit_self + ot_request.view_self + claim.submit_self + punch_self + approval_delegation.view_self
+    }
+
+    #[test]
+    fn only_hr_admin_and_manager_manage_approval_delegations() {
+        for role in ["hr_admin", "manager"] {
+            assert!(
+                has_permission(&[role.into()], "approval_delegation", "manage"),
+                "{role} should manage delegations"
+            );
+        }
+        for role in ["payroll_manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "approval_delegation", "manage"),
+                "{role} should not manage delegations"
+            );
+        }
     }
 
     #[test]

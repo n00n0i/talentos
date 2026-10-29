@@ -5,6 +5,7 @@
 
 pub mod attendance;
 pub mod claims;
+pub mod delegations;
 pub mod leave;
 pub mod notify;
 pub mod ot;
@@ -20,6 +21,10 @@ pub use claims::{
     employee_of_user as claim_employee_of_user, list_claims, owner_of_claim,
     pending_approvals as pending_claim_approvals, set_receipt, upload_dir as claim_upload_dir,
     ClaimError, ClaimInput, ClaimView, PendingClaim, ReceiptError, ReceiptFile,
+};
+pub use delegations::{
+    create_delegation, delete_delegation, list_candidates, list_delegations, DelegateCandidate,
+    DelegationError, DelegationInput, DelegationView,
 };
 pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,

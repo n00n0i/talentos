@@ -182,6 +182,14 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/leave/requests/:id/decision", post(leave::decide))
         .route("/api/v1/leave/approvals", get(leave::approvals))
         .route(
+            "/api/v1/leave/approval-rules",
+            get(leave::approval_rules_list).post(leave::approval_rules_create),
+        )
+        .route(
+            "/api/v1/leave/approval-rules/:id",
+            delete(leave::approval_rules_delete),
+        )
+        .route(
             "/api/v1/approval-delegations",
             get(delegations::list).post(delegations::create),
         )

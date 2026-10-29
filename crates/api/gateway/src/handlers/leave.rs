@@ -433,6 +433,68 @@ pub async fn approvals(State(state): State<AppState>, Authed(ctx): Authed) -> Re
     }
 }
 
+/// GET /api/v1/leave/approval-rules — tenant's conditional approval rules.
+pub async fn approval_rules_list(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "settings", "manage_company") {
+        return forbidden;
+    }
+    match talentos_hr_runner::list_rules(&state.pool, ctx.tenant_id).await {
+        Ok(rules) => (StatusCode::OK, Json(json!({ "rules": rules }))).into_response(),
+        Err(e) => map_rule_error(e),
+    }
+}
+
+/// POST /api/v1/leave/approval-rules
+pub async fn approval_rules_create(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(input): Json<talentos_hr_runner::ApprovalRuleInput>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "settings", "manage_company") {
+        return forbidden;
+    }
+    match talentos_hr_runner::create_rule(&state.pool, ctx.tenant_id, ctx.user_id.0, input).await {
+        Ok(view) => (StatusCode::CREATED, Json(view)).into_response(),
+        Err(e) => map_rule_error(e),
+    }
+}
+
+/// DELETE /api/v1/leave/approval-rules/:id
+pub async fn approval_rules_delete(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<i64>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "settings", "manage_company") {
+        return forbidden;
+    }
+    match talentos_hr_runner::delete_rule(&state.pool, ctx.tenant_id, id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => map_rule_error(e),
+    }
+}
+
+fn map_rule_error(e: talentos_hr_runner::ApprovalRuleError) -> Response {
+    use talentos_hr_runner::ApprovalRuleError::*;
+    let (status, message) = match e {
+        NotFound => (StatusCode::NOT_FOUND, "approval rule not found"),
+        InvalidType => (
+            StatusCode::BAD_REQUEST,
+            "leave_type must be a known leave type",
+        ),
+        InvalidMinDays => (
+            StatusCode::BAD_REQUEST,
+            "min_days must be greater than 0 and at most 365",
+        ),
+        InvalidChain => (
+            StatusCode::BAD_REQUEST,
+            "chain must be 1..3 roles from {manager, hr_admin} with no duplicates, ending in hr_admin",
+        ),
+        Db(_) => return internal_err(&e.to_string()),
+    };
+    (status, Json(envelope("invalid_request", message))).into_response()
+}
+
 async fn resolve_employee(
     state: &AppState,
     tenant_id: talentos_kernel::TenantId,

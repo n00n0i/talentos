@@ -3,6 +3,7 @@
 //! Leave days are always computed server-side (calendar days inclusive) — a client
 //! never gets to declare how many days it is taking.
 
+pub mod approval_rules;
 pub mod attendance;
 pub mod claims;
 pub mod delegations;
@@ -13,6 +14,9 @@ pub mod pf;
 pub mod reports;
 pub mod settlement;
 
+pub use approval_rules::{
+    create_rule, delete_rule, list_rules, ApprovalRuleError, ApprovalRuleInput, ApprovalRuleView,
+};
 pub use attendance::{
     active_shift, assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError,
     DayView, PunchInput, ShiftInput, ShiftView,

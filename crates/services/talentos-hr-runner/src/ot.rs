@@ -24,6 +24,8 @@ pub enum OtError {
     NotFound,
     #[error("OT request is not in pending status")]
     NotPending,
+    #[error("approver is not authorised for this step")]
+    Forbidden,
     #[error("a request already exists for this work date")]
     DuplicateDate,
     #[error("minutes must be between 1 and 720")]
@@ -66,6 +68,17 @@ pub struct PendingOt {
     pub reason: Option<String>,
     pub status: String,
     pub decided_at: Option<DateTime<Utc>>,
+    pub step_no: i32,
+    pub total_steps: i64,
+    pub approver_role: String,
+}
+
+/// Result of approving/rejecting an OT request.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct OtDecideOutcome {
+    pub status: String,
+    pub step: i32,
+    pub total_steps: i64,
 }
 
 fn validate_reason(reason: &Option<String>) -> Result<(), OtError> {
@@ -127,16 +140,60 @@ pub async fn create_request(
         _ => OtError::Db(e),
     })?;
 
+    let request_id: Uuid = row.try_get("id")?;
+
+    // Snapshot the tenant's OT approval chain into steps (default single HR step).
+    let chain: Vec<String> = sqlx::query_scalar(
+        "SELECT ot_approval_chain FROM tenant_payroll_settings WHERE tenant_id = $1",
+    )
+    .bind(tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await?
+    .unwrap_or_else(|| vec!["hr_admin".to_string()]);
+
+    for (idx, role) in normalise_chain(chain).iter().enumerate() {
+        sqlx::query(
+            r#"INSERT INTO ot_approval_steps
+                 (tenant_id, ot_request_id, step_no, approver_role, status)
+               VALUES ($1,$2,$3,$4,'pending')"#,
+        )
+        .bind(tenant_id.0)
+        .bind(request_id)
+        .bind(i32::try_from(idx + 1).unwrap_or(1))
+        .bind(role)
+        .execute(&mut *tx)
+        .await?;
+    }
+
     tx.commit().await?;
 
     Ok(OtRequestView {
-        id: row.try_get("id")?,
+        id: request_id,
         employee_id,
         work_date: input.work_date,
         minutes: input.minutes,
         reason: input.reason,
         status: row.try_get("status")?,
     })
+}
+
+/// Coerce a missing or invalid OT chain to the safe one-step HR default.
+fn normalise_chain(chain: Vec<String>) -> Vec<String> {
+    let valid = ["manager", "hr_admin"];
+    let chain: Vec<String> = chain
+        .into_iter()
+        .filter(|r| valid.contains(&r.as_str()))
+        .collect();
+    let unique: std::collections::HashSet<_> = chain.iter().collect();
+    if chain.is_empty()
+        || chain.len() > 3
+        || unique.len() != chain.len()
+        || chain.last().map(String::as_str) != Some("hr_admin")
+    {
+        vec!["hr_admin".to_string()]
+    } else {
+        chain
+    }
 }
 
 /// List OT requests for one employee, optionally filtered by status.
@@ -207,6 +264,12 @@ pub async fn cancel_request(
 
     if let Some(row) = updated {
         let work_date: NaiveDate = row.try_get("work_date")?;
+        sqlx::query(
+            "UPDATE ot_approval_steps SET status = 'skipped' WHERE ot_request_id = $1 AND status = 'pending'",
+        )
+        .bind(request_id)
+        .execute(&mut *tx)
+        .await?;
         attendance::reapply_ot_request(&mut tx, employee_id, work_date)
             .await
             .map_err(|e| match e {
@@ -261,7 +324,23 @@ pub async fn tenant_requests(
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let rows = sqlx::query(
         r#"SELECT o.id, o.employee_id, e.employee_code, e.first_name_th, e.last_name_th,
-                  o.work_date, o.minutes, o.reason, o.status, o.decided_at
+                  o.work_date, o.minutes, o.reason, o.status, o.decided_at,
+                  COALESCE(
+                      (SELECT step_no FROM ot_approval_steps
+                        WHERE ot_request_id = o.id AND status = 'pending'
+                        ORDER BY step_no LIMIT 1),
+                      1
+                  ) AS step_no,
+                  COALESCE(
+                      (SELECT approver_role FROM ot_approval_steps
+                        WHERE ot_request_id = o.id AND status = 'pending'
+                        ORDER BY step_no LIMIT 1),
+                      'hr_admin'
+                  ) AS approver_role,
+                  GREATEST(
+                      1,
+                      (SELECT COUNT(*) FROM ot_approval_steps s2 WHERE s2.ot_request_id = o.id)
+                  ) AS total_steps
            FROM ot_requests o
            JOIN employees e ON e.id = o.employee_id
            WHERE o.tenant_id = $1
@@ -296,6 +375,9 @@ pub async fn tenant_requests(
                 reason: row.try_get("reason")?,
                 status: row.try_get("status")?,
                 decided_at: row.try_get("decided_at")?,
+                step_no: row.try_get("step_no")?,
+                total_steps: row.try_get("total_steps")?,
+                approver_role: row.try_get("approver_role")?,
             })
         })
         .collect::<Result<Vec<_>, sqlx::Error>>()
@@ -310,34 +392,135 @@ pub async fn pending_approvals(
     tenant_requests(pool, tenant_id, Some("pending"), None, None, 200).await
 }
 
-/// Approve or reject a pending OT request.
-/// Approved OT raises the attendance day's effective OT to
-/// `max(derived, approved request minutes)`; days already approved reject changes.
+/// Approve or reject a pending OT request, advancing the approval chain.
+/// Final approval raises the attendance day's effective OT to
+/// `max(derived, approved request minutes)`; rejection or cancel restores the
+/// derived value. Days already approved reject changes.
 pub async fn decide_request(
     pool: &TenantPool,
     tenant_id: TenantId,
     approver_user_id: Uuid,
+    roles: &[String],
     request_id: Uuid,
     approve: bool,
-) -> Result<String, OtError> {
+) -> Result<OtDecideOutcome, OtError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
 
-    let updated = sqlx::query(
-        r#"UPDATE ot_requests
-           SET status = $3, decided_by = $4, decided_at = now(), updated_at = now()
+    let request = sqlx::query(
+        r#"SELECT employee_id, work_date
+           FROM ot_requests
            WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
-           RETURNING status, employee_id, work_date"#,
+           FOR UPDATE"#,
     )
     .bind(request_id)
     .bind(tenant_id.0)
-    .bind(if approve { "approved" } else { "rejected" })
-    .bind(approver_user_id)
     .fetch_optional(&mut *tx)
     .await?;
 
-    if let Some(row) = updated {
-        let employee_id: Uuid = row.try_get("employee_id")?;
-        let work_date: NaiveDate = row.try_get("work_date")?;
+    let Some(request) = request else {
+        let row = sqlx::query("SELECT status FROM ot_requests WHERE id = $1 AND tenant_id = $2")
+            .bind(request_id)
+            .bind(tenant_id.0)
+            .fetch_optional(&mut *tx)
+            .await?;
+        let _ = tx.rollback().await;
+        return match row {
+            Some(_) => Err(OtError::NotPending),
+            None => Err(OtError::NotFound),
+        };
+    };
+
+    let employee_id: Uuid = request.try_get("employee_id")?;
+    let work_date: NaiveDate = request.try_get("work_date")?;
+
+    // Current pending step, creating a single HR step on the fly for legacy
+    // requests that pre-date the steps table.
+    let step = sqlx::query(
+        r#"SELECT id, step_no, approver_role
+           FROM ot_approval_steps
+           WHERE ot_request_id = $1 AND status = 'pending'
+           ORDER BY step_no
+           LIMIT 1
+           FOR UPDATE"#,
+    )
+    .bind(request_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let (step_id, step_no, approver_role) = match step {
+        Some(row) => {
+            let id: i64 = row.try_get("id")?;
+            let no: i32 = row.try_get("step_no")?;
+            let role: String = row.try_get("approver_role")?;
+            (id, no, role)
+        }
+        None => {
+            let id: i64 = sqlx::query_scalar(
+                r#"INSERT INTO ot_approval_steps
+                     (tenant_id, ot_request_id, step_no, approver_role, status)
+                   VALUES ($1,$2,1,'hr_admin','pending')
+                   RETURNING id"#,
+            )
+            .bind(tenant_id.0)
+            .bind(request_id)
+            .fetch_one(&mut *tx)
+            .await?;
+            (id, 1, "hr_admin".to_string())
+        }
+    };
+
+    let can_decide = roles.iter().any(|r| r == &approver_role || r == "hr_admin");
+    if !can_decide {
+        let _ = tx.rollback().await;
+        return Err(OtError::Forbidden);
+    }
+
+    let total_steps: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM ot_approval_steps WHERE ot_request_id = $1")
+            .bind(request_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+    if approve {
+        sqlx::query(
+            r#"UPDATE ot_approval_steps
+               SET status = 'approved', decided_by = $1, decided_at = now()
+               WHERE id = $2"#,
+        )
+        .bind(approver_user_id)
+        .bind(step_id)
+        .execute(&mut *tx)
+        .await?;
+
+        let next_step: Option<i32> = sqlx::query_scalar(
+            r#"SELECT step_no FROM ot_approval_steps
+               WHERE ot_request_id = $1 AND status = 'pending'
+               ORDER BY step_no
+               LIMIT 1"#,
+        )
+        .bind(request_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        if let Some(next) = next_step {
+            tx.commit().await?;
+            return Ok(OtDecideOutcome {
+                status: "pending".to_string(),
+                step: next,
+                total_steps,
+            });
+        }
+
+        sqlx::query(
+            r#"UPDATE ot_requests
+               SET status = 'approved', decided_by = $1, decided_at = now(), updated_at = now()
+               WHERE id = $2"#,
+        )
+        .bind(approver_user_id)
+        .bind(request_id)
+        .execute(&mut *tx)
+        .await?;
+
         attendance::reapply_ot_request(&mut tx, employee_id, work_date)
             .await
             .map_err(|e| match e {
@@ -345,20 +528,57 @@ pub async fn decide_request(
                 attendance::AttendanceError::Db(sqlx_err) => OtError::Db(sqlx_err),
                 _ => unreachable!("reapply_ot_request only returns Db or DayAlreadyApproved"),
             })?;
-        tx.commit().await?;
-        return row.try_get("status").map_err(Into::into);
-    }
 
-    let row = sqlx::query("SELECT status FROM ot_requests WHERE id = $1 AND tenant_id = $2")
-        .bind(request_id)
-        .bind(tenant_id.0)
-        .fetch_optional(&mut *tx)
+        tx.commit().await?;
+        Ok(OtDecideOutcome {
+            status: "approved".to_string(),
+            step: total_steps as i32,
+            total_steps,
+        })
+    } else {
+        sqlx::query(
+            r#"UPDATE ot_approval_steps
+               SET status = 'rejected', decided_by = $1, decided_at = now()
+               WHERE id = $2"#,
+        )
+        .bind(approver_user_id)
+        .bind(step_id)
+        .execute(&mut *tx)
         .await?;
 
-    let _ = tx.rollback().await;
-    match row {
-        Some(_) => Err(OtError::NotPending),
-        None => Err(OtError::NotFound),
+        sqlx::query(
+            r#"UPDATE ot_approval_steps
+               SET status = 'skipped'
+               WHERE ot_request_id = $1 AND status = 'pending'"#,
+        )
+        .bind(request_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"UPDATE ot_requests
+               SET status = 'rejected', decided_by = $1, decided_at = now(), updated_at = now()
+               WHERE id = $2"#,
+        )
+        .bind(approver_user_id)
+        .bind(request_id)
+        .execute(&mut *tx)
+        .await?;
+
+        attendance::reapply_ot_request(&mut tx, employee_id, work_date)
+            .await
+            .map_err(|e| match e {
+                attendance::AttendanceError::DayAlreadyApproved => OtError::DayAlreadyApproved,
+                attendance::AttendanceError::Db(sqlx_err) => OtError::Db(sqlx_err),
+                _ => unreachable!("reapply_ot_request only returns Db or DayAlreadyApproved"),
+            })?;
+
+        tx.commit().await?;
+        Ok(OtDecideOutcome {
+            status: "rejected".to_string(),
+            step: step_no,
+            total_steps,
+        })
     }
 }
 

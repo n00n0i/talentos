@@ -10,6 +10,7 @@ type PayrollSettings = {
   ot_weekend_rate: Num;
   ot_holiday_rate: Num;
   leave_approval_chain: string[];
+  ot_approval_chain: string[];
   approval_sla_hours: Num;
   gl_salary_account: string;
   gl_net_account: string;
@@ -57,6 +58,7 @@ const DEFAULTS: PayrollSettings = {
   ot_weekend_rate: "2.00",
   ot_holiday_rate: "3.00",
   leave_approval_chain: ["hr_admin"],
+  ot_approval_chain: ["hr_admin"],
   approval_sla_hours: "48",
   gl_salary_account: "5100",
   gl_net_account: "2100",
@@ -203,6 +205,7 @@ export default function SettingsPage() {
           ot_weekend_rate: Number(policy.ot_weekend_rate),
           ot_holiday_rate: Number(policy.ot_holiday_rate),
           leave_approval_chain: policy.leave_approval_chain,
+          ot_approval_chain: policy.ot_approval_chain,
           approval_sla_hours: Number(policy.approval_sla_hours),
           gl_salary_account: policy.gl_salary_account,
           gl_net_account: policy.gl_net_account,
@@ -440,6 +443,20 @@ export default function SettingsPage() {
               value={policy.leave_approval_chain.join(",")}
               onChange={(e) =>
                 setPolicy((p) => ({ ...p, leave_approval_chain: e.target.value.split(",") }))
+              }
+            >
+              <option value="hr_admin">HR อนุมัติขั้นเดียว</option>
+              <option value="manager,hr_admin">หัวหน้างาน → HR</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="ot-approval-chain">ขั้นตอนการอนุมัติ OT</label>
+            <select
+              id="ot-approval-chain"
+              data-testid="ot-approval-chain"
+              value={policy.ot_approval_chain.join(",")}
+              onChange={(e) =>
+                setPolicy((p) => ({ ...p, ot_approval_chain: e.target.value.split(",") }))
               }
             >
               <option value="hr_admin">HR อนุมัติขั้นเดียว</option>

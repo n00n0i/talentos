@@ -41,8 +41,8 @@ pub use leave::{
 pub use ot::{
     cancel_request as cancel_ot_request, create_request as create_ot_request,
     decide_request as decide_ot_request, list_requests as list_ot_requests,
-    pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests, OtError,
-    OtInput, OtRequestView, PendingOt,
+    pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests,
+    OtDecideOutcome, OtError, OtInput, OtRequestView, PendingOt,
 };
 pub use pf::{list_rates, rate_for, upsert_rate, PfError, PfRate, DEFAULT_PF_RATE, MAX_PF_RATE};
 pub use settlement::{

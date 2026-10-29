@@ -4,6 +4,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
+use talentos_hr_runner::loans::reverse_installment;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
 
@@ -82,6 +83,24 @@ async fn installment_count(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) ->
     .expect("count installments");
     let _ = tx.rollback().await;
     count
+}
+
+async fn loan_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
+    let mut tx = pool.begin().await.expect("begin loan_id_of");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM employee_loans WHERE employee_id = $1 AND tenant_id = current_tenant_id()",
+    )
+    .bind(employee_id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("loan id");
+    let _ = tx.rollback().await;
+    id
 }
 
 async fn payslip_loan_deduction(
@@ -358,6 +377,95 @@ async fn final_installment_caps_at_balance_and_closes() {
     let (balance, status) = loan_state(&raw, tenant_id, employee_id).await;
     assert_eq!(balance, dec!(0));
     assert_eq!(status, "closed");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn recalc_after_reversal_creates_new_installment_and_deducts_once() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, employee_ids) =
+        seed(&raw, &[("EMP104", Decimal::new(30_000, 0))]).await;
+    let employee_id = employee_ids[0];
+
+    let user_id: Uuid = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM users WHERE tenant_id = current_tenant_id() LIMIT 1",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("user");
+        let _ = tx.rollback().await;
+        id
+    };
+
+    seed_loan(
+        &raw,
+        tenant_id,
+        user_id,
+        employee_id,
+        dec!(10_000),
+        dec!(1_000),
+    )
+    .await;
+    let loan_id = loan_id_of(&raw, tenant_id, employee_id).await;
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("first run");
+
+    let (balance, _) = loan_state(&raw, tenant_id, employee_id).await;
+    assert_eq!(balance, dec!(9_000));
+    assert_eq!(installment_count(&raw, tenant_id, employee_id).await, 1);
+
+    reverse_installment(&tenant_pool, TenantId(tenant_id), user_id, loan_id, run_id)
+        .await
+        .expect("reverse");
+
+    let (balance, status) = loan_state(&raw, tenant_id, employee_id).await;
+    assert_eq!(balance, dec!(10_000));
+    assert_eq!(status, "active");
+    assert_eq!(installment_count(&raw, tenant_id, employee_id).await, 1);
+
+    // Recalculate: reset the run and execute again.
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("UPDATE payroll_runs SET status = 'calculating' WHERE id = $1")
+        .bind(run_id)
+        .execute(&mut *tx)
+        .await
+        .expect("mark calculating");
+    let _ = tx.commit().await;
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("recalculated run");
+
+    let (balance, _) = loan_state(&raw, tenant_id, employee_id).await;
+    assert_eq!(balance, dec!(9_000), "deducted exactly once after reversal");
+
+    // Two rows total: the reversed one plus a fresh one for the recalculated run.
+    assert_eq!(
+        installment_count(&raw, tenant_id, employee_id).await,
+        2,
+        "one reversed + one fresh installment"
+    );
 
     cleanup(&raw, tenant_id).await;
 }

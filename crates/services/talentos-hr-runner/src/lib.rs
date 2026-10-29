@@ -23,8 +23,8 @@ pub use claims::{
     ClaimError, ClaimInput, ClaimView, PendingClaim, ReceiptError, ReceiptFile,
 };
 pub use delegations::{
-    create_delegation, delete_delegation, list_candidates, list_delegations, DelegateCandidate,
-    DelegationError, DelegationInput, DelegationView,
+    create_delegation, delete_delegation, has_active_delegation, list_candidates, list_delegations,
+    DelegateCandidate, DelegationError, DelegationInput, DelegationView,
 };
 pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,

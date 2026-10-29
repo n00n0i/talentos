@@ -238,3 +238,27 @@ fn is_unique_violation(error: &sqlx::Error) -> bool {
         .and_then(|db| db.code())
         .is_some_and(|code| code == "23505")
 }
+
+/// True when `delegate_user_id` has any active delegation today.
+pub async fn has_active_delegation(
+    pool: &talentos_db::TenantPool,
+    tenant_id: talentos_kernel::TenantId,
+    delegate_user_id: Uuid,
+) -> Result<bool, DelegationError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(
+             SELECT 1 FROM approval_delegations
+              WHERE tenant_id = $1
+                AND delegate_user_id = $2
+                AND starts_on <= CURRENT_DATE
+                AND ends_on >= CURRENT_DATE
+           )"#,
+    )
+    .bind(tenant_id.0)
+    .bind(delegate_user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let _ = tx.rollback().await;
+    Ok(exists)
+}

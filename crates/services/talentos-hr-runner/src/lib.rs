@@ -7,6 +7,7 @@ pub mod approval_rules;
 pub mod attendance;
 pub mod claims;
 pub mod delegations;
+pub mod escalation;
 pub mod leave;
 pub mod notify;
 pub mod ot;
@@ -31,6 +32,7 @@ pub use delegations::{
     create_delegation, delete_delegation, has_active_delegation, list_candidates, list_delegations,
     DelegateCandidate, DelegationError, DelegationInput, DelegationView,
 };
+pub use escalation::escalate_overdue;
 pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,
     list_balances, list_requests, pending_approvals, DecideOutcome, LeaveBalanceView, LeaveError,

@@ -10,6 +10,7 @@ type PayrollSettings = {
   ot_weekend_rate: Num;
   ot_holiday_rate: Num;
   leave_approval_chain: string[];
+  approval_sla_hours: Num;
   gl_salary_account: string;
   gl_net_account: string;
   gl_tax_account: string;
@@ -56,6 +57,7 @@ const DEFAULTS: PayrollSettings = {
   ot_weekend_rate: "2.00",
   ot_holiday_rate: "3.00",
   leave_approval_chain: ["hr_admin"],
+  approval_sla_hours: "48",
   gl_salary_account: "5100",
   gl_net_account: "2100",
   gl_tax_account: "2200",
@@ -201,6 +203,7 @@ export default function SettingsPage() {
           ot_weekend_rate: Number(policy.ot_weekend_rate),
           ot_holiday_rate: Number(policy.ot_holiday_rate),
           leave_approval_chain: policy.leave_approval_chain,
+          approval_sla_hours: Number(policy.approval_sla_hours),
           gl_salary_account: policy.gl_salary_account,
           gl_net_account: policy.gl_net_account,
           gl_tax_account: policy.gl_tax_account,
@@ -442,6 +445,22 @@ export default function SettingsPage() {
               <option value="hr_admin">HR อนุมัติขั้นเดียว</option>
               <option value="manager,hr_admin">หัวหน้างาน → HR</option>
             </select>
+          </div>
+          <div className="field">
+            <label htmlFor="approval-sla-hours">SLA การอนุมัติการลา (ชั่วโมง)</label>
+            <input
+              id="approval-sla-hours"
+              type="number"
+              min="0"
+              max="720"
+              step="1"
+              data-testid="approval-sla-hours"
+              value={policy.approval_sla_hours}
+              onChange={(e) => setPolicyValue("approval_sla_hours", e.target.value)}
+            />
+            <p className="hint" style={{ marginTop: 4 }}>
+              แจ้งเตือน HR เมื่อคำขอลาค้างเกินเวลาที่กำหนด — 0 = ปิด
+            </p>
           </div>
           <div>
             <h3>รหัสบัญชี GL</h3>

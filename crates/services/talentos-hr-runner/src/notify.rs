@@ -192,7 +192,7 @@ pub async fn enqueue_payslip_ready(
     Ok(())
 }
 
-async fn insert_notification(
+pub(crate) async fn insert_notification(
     tx: &mut Transaction<'_, Postgres>,
     tenant_id: Uuid,
     user_id: Uuid,

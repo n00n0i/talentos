@@ -60,6 +60,10 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/employees/:id/final-settlement",
             post(settlement::compute),
         )
+        .route(
+            "/api/v1/employees/:id/pf-rates",
+            get(employees::list_pf_rates).post(employees::upsert_pf_rate),
+        )
         .route("/api/v1/employees/import", post(employees::import))
         .route("/api/v1/final-settlements", get(settlement::list))
         .route("/api/v1/loans", get(loans::list).post(loans::create))

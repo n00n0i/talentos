@@ -522,6 +522,68 @@ async fn missing_renderer_reports_unavailable_not_a_broken_file() {
 }
 
 #[tokio::test]
+async fn pf_rate_uses_period_end_effective_rate() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, employee_ids) =
+        seed(&raw, &[("EMP080", Decimal::new(30_000, 0))]).await;
+    let employee_id = employee_ids[0];
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    // Join PF and set a 3% rate effective before the period end.
+    sqlx::query("UPDATE employees SET pf_member = true WHERE id = $1")
+        .bind(employee_id)
+        .execute(&mut *tx)
+        .await
+        .expect("pf member");
+    sqlx::query(
+        "INSERT INTO pf_rate_history (tenant_id, employee_id, effective_from, rate)
+         VALUES ($1, $2, '2026-10-01', 0.03)",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .execute(&mut *tx)
+    .await
+    .expect("pf rate");
+    tx.commit().await.expect("commit fixtures");
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("run should succeed");
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let pf: Decimal = sqlx::query_scalar(
+        "SELECT pf_employee FROM payslips WHERE payroll_run_id = $1 AND employee_id = $2",
+    )
+    .bind(run_id)
+    .bind(employee_id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("pf_employee");
+    let _ = tx.rollback().await;
+
+    // 30,000 × 3% = 900 (not the 5% default of 1,500).
+    assert_eq!(pf, Decimal::new(900, 0), "period-end 3% rate applied");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
 async fn stuck_run_is_recovered_and_completed() {
     let (Some(url), Some(auth_url)) = (database_url(), recovery_url()) else {
         eprintln!("SKIP: DATABASE_URL not set");

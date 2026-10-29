@@ -43,6 +43,8 @@ type FormState = {
   national_id: string;
   sso_number: string;
   user_id: string;
+  pf_rate: string;
+  pf_rate_from: string;
 };
 
 const EMPTY: FormState = {
@@ -61,6 +63,8 @@ const EMPTY: FormState = {
   national_id: "",
   sso_number: "",
   user_id: "",
+  pf_rate: "",
+  pf_rate_from: "",
 };
 
 type ImportRow = Record<string, string>;
@@ -246,7 +250,25 @@ export default function EmployeesPage() {
       national_id: "",
       sso_number: "",
       user_id: editing.user_id ?? "",
+      pf_rate: "",
+      pf_rate_from: "",
     });
+    // Prefill with the latest effective PF rate for this employee.
+    gw<{ rates: { effective_from: string; rate: string }[] }>(
+      `api/v1/employees/${editing.id}/pf-rates`,
+    )
+      .then((r) => {
+        const latest = r.rates[0];
+        if (latest) {
+          const pct = (Number(latest.rate) * 100).toString();
+          setForm((f) => ({
+            ...f,
+            pf_rate: pct,
+            pf_rate_from: latest.effective_from,
+          }));
+        }
+      })
+      .catch(() => undefined);
   }, [editing]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -277,6 +299,16 @@ export default function EmployeesPage() {
           method: "PUT",
           body: JSON.stringify(body),
         });
+        // Persist the PF rate separately (effective-dated), only for members.
+        if (form.pf_member && form.pf_rate.trim() !== "" && form.pf_rate_from.trim() !== "") {
+          const rate = Number(form.pf_rate) / 100;
+          if (!Number.isNaN(rate)) {
+            await gw(`api/v1/employees/${editing.id}/pf-rates`, {
+              method: "POST",
+              body: JSON.stringify({ effective_from: form.pf_rate_from, rate }),
+            });
+          }
+        }
         setNotice("บันทึกการแก้ไขแล้ว");
       }
       setEditing(null);
@@ -516,6 +548,32 @@ export default function EmployeesPage() {
               />
               เป็นสมาชิกกองทุนสำรองเลี้ยงชีพ
             </label>
+          </div>
+          <div className="form-row">
+            <div className="field">
+              <label>อัตรา PF (%)</label>
+              <input
+                data-testid="employee-pf-rate"
+                type="number"
+                min="0"
+                max="15"
+                step="0.01"
+                value={form.pf_rate}
+                placeholder="5"
+                onChange={(e) => set("pf_rate", e.target.value)}
+              />
+              <span className="hint">ใช้เมื่อเป็นสมาชิกกองทุนฯ (เว้นว่าง = 5%)</span>
+            </div>
+            <div className="field">
+              <label>มีผลตั้งแต่</label>
+              <input
+                data-testid="employee-pf-rate-from"
+                type="date"
+                value={form.pf_rate_from}
+                onChange={(e) => set("pf_rate_from", e.target.value)}
+              />
+              <span className="hint">อัตราจะมีผลกับรอบเงินเดือนที่สิ้นสุดตั้งแต่วันนี้</span>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-primary" data-testid="save-employee" type="submit" disabled={busy}>

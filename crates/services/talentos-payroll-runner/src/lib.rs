@@ -240,6 +240,9 @@ pub async fn execute_run(
     // remaining balance so the final installment closes the loan cleanly.
     let active_loans = load_active_loans(&mut tx, tenant_id.0, &employees, period_end).await?;
 
+    // PF contribution rates effective at the end of this pay period.
+    let pf_rates = load_pf_rates(&mut tx, tenant_id.0, &employees, period_end).await?;
+
     // Approved expense claims inside the pay period. Claims already tied to this
     // run (e.g. crash recovery) are included again so the reimbursement amount is
     // stable on re-run, and marking them paid again is idempotent.
@@ -277,7 +280,10 @@ pub async fn execute_run(
                 child_count: 0,
                 insurance_paid: Decimal::ZERO,
                 pf_rate: if pf_member {
-                    Decimal::new(5, 2)
+                    pf_rates
+                        .get(&employee_id)
+                        .copied()
+                        .unwrap_or(Decimal::new(5, 2))
                 } else {
                     Decimal::ZERO
                 },
@@ -540,6 +546,44 @@ async fn load_active_loans(
                 amount: installment.min(balance),
             },
         );
+    }
+    Ok(map)
+}
+
+/// Load effective PF contribution rates at the period end, keyed by employee.
+async fn load_pf_rates(
+    tx: &mut Transaction<'_, Postgres>,
+    tenant_id: Uuid,
+    employees: &[sqlx::postgres::PgRow],
+    period_end: chrono::NaiveDate,
+) -> Result<HashMap<Uuid, Decimal>, RunError> {
+    let ids: Vec<Uuid> = employees
+        .iter()
+        .map(|row| row.try_get::<Uuid, _>("id"))
+        .collect::<Result<Vec<_>, _>>()?;
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    let rows = sqlx::query(
+        r#"SELECT DISTINCT ON (employee_id) employee_id, rate
+           FROM pf_rate_history
+           WHERE tenant_id = $1
+             AND employee_id = ANY($2)
+             AND effective_from <= $3
+           ORDER BY employee_id, effective_from DESC"#,
+    )
+    .bind(tenant_id)
+    .bind(&ids)
+    .bind(period_end)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut map = HashMap::new();
+    for row in &rows {
+        let employee_id: Uuid = row.try_get("employee_id")?;
+        let rate: Decimal = row.try_get("rate")?;
+        map.insert(employee_id, rate);
     }
     Ok(map)
 }

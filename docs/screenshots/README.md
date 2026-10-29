@@ -16,7 +16,7 @@ Regenerate:
 ```bash
 # services: gateway :18108 with the e2e tenant + web :3100
 docker compose exec -T -e PGPASSWORD=talentos_dev_secret postgres \
-  psql -U talentos -d talentos -f - < scripts/seed-e2e.sql
+  # open /setup and create the organization + first admin (empty DB)
 cd web && PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium-browser \
   E2E_BASE_URL=http://127.0.0.1:3100 npx playwright test
 # then run the gallery script used to capture these pages

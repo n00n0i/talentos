@@ -264,7 +264,9 @@ interest, early payoff, or reversal of past installments.
 
 ## Provident fund
 
-Membership is the employee `pf_member` toggle (5% employee/employer in the DAG).
+Membership is the employee `pf_member` toggle; the rate is effective-dated per
+employee (`POST /employees/:id/pf-rates`, default 5%) and payroll uses the rate
+effective at the period end.
 An approved payroll run exports `GET /api/v1/payroll/runs/:id/pf-remittance.csv`
 with per-employee and employer amounts plus totals, deterministic and
 CSV-injection safe. `/payroll` links it next to the GL export.

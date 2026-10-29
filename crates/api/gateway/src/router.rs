@@ -7,8 +7,9 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, claims, delegations, employees, graphql, health, leave, loans,
-    mcp, me, memory, notifications, ot, payroll, pf, plugins, reports, settings, settlement, users,
+    ai, attendance, audit, auth, claims, delegations, employees, forms, graphql, health, leave,
+    loans, mcp, me, memory, notifications, ot, payroll, pf, plugins, reports, settings, settlement,
+    users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -140,6 +141,18 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/v1/payroll/runs/:id/pf-remittance/send",
             post(pf::send),
+        )
+        .route(
+            "/api/v1/payroll/runs/:id/sso1-10.csv",
+            get(forms::export_sso1_10_csv),
+        )
+        .route(
+            "/api/v1/payroll/payslips/:id/50tawi",
+            get(forms::render_50tawi),
+        )
+        .route(
+            "/api/v1/forms/:type",
+            get(forms::get_form).put(forms::put_form),
         )
         .route("/api/v1/reports/headcount", get(reports::headcount))
         .route("/api/v1/reports/payroll-cost", get(reports::payroll_cost))

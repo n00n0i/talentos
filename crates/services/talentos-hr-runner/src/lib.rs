@@ -8,6 +8,7 @@ pub mod attendance;
 pub mod claims;
 pub mod delegations;
 pub mod escalation;
+pub mod forms;
 pub mod leave;
 pub mod loans;
 pub mod notify;
@@ -34,6 +35,11 @@ pub use delegations::{
     DelegateCandidate, DelegationError, DelegationInput, DelegationView,
 };
 pub use escalation::escalate_overdue;
+pub use forms::{
+    export_sso1_10_csv, load_active_template, render_50tawi, save_template, validate, FormColumn,
+    FormConfig, FormError, FormField, FormTemplate, HeaderField, ALLOWED_SOURCES, FORM_TYPE_50TAWI,
+    FORM_TYPE_SSO1_10,
+};
 pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,
     list_balances, list_requests, pending_approvals, DecideOutcome, LeaveBalanceView, LeaveError,

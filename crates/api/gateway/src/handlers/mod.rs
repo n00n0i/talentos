@@ -5,6 +5,7 @@ pub mod auth;
 pub mod claims;
 pub mod delegations;
 pub mod employees;
+pub mod forms;
 pub mod graphql;
 pub mod health;
 pub mod leave;

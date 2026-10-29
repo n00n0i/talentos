@@ -630,7 +630,7 @@ test("employee submits an expense claim with receipt and HR approves it", async 
   await login(page);
   await loginAs(invitedEmail, "ResetPass123!");
   await page.goto("/claims");
-  await expect(page.getByRole("heading", { name: "ค่าใช้จ่าย" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ค่าใช้จ่าย", exact: true })).toBeVisible();
 
   await page.getByTestId("claim-category").selectOption("meal");
   await page.getByTestId("claim-amount").fill("500");

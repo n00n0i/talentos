@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
+use talentos_hr_runner::loans::{list_payments, payoff as record_payoff, PayoffError};
 
 #[derive(Debug, Deserialize)]
 pub struct ListQuery {
@@ -33,6 +34,12 @@ pub struct LoanBody {
     pub note: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PayoffBody {
+    pub amount: Decimal,
+    pub note: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct LoanDto {
     pub id: Uuid,
@@ -41,11 +48,22 @@ pub struct LoanDto {
     pub employee_name: String,
     pub principal: String,
     pub balance: String,
+    pub paid_amount: String,
     pub installment_amount: String,
     pub start_date: String,
     pub status: String,
     pub note: Option<String>,
     pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PaymentDto {
+    pub id: i64,
+    pub loan_id: Uuid,
+    pub amount: String,
+    pub paid_at: String,
+    pub note: Option<String>,
+    pub created_by: Uuid,
 }
 
 /// GET /api/v1/loans?employee_id=&status=
@@ -231,6 +249,73 @@ pub async fn cancel(
     }
 }
 
+/// POST /api/v1/loans/:id/payoff
+pub async fn payoff(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<PayoffBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+
+    match record_payoff(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        body.amount,
+        body.note.as_deref(),
+    )
+    .await
+    {
+        Ok(()) => match fetch_one(&state, ctx.tenant_id.0, id).await {
+            Ok(Some(loan)) => (StatusCode::OK, Json(loan)).into_response(),
+            Ok(None) => not_found(),
+            Err(e) => internal_err(&e),
+        },
+        Err(PayoffError::NotFound) => not_found(),
+        Err(PayoffError::NotActive | PayoffError::InvalidAmount) => {
+            conflict("amount must be greater than 0 and not exceed the remaining balance")
+        }
+        Err(PayoffError::Db(e)) => internal_err(&e.to_string()),
+    }
+}
+
+/// GET /api/v1/loans/:id/payments
+pub async fn payments(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+
+    match list_payments(&state.pool, ctx.tenant_id, id).await {
+        Ok(rows) => {
+            let payments: Vec<PaymentDto> = rows
+                .into_iter()
+                .map(|p| PaymentDto {
+                    id: p.id,
+                    loan_id: p.loan_id,
+                    amount: p.amount.to_string(),
+                    paid_at: p.paid_at.to_rfc3339(),
+                    note: p.note,
+                    created_by: p.created_by,
+                })
+                .collect();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({ "payments": payments })),
+            )
+                .into_response()
+        }
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
 /// GET /api/v1/me/loans
 pub async fn me_loans(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
     if let Err(forbidden) = require(&ctx, "payslip", "view_self") {
@@ -305,6 +390,7 @@ fn row_to_dto(row: &sqlx::postgres::PgRow) -> LoanDto {
         ),
         principal: principal.to_string(),
         balance: balance.to_string(),
+        paid_amount: (principal - balance).to_string(),
         installment_amount: installment.to_string(),
         start_date: row.get::<NaiveDate, _>("start_date").to_string(),
         status: row.get("status"),

@@ -268,8 +268,10 @@ HR records a loan/advance at `/loans` (one active loan per employee):
 Each payroll run deducts `min(installment, balance)` after SSO/tax/PF, records a
 `loan_installments` row and reduces the balance in the same transaction; reruns
 are idempotent per run and the loan closes at zero. Employees see their loan at
-`GET /api/v1/me/loans`; the payslip shows the deduction line. There is no
-interest, early payoff, or reversal of past installments.
+`GET /api/v1/me/loans`; the payslip shows the deduction line. HR can record an
+early/partial payoff (`POST /loans/:id/payoff`), which closes the loan at zero;
+future payroll installments use the reduced balance. Interest/amortization and
+reversing a past installment are not built (a payroll storno design is needed).
 
 ## Provident fund
 

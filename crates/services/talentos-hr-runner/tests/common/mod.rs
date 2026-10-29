@@ -193,6 +193,7 @@ pub async fn cleanup(pool: &PgPool, tenant_id: Uuid) {
         "DELETE FROM shift_assignments WHERE tenant_id = $1",
         "DELETE FROM work_shifts WHERE tenant_id = $1",
         "DELETE FROM loan_installments WHERE tenant_id = $1",
+        "DELETE FROM loan_payments WHERE tenant_id = $1",
         "DELETE FROM employee_loans WHERE tenant_id = $1",
         "DELETE FROM employees WHERE tenant_id = $1",
         "DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1)",

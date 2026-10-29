@@ -9,6 +9,7 @@ pub mod claims;
 pub mod delegations;
 pub mod escalation;
 pub mod leave;
+pub mod loans;
 pub mod notify;
 pub mod ot;
 pub mod pf;
@@ -38,6 +39,7 @@ pub use leave::{
     list_balances, list_requests, pending_approvals, DecideOutcome, LeaveBalanceView, LeaveError,
     LeaveInput, LeaveRequestView, PendingLeave,
 };
+pub use loans::{list_payments, payoff, PaymentView, PayoffError};
 pub use ot::{
     cancel_request as cancel_ot_request, create_request as create_ot_request,
     decide_request as decide_ot_request, list_requests as list_ot_requests,

@@ -68,6 +68,8 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/final-settlements", get(settlement::list))
         .route("/api/v1/loans", get(loans::list).post(loans::create))
         .route("/api/v1/loans/:id/cancel", post(loans::cancel))
+        .route("/api/v1/loans/:id/payoff", post(loans::payoff))
+        .route("/api/v1/loans/:id/payments", get(loans::payments))
         .route("/api/v1/me/loans", get(loans::me_loans))
         .route(
             "/api/v1/settings/payroll",

@@ -17,6 +17,7 @@ type Loan = {
   employee_name: string;
   principal: string;
   balance: string;
+  paid_amount: string;
   installment_amount: string;
   start_date: string;
   status: string;
@@ -93,6 +94,34 @@ export default function LoansPage() {
     try {
       await gw(`api/v1/loans/${loan.id}/cancel`, { method: "POST" });
       setNotice("ยกเลิกเงินกู้แล้ว");
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function payoffLoan(loan: Loan) {
+    const input = prompt(
+      `จ่ายปิด/จ่ายบางส่วน — ${loan.employee_code} ${loan.employee_name}\nคงเหลือ ฿${thb(loan.balance)}`,
+      loan.balance,
+    );
+    if (input === null) return;
+    const amount = Number(input);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("ระบุจำนวนเงินที่มากกว่า 0");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(`api/v1/loans/${loan.id}/payoff`, {
+        method: "POST",
+        body: JSON.stringify({ amount, note: null }),
+      });
+      setNotice("บันทึกการชำระแล้ว");
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -198,6 +227,7 @@ export default function LoansPage() {
               <tr>
                 <th>พนักงาน</th>
                 <th className="num">เงินต้น</th>
+                <th className="num">ชำระแล้ว</th>
                 <th className="num">คงเหลือ</th>
                 <th className="num">งวดผ่อน</th>
                 <th>วันเริ่มผ่อน</th>
@@ -212,6 +242,7 @@ export default function LoansPage() {
                     {l.employee_code} · {l.employee_name}
                   </td>
                   <td className="num">฿{thb(l.principal)}</td>
+                  <td className="num">฿{thb(l.paid_amount)}</td>
                   <td className="num">฿{thb(l.balance)}</td>
                   <td className="num">฿{thb(l.installment_amount)}</td>
                   <td>{thDate(l.start_date)}</td>
@@ -221,6 +252,11 @@ export default function LoansPage() {
                     </span>
                   </td>
                   <td className="num">
+                    {l.status === "active" && (
+                      <button className="btn btn-sm" data-testid="payoff-loan" onClick={() => payoffLoan(l)} disabled={busy}>
+                        จ่ายปิด/จ่ายบางส่วน
+                      </button>
+                    )}
                     {l.status === "active" && (
                       <button className="btn btn-sm" data-testid="cancel-loan" onClick={() => cancel(l)} disabled={busy}>
                         ยกเลิก

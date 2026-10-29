@@ -29,6 +29,17 @@ type Pending = LeaveRequest & {
   approver_role: string;
 };
 
+type Candidate = { id: string; email: string; full_name_th: string | null };
+type Delegation = {
+  id: string;
+  delegator_user_id: string;
+  delegate_user_id: string;
+  delegate_email: string;
+  delegate_name: string | null;
+  starts_on: string;
+  ends_on: string;
+};
+
 type BalanceImportRow = Record<string, string>;
 type MeLeaveResponse = {
   employee_linked: boolean;
@@ -174,6 +185,11 @@ export default function LeavePage() {
   const [requests, setRequests] = useState<LeaveRequest[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [pending, setPending] = useState<Pending[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [delegations, setDelegations] = useState<Delegation[]>([]);
+  const [delegateUser, setDelegateUser] = useState("");
+  const [delegateStart, setDelegateStart] = useState("");
+  const [delegateEnd, setDelegateEnd] = useState("");
   const [leaveType, setLeaveType] = useState("annual");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
@@ -189,9 +205,11 @@ export default function LeavePage() {
   const load = useCallback(async () => {
     const me = await gw<Me>("api/v1/auth/me");
     const hr = me.permissions.includes("leave_request.view_team");
-    const [mine, inbox] = await Promise.all([
+    const [mine, inbox, deleg, cands] = await Promise.all([
       gw<MeLeaveResponse>("api/v1/me/leave?limit=50&offset=0"),
       hr ? gw<{ requests: Pending[] }>("api/v1/leave/approvals") : Promise.resolve(null),
+      hr ? gw<{ delegations: Delegation[] }>("api/v1/approval-delegations") : Promise.resolve(null),
+      hr ? gw<{ users: Candidate[] }>("api/v1/approval-delegations/candidates") : Promise.resolve(null),
     ]);
     setIsHr(hr);
     setLinked(mine.employee_linked);
@@ -199,6 +217,8 @@ export default function LeavePage() {
     setRequests(mine.requests);
     setHasMore(mine.has_more);
     setPending(inbox?.requests ?? []);
+    setDelegations(deleg?.delegations ?? []);
+    setCandidates((cands?.users ?? []).filter((c) => c.id !== me.user_id));
   }, []);
 
   useEffect(() => {
@@ -302,6 +322,36 @@ export default function LeavePage() {
     }
   }
 
+  async function createDelegation(e: React.FormEvent) {
+    e.preventDefault();
+    if (!delegateUser || !delegateStart || !delegateEnd) return;
+    const ok = await act("บันทึกการมอบหมายแล้ว", "api/v1/approval-delegations", {
+      delegate_user_id: delegateUser,
+      starts_on: delegateStart,
+      ends_on: delegateEnd,
+    });
+    if (ok) {
+      setDelegateUser("");
+      setDelegateStart("");
+      setDelegateEnd("");
+    }
+  }
+
+  async function cancelDelegation(id: string) {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(`api/v1/approval-delegations/${id}`, { method: "DELETE" });
+      setNotice("ยกเลิกการมอบหมายแล้ว");
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const typeLabel = (t: string) => balances.find((b) => b.leave_type === t)?.label_th ?? t;
   const badge = (status: string) => {
     const st = STATUS[status] ?? { label: status, tone: "" };
@@ -386,6 +436,92 @@ export default function LeavePage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      )}
+
+      {isHr && (
+        <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
+          <h2>มอบหมายการอนุมัติ</h2>
+          <p className="hint">มอบสิทธิ์การอนุมัติการลาให้ผู้ใช้คนอื่นในช่วงเวลาที่กำหนด</p>
+          <form onSubmit={createDelegation} style={{ display: "grid", gap: 12 }}>
+            <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+              <div className="field">
+                <label htmlFor="delegate-user">ผู้รับมอบหมาย</label>
+                <select
+                  id="delegate-user"
+                  data-testid="delegate-user"
+                  value={delegateUser}
+                  onChange={(e) => setDelegateUser(e.target.value)}
+                  required
+                >
+                  <option value="">เลือกผู้ใช้…</option>
+                  {candidates.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.full_name_th ?? c.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label htmlFor="delegate-start">เริ่ม</label>
+                <input
+                  id="delegate-start"
+                  data-testid="delegate-start"
+                  type="date"
+                  value={delegateStart}
+                  onChange={(e) => setDelegateStart(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="delegate-end">ถึง</label>
+                <input
+                  id="delegate-end"
+                  data-testid="delegate-end"
+                  type="date"
+                  value={delegateEnd}
+                  onChange={(e) => setDelegateEnd(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <button className="btn btn-primary btn-sm" data-testid="create-delegation" type="submit" disabled={busy}>
+                บันทึกการมอบหมาย
+              </button>
+            </div>
+          </form>
+          {delegations.length > 0 && (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>ผู้รับมอบหมาย</th>
+                  <th>เริ่ม</th>
+                  <th>ถึง</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {delegations.map((dg) => (
+                  <tr key={dg.id} data-testid="delegation-row">
+                    <td>{dg.delegate_name ?? dg.delegate_email}</td>
+                    <td>{thDate(dg.starts_on)}</td>
+                    <td>{thDate(dg.ends_on)}</td>
+                    <td className="num">
+                      <button
+                        className="btn btn-sm btn-danger"
+                        data-testid="cancel-delegation"
+                        disabled={busy}
+                        onClick={() => cancelDelegation(dg.id)}
+                      >
+                        ยกเลิก
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       )}

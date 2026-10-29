@@ -592,6 +592,11 @@ pub async fn decide_request(
     };
 
     let can_decide = roles.iter().any(|r| r == &approver_role || r == "hr_admin");
+    let can_decide = if can_decide {
+        true
+    } else {
+        delegation_allows(&mut tx, tenant_id.0, approver_user_id, &approver_role).await?
+    };
     if !can_decide {
         let _ = tx.rollback().await;
         return Err(LeaveError::Forbidden);
@@ -1054,6 +1059,35 @@ pub async fn import_balances(
         created,
         rows: row_results,
     })
+}
+
+/// True when an active delegation grants `delegate_user_id` the given role: the
+/// delegator holds `role` and the current date falls within the delegation range.
+async fn delegation_allows(
+    tx: &mut sqlx::PgConnection,
+    tenant_id: Uuid,
+    delegate_user_id: Uuid,
+    role: &str,
+) -> Result<bool, sqlx::Error> {
+    let allowed: bool = sqlx::query_scalar(
+        r#"SELECT EXISTS(
+             SELECT 1
+             FROM approval_delegations ad
+             JOIN user_roles ur ON ur.user_id = ad.delegator_user_id
+             JOIN roles r ON r.id = ur.role_id
+            WHERE ad.tenant_id = $1
+              AND ad.delegate_user_id = $2
+              AND ad.starts_on <= CURRENT_DATE
+              AND ad.ends_on >= CURRENT_DATE
+              AND r.name = $3
+           )"#,
+    )
+    .bind(tenant_id)
+    .bind(delegate_user_id)
+    .bind(role)
+    .fetch_one(tx)
+    .await?;
+    Ok(allowed)
 }
 
 /// Coerce a missing or invalid chain to the safe one-step HR default.

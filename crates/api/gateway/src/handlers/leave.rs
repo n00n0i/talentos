@@ -419,7 +419,13 @@ fn parse_decimal_for_import(value: &str, field: &str, errors: &mut Vec<String>) 
 /// GET /api/v1/leave/approvals
 pub async fn approvals(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
     if let Err(forbidden) = require(&ctx, "leave_request", "view_team") {
-        return forbidden;
+        let delegated =
+            talentos_hr_runner::has_active_delegation(&state.pool, ctx.tenant_id, ctx.user_id.0)
+                .await
+                .unwrap_or(false);
+        if !delegated {
+            return forbidden;
+        }
     }
     match talentos_hr_runner::pending_approvals(&state.pool, ctx.tenant_id).await {
         Ok(requests) => (StatusCode::OK, Json(json!({ "requests": requests }))).into_response(),
@@ -449,7 +455,13 @@ pub async fn decide(
     Json(body): Json<ApproveLeaveRequest>,
 ) -> Response {
     if let Err(forbidden) = require(&ctx, "leave_request", "approve_team") {
-        return forbidden;
+        let delegated =
+            talentos_hr_runner::has_active_delegation(&state.pool, ctx.tenant_id, ctx.user_id.0)
+                .await
+                .unwrap_or(false);
+        if !delegated {
+            return forbidden;
+        }
     }
     match talentos_hr_runner::decide_request(
         &state.pool,

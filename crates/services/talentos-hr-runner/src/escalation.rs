@@ -90,6 +90,13 @@ pub async fn escalate_overdue(
     .fetch_all(&mut *tx)
     .await?;
 
+    // No HR admin means nobody to notify; leave the steps unstamped so a
+    // future HR admin still gets the escalation.
+    if recipients.is_empty() {
+        tx.rollback().await?;
+        return Ok(0);
+    }
+
     let mut escalated = 0usize;
 
     for row in &overdue {

@@ -15,6 +15,7 @@ pub mod memory;
 pub mod notifications;
 pub mod ot;
 pub mod payroll;
+pub mod pf;
 pub mod plugins;
 pub mod reports;
 pub mod settings;

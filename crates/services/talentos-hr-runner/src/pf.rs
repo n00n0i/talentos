@@ -7,7 +7,7 @@
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::Serialize;
-use sqlx::Row;
+use sqlx::{PgConnection, Row};
 use talentos_db::TenantPool;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -33,8 +33,37 @@ pub enum PfError {
     EmployeeNotFound,
     #[error("rate must be between 0 and 0.15")]
     RateOutOfRange,
+    #[error("payroll run is not approved")]
+    NotApproved,
+    #[error("payroll run not found in this tenant")]
+    RunNotFound,
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
+}
+
+/// One member row in a PF remittance payload.
+#[derive(Debug, Clone, Serialize)]
+pub struct PfRemittanceMember {
+    pub employee_code: String,
+    pub name: String,
+    pub employee_amount: Decimal,
+    pub employer_amount: Decimal,
+    pub total: Decimal,
+}
+
+/// Provider-agnostic remittance payload for an approved run.
+///
+/// Provider-specific field mapping (fund codes, member IDs, etc.) is a future
+/// per-provider adapter; this is the shared shape every adapter consumes.
+#[derive(Debug, Clone, Serialize)]
+pub struct PfRemittancePayload {
+    pub payroll_run_id: Uuid,
+    pub period_start: NaiveDate,
+    pub period_end: NaiveDate,
+    pub members: Vec<PfRemittanceMember>,
+    pub total_employee: Decimal,
+    pub total_employer: Decimal,
+    pub total: Decimal,
 }
 
 /// Return the PF rate effective for `employee_id` on `as_of`: the latest row
@@ -130,6 +159,78 @@ pub async fn upsert_rate(
 
     tx.commit().await?;
     Ok(())
+}
+
+/// Build the PF remittance payload for an approved payroll run.
+///
+/// Only payslips with a non-zero employee or employer PF contribution are
+/// included. A non-approved run is `NotApproved`; a run invisible to the tenant
+/// (or missing) is `RunNotFound`. Caller must have scoped the connection with
+/// `current_tenant_id()` (RLS enforces tenant isolation regardless).
+pub async fn build_remittance_payload(
+    conn: &mut PgConnection,
+    run_id: Uuid,
+) -> Result<PfRemittancePayload, PfError> {
+    let run = sqlx::query(
+        "SELECT status, period_start, period_end FROM payroll_runs \
+         WHERE id = $1 AND tenant_id = current_tenant_id()",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let (period_start, period_end) = match run {
+        Some(row) => {
+            let status: String = row.try_get("status")?;
+            if status != "approved" {
+                return Err(PfError::NotApproved);
+            }
+            (row.try_get("period_start")?, row.try_get("period_end")?)
+        }
+        None => return Err(PfError::RunNotFound),
+    };
+
+    let rows = sqlx::query(
+        "SELECT e.employee_code, \
+                e.first_name_th || ' ' || e.last_name_th AS name, \
+                p.pf_employee, p.pf_employer \
+         FROM payslips p \
+         JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id \
+         WHERE p.payroll_run_id = $1 \
+           AND p.tenant_id = current_tenant_id() \
+           AND (p.pf_employee > 0 OR p.pf_employer > 0) \
+         ORDER BY e.employee_code",
+    )
+    .bind(run_id)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let mut total_employee = Decimal::ZERO;
+    let mut total_employer = Decimal::ZERO;
+    let mut members = Vec::with_capacity(rows.len());
+    for row in &rows {
+        let employee: Decimal = row.try_get("pf_employee")?;
+        let employer: Decimal = row.try_get("pf_employer")?;
+        total_employee += employee;
+        total_employer += employer;
+        members.push(PfRemittanceMember {
+            employee_code: row.try_get("employee_code")?,
+            name: row.try_get("name")?,
+            employee_amount: employee,
+            employer_amount: employer,
+            total: employee + employer,
+        });
+    }
+
+    Ok(PfRemittancePayload {
+        payroll_run_id: run_id,
+        period_start,
+        period_end,
+        members,
+        total_employee,
+        total_employer,
+        total: total_employee + total_employer,
+    })
 }
 
 #[cfg(test)]

@@ -200,7 +200,9 @@ GET  /api/v1/ot/approvals                HR/manager pending inbox
 POST /api/v1/ot/requests/:id/decision    {approve}
 ```
 
-One live request per employee per date; rejected/cancelled frees the date.
+OT requests use the tenant `ot_approval_chain` (HR only or manager → HR) with
+step roles and HR override, mirroring leave. One live request per employee per
+date; rejected/cancelled frees the date.
 Minutes are 1..720 and the `/ot` page takes hours in 0.5 steps. An approved
 request raises that attendance day's effective OT to
 `max(punch-derived OT, approved request minutes)` — never adds, so it cannot be

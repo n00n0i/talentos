@@ -229,8 +229,9 @@ pub async fn reverse_installment(
     };
 
     let installment = sqlx::query(
-        "SELECT amount, reversed_at FROM loan_installments
-          WHERE loan_id = $1 AND payroll_run_id = $2 AND tenant_id = $3 FOR UPDATE",
+        "SELECT id, amount FROM loan_installments
+          WHERE loan_id = $1 AND payroll_run_id = $2 AND tenant_id = $3
+            AND reversed_at IS NULL FOR UPDATE",
     )
     .bind(loan_id)
     .bind(run_id)
@@ -239,15 +240,22 @@ pub async fn reverse_installment(
     .await?;
 
     let Some(installment) = installment else {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM loan_installments
+                            WHERE loan_id = $1 AND payroll_run_id = $2 AND tenant_id = $3)",
+        )
+        .bind(loan_id)
+        .bind(run_id)
+        .bind(tenant_id.0)
+        .fetch_one(&mut *tx)
+        .await?;
         let _ = tx.rollback().await;
-        return Err(ReverseError::NotFound);
+        return Err(if exists {
+            ReverseError::AlreadyReversed
+        } else {
+            ReverseError::NotFound
+        });
     };
-
-    let reversed_at: Option<DateTime<Utc>> = installment.try_get("reversed_at")?;
-    if reversed_at.is_some() {
-        let _ = tx.rollback().await;
-        return Err(ReverseError::AlreadyReversed);
-    }
 
     let run_status: String =
         sqlx::query_scalar("SELECT status FROM payroll_runs WHERE id = $1 AND tenant_id = $2")
@@ -262,15 +270,15 @@ pub async fn reverse_installment(
     }
 
     let amount: Decimal = installment.try_get("amount")?;
+    let installment_id: i64 = installment.try_get("id")?;
 
     sqlx::query(
         "UPDATE loan_installments
             SET reversed_at = now(), reversed_by = $1
-          WHERE loan_id = $2 AND payroll_run_id = $3 AND tenant_id = $4",
+          WHERE id = $2 AND tenant_id = $3 AND reversed_at IS NULL",
     )
     .bind(caller)
-    .bind(loan_id)
-    .bind(run_id)
+    .bind(installment_id)
     .bind(tenant_id.0)
     .execute(&mut *tx)
     .await?;

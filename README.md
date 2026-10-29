@@ -270,8 +270,9 @@ Each payroll run deducts `min(installment, balance)` after SSO/tax/PF, records a
 are idempotent per run and the loan closes at zero. Employees see their loan at
 `GET /api/v1/me/loans`; the payslip shows the deduction line. HR can record an
 early/partial payoff (`POST /loans/:id/payoff`), which closes the loan at zero;
-future payroll installments use the reduced balance. Interest/amortization and
-reversing a past installment are not built (a payroll storno design is needed).
+future payroll installments use the reduced balance. Interest/amortization is not built. An installment from a
+not-yet-approved payroll run can be reversed (`.../installments/:run_id/reverse`);
+the run must then be recalculated so the payslip matches the restored balance.
 
 ## Provident fund
 

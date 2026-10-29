@@ -72,6 +72,23 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const isAdmin = me?.roles.includes("hr_admin") ?? false;
   const canHr = me?.permissions.includes("employee.read_all") ?? true;
   const canReports = me?.roles.some((r) => ["hr_admin", "payroll_manager"].includes(r)) ?? false;
+
+  // Direct URLs must not render admin screens for roles that only see the
+  // error state. The API still enforces permissions; this keeps the UI honest.
+  useEffect(() => {
+    if (!me) return;
+    const adminOnly = ["/users", "/settings", "/forms", "/audit", "/loans", "/final-settlement", "/payslip"];
+    const payrollOnly = ["/payroll", "/reports"];
+    const hrOnly = ["/employees"];
+    const attendanceOnly = ["/attendance"];
+    const denied =
+      (adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
+      (payrollOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canReports) ||
+      (hrOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canHr) ||
+      (attendanceOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+        !me.permissions.includes("attendance.read"));
+    if (denied) router.replace("/clock");
+  }, [me, pathname, router, isAdmin, canHr, canReports]);
   const displayName = me?.full_name_th || me?.email || "TalentOS";
   const roleLabel = me?.roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ") || "";
   const baseNav = canReports
@@ -86,11 +103,16 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         { href: "/reports", label: "รายงาน", icon: "file" as IconName },
       ]
     : NAV;
+  const employeeNav = ["/clock", "/leave", "/ot", "/claims", "/me/payslips"];
   const items = !me
     ? baseNav
     : canHr
       ? [...baseNav, ...(isAdmin ? ADMIN_NAV : [])]
-      : baseNav.filter((i) => i.href === "/clock" || i.href === "/leave" || i.href === "/ot" || i.href === "/me/payslips");
+      : baseNav.filter(
+          (i) =>
+            employeeNav.includes(i.href) ||
+            (i.href === "/attendance" && me.permissions.includes("attendance.read")),
+        );
 
   return (
     <div className="shell">

@@ -30,4 +30,14 @@ VALUES (
     'eeeeeeee-0000-0000-0000-000000000002',
     digest('e2e-invite-token-4f8a2c1d9b7e6a3f5c0d8e2b1a9f7c6d', 'sha256'),
     now() + interval '7 days'
+),
+(
+    'eeeeeeee-0000-0000-0000-000000000004',
+    'eeeeeeee-0000-0000-0000-000000000001',
+    'manager-e2e@example.com',
+    'ผู้จัดการ E2E',
+    'manager',
+    'eeeeeeee-0000-0000-0000-000000000002',
+    digest('e2e-manager-invite-token-8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f', 'sha256'),
+    now() + interval '7 days'
 );

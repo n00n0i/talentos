@@ -251,15 +251,9 @@ pub async fn create_request(
 
     let request_id: Uuid = row.try_get("id")?;
 
-    // Snapshot the tenant's current approval chain for this request.
-    let chain: Vec<String> = sqlx::query_scalar(
-        "SELECT leave_approval_chain FROM tenant_payroll_settings WHERE tenant_id = $1",
-    )
-    .bind(tenant_id.0)
-    .fetch_optional(&mut *tx)
-    .await?
-    .unwrap_or_else(|| vec!["hr_admin".to_string()]);
-    let chain = normalise_chain(chain);
+    // Snapshot the approval chain this request will follow: the most specific
+    // matching rule, else the tenant default chain.
+    let chain = select_chain(&mut tx, tenant_id.0, &input.leave_type, days).await?;
 
     for (idx, role) in chain.iter().enumerate() {
         sqlx::query(
@@ -1088,6 +1082,46 @@ async fn delegation_allows(
     .fetch_one(tx)
     .await?;
     Ok(allowed)
+}
+
+/// Pick the approval chain for a request: the first matching rule ordered by
+/// type-specific, then min_days-specific, then priority desc, then id — falling
+/// back to the tenant default chain. Coerces invalid chains to the HR default.
+async fn select_chain(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    leave_type: &str,
+    days: Decimal,
+) -> Result<Vec<String>, sqlx::Error> {
+    let rule_chain: Option<Vec<String>> = sqlx::query_scalar(
+        r#"SELECT chain FROM leave_approval_rules
+            WHERE tenant_id = $1
+              AND (leave_type IS NULL OR leave_type = $2)
+              AND (min_days IS NULL OR $3 >= min_days)
+            ORDER BY (leave_type IS NOT NULL) DESC,
+                     (min_days IS NOT NULL) DESC,
+                     priority DESC,
+                     id
+            LIMIT 1"#,
+    )
+    .bind(tenant_id)
+    .bind(leave_type)
+    .bind(days)
+    .fetch_optional(&mut **tx)
+    .await?;
+
+    if let Some(chain) = rule_chain {
+        return Ok(normalise_chain(chain));
+    }
+
+    let chain: Vec<String> = sqlx::query_scalar(
+        "SELECT leave_approval_chain FROM tenant_payroll_settings WHERE tenant_id = $1",
+    )
+    .bind(tenant_id)
+    .fetch_optional(&mut **tx)
+    .await?
+    .unwrap_or_else(|| vec!["hr_admin".to_string()]);
+    Ok(normalise_chain(chain))
 }
 
 /// Coerce a missing or invalid chain to the safe one-step HR default.

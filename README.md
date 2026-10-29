@@ -160,6 +160,10 @@ Managers/HR can delegate approval authority to another active user for a date
 range (`/leave` “มอบหมายการอนุมัติ”); the delegate can act on the delegator's
 step, and expiry removes the right automatically. HR retains override.
 
+Tenants can add approval rules by leave type and minimum days
+(`/settings` “เงื่อนไขการอนุมัติ”); the most specific rule wins, then the default
+chain. Rules are snapshotted when a request is created.
+
 Leave approvals can be one step (HR) or a sequential chain
 `manager → hr_admin`, configured in `/settings` (`leave_approval_chain`). The
 chain is snapshotted onto each request; the current step's role decides, and an

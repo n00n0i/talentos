@@ -41,6 +41,15 @@ type Notification = {
 };
 type NotificationSummary = { pending: number; failed: number; sent: number };
 
+type ApprovalRule = {
+  id: number;
+  leave_type: string | null;
+  min_days: string | null;
+  chain: string[];
+  priority: number;
+  created_at: string;
+};
+
 const DEFAULTS: PayrollSettings = {
   unpaid_leave_divisor: "30",
   ot_weekday_rate: "1.50",
@@ -54,6 +63,16 @@ const DEFAULTS: PayrollSettings = {
   gl_pf_account: "2220",
   gl_loan_account: "2230",
   gl_claim_account: "5200",
+};
+
+const LEAVE_TYPE_LABELS: Record<string, string> = {
+  annual: "ลาพักร้อน",
+  sick: "ลาป่วย",
+  personal: "ลากิจ",
+  maternity: "ลาคลอด",
+  paternity: "ลาบิดา",
+  bereavement: "ลาศพ",
+  unpaid: "ลากิจไม่รับค่าจ้าง",
 };
 
 export default function SettingsPage() {
@@ -74,6 +93,10 @@ export default function SettingsPage() {
   >([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notifySummary, setNotifySummary] = useState<NotificationSummary | null>(null);
+  const [rules, setRules] = useState<ApprovalRule[]>([]);
+  const [ruleType, setRuleType] = useState("");
+  const [ruleMinDays, setRuleMinDays] = useState("");
+  const [ruleChain, setRuleChain] = useState("hr_admin");
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
@@ -81,6 +104,7 @@ export default function SettingsPage() {
       .catch((e) => handleApiError(e, setError));
     loadSessions();
     loadNotifications();
+    loadRules();
     Promise.all([
       gw<System>("api/v1/settings/system"),
       gw<{ tenant: Tenant; entities: Entity[] }>("api/v1/settings/organization"),
@@ -111,6 +135,53 @@ export default function SettingsPage() {
       const res = await gw<{ summary: NotificationSummary; rows: Notification[] }>("api/v1/notifications");
       setNotifySummary(res.summary);
       setNotifications(res.rows);
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function loadRules() {
+    try {
+      const res = await gw<{ rules: ApprovalRule[] }>("api/v1/leave/approval-rules");
+      setRules(res.rules);
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function addRule(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw("api/v1/leave/approval-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          leave_type: ruleType || null,
+          min_days: ruleMinDays ? Number(ruleMinDays) : null,
+          chain: ruleChain.split(","),
+        }),
+      });
+      setRuleType("");
+      setRuleMinDays("");
+      setRuleChain("hr_admin");
+      await loadRules();
+      setNotice("บันทึกเงื่อนไขการอนุมัติแล้ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteRule(id: number) {
+    setError("");
+    setNotice("");
+    try {
+      await gw(`api/v1/leave/approval-rules/${id}`, { method: "DELETE" });
+      await loadRules();
+      setNotice("ลบเงื่อนไขแล้ว");
     } catch (e) {
       handleApiError(e, setError);
     }
@@ -494,6 +565,83 @@ export default function SettingsPage() {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="card">
+        <div className="card-head">
+          <h2>เงื่อนไขการอนุมัติ</h2>
+          <span className="hint" data-testid="rules-count">{rules.length} เงื่อนไข</span>
+        </div>
+        <form className="form-row" onSubmit={addRule} style={{ padding: 16, gap: 10, alignItems: "end" }}>
+          <div className="field">
+            <label>ประเภทการลา</label>
+            <select data-testid="rule-type" value={ruleType} onChange={(e) => setRuleType(e.target.value)}>
+              <option value="">ทุกประเภท</option>
+              {Object.entries(LEAVE_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>จำนวนวันขั้นต่ำ (ไม่บังคับ)</label>
+            <input
+              type="number"
+              min="0.5"
+              max="365"
+              step="0.5"
+              data-testid="rule-min-days"
+              value={ruleMinDays}
+              onChange={(e) => setRuleMinDays(e.target.value)}
+              placeholder="เช่น 5"
+            />
+          </div>
+          <div className="field">
+            <label>ขั้นตอนการอนุมัติ</label>
+            <select data-testid="rule-chain" value={ruleChain} onChange={(e) => setRuleChain(e.target.value)}>
+              <option value="hr_admin">HR อนุมัติขั้นเดียว</option>
+              <option value="manager,hr_admin">หัวหน้างาน → HR</option>
+            </select>
+          </div>
+          <div>
+            <button className="btn btn-primary" data-testid="add-rule" type="submit" disabled={busy}>
+              เพิ่มเงื่อนไข
+            </button>
+          </div>
+        </form>
+        {rules.length === 0 ? (
+          <p className="hint" data-testid="rules-empty" style={{ padding: "0 16px 16px" }}>
+            ยังไม่มีเงื่อนไข — ใช้ขั้นตอนการอนุมัติเริ่มต้นของบริษัท
+          </p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>ประเภท</th>
+                <th>จำนวนวันขั้นต่ำ</th>
+                <th>ขั้นตอน</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((rule) => (
+                <tr key={rule.id} data-testid="rule-row">
+                  <td>{rule.leave_type ? LEAVE_TYPE_LABELS[rule.leave_type] ?? rule.leave_type : "ทุกประเภท"}</td>
+                  <td className="num">{rule.min_days ? `${rule.min_days} วัน` : "—"}</td>
+                  <td>
+                    {rule.chain.map((r) => (r === "manager" ? "หัวหน้างาน" : "HR")).join(" → ")}
+                  </td>
+                  <td className="num">
+                    <button className="btn btn-sm btn-danger" onClick={() => deleteRule(rule.id)}>
+                      ลบ
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
       <div className="card">

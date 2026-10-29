@@ -275,6 +275,12 @@ and interest, and the GL credits principal to 2230 and interest to 4900. An
 installment from a not-yet-approved run can be reversed
 (`.../installments/:run_id/reverse`); the run must then be recalculated.
 
+## First-run setup
+
+With an empty database, open `/setup` and create the organization, entity, and
+first HR admin through the UI. The endpoint (`POST /api/v1/setup`) refuses once
+a tenant exists. The E2E suite uses this path — it does not seed test data.
+
 ## Statutory form templates
 
 `/forms` (HR) edits versioned 50 ทวิ, สปส.1-10, ภ.ง.ด.1, and ภ.ง.ด.1ก templates: labels, header
@@ -571,7 +577,7 @@ LOAD_EMPLOYEES=500 cargo test -p talentos-payroll-runner --test load \
 
 ```bash
 docker compose exec -T -e PGPASSWORD=talentos_dev_secret postgres \
-  psql -U talentos -d talentos -f - < scripts/seed-e2e.sql
+  # then open /setup and create the organization + first admin
 cd web
 npx playwright install chromium      # first run
 npx playwright test                  # E2E_BASE_URL defaults to :3100

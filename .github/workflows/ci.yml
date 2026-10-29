@@ -128,7 +128,6 @@ jobs:
           PGPASSWORD: talentos_ci
         run: |
           ./target/debug/talentos-gateway migrate
-          psql -h localhost -U talentos -d talentos -v ON_ERROR_STOP=1 -q -f scripts/seed-e2e.sql
       - name: Start gateway
         env:
           DATABASE_URL: postgres://talentos_app:app_ci_password@localhost:5432/talentos

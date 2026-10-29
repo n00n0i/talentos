@@ -4,6 +4,7 @@ import { expect, Page, test } from "@playwright/test";
 test.describe.configure({ mode: "serial" });
 
 let invitedEmail = "";
+const managerEmail = "manager-e2e@example.com";
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -37,15 +38,16 @@ async function apiGet(page: Page, path: string) {
   }, { p: path });
 }
 
-test("accepts the invite and logs in", async ({ page }) => {
-  await page.goto("/invite/e2e-invite-token-4f8a2c1d9b7e6a3f5c0d8e2b1a9f7c6d");
-  const passwords = page.locator('input[type="password"]');
-  await passwords.nth(0).fill("E2ePassword123!");
-  await passwords.nth(1).fill("E2ePassword123!");
-  await page.getByRole("button", { name: "ตั้งรหัสผ่าน" }).click();
-  await expect(page.getByRole("heading", { name: "ตั้งรหัสผ่านแล้ว" })).toBeVisible();
-
-  await page.getByRole("button", { name: "ไปหน้าเข้าสู่ระบบ" }).click();
+test("first-run setup creates the tenant and admin", async ({ page }) => {
+  await page.goto("/setup");
+  await page.getByTestId("setup-org").fill("E2E Co");
+  await page.getByTestId("setup-slug").fill("e2e");
+  await page.getByTestId("setup-entity").fill("E2E Main");
+  await page.getByTestId("setup-email").fill("e2e@example.com");
+  await page.getByTestId("setup-password").fill("E2ePassword123!");
+  await page.getByTestId("setup-confirm").fill("E2ePassword123!");
+  await page.getByTestId("setup-submit").click();
+  await expect(page.getByRole("heading", { name: "เข้าสู่ระบบ" })).toBeVisible();
   await login(page);
 });
 
@@ -925,24 +927,26 @@ test("session management lists and revokes all sessions", async ({ page }) => {
   await expect(page.getByTestId("revoke-all-sessions")).toBeEnabled();
 });
 
-async function acceptInvite(page: Page, token: string, password: string) {
-  await page.goto(`/invite/${token}`);
-  const passwords = page.locator('input[type="password"]');
-  await passwords.nth(0).fill(password);
-  await passwords.nth(1).fill(password);
-  await page.getByRole("button", { name: "ตั้งรหัสผ่าน" }).click();
-  await expect(page.getByRole("heading", { name: "ตั้งรหัสผ่านแล้ว" })).toBeVisible();
-}
 
 test("manager role sees team areas but no admin or payroll", async ({ page }) => {
-  await acceptInvite(
-    page,
-    "e2e-manager-invite-token-8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f",
-    "ManagerPass123!",
-  );
+  await login(page);
+  await page.goto("/users");
+  await page.getByLabel("อีเมล").fill(managerEmail);
+  await page.getByLabel("ชื่อ (ไทย)").fill("ผู้จัดการ E2E");
+  await page.getByLabel("บทบาท", { exact: true }).selectOption("manager");
+  await page.getByRole("button", { name: "สร้างลิงก์เชิญ" }).click();
+  const link = page.getByRole("link", { name: /\/invite\// });
+  const href = await link.getAttribute("href");
+  expect(href).toBeTruthy();
+  await page.goto(href!);
+  const passwords = page.locator('input[type="password"]');
+  await passwords.nth(0).fill("ManagerPass123!");
+  await passwords.nth(1).fill("ManagerPass123!");
+  await page.getByRole("button", { name: "ตั้งรหัสผ่าน" }).click();
+  await expect(page.getByRole("heading", { name: "ตั้งรหัสผ่านแล้ว" })).toBeVisible();
   await page.getByRole("button", { name: "ไปหน้าเข้าสู่ระบบ" }).click();
   await page.getByLabel("องค์กร").fill("e2e");
-  await page.getByLabel("อีเมล").fill("manager-e2e@example.com");
+  await page.getByLabel("อีเมล").fill(managerEmail);
   await page.getByLabel("รหัสผ่าน").fill("ManagerPass123!");
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
   await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
@@ -950,7 +954,7 @@ test("manager role sees team areas but no admin or payroll", async ({ page }) =>
   await expect(page.getByRole("link", { name: "เวลาและ OT" })).toBeVisible();
   await expect(page.getByRole("link", { name: "การลา" })).toBeVisible();
   await expect(page.getByRole("link", { name: "ค่าใช้จ่าย" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "รอบเงินเดือน" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "รอบเงินเดือน", exact: true })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "ตั้งค่า" })).toHaveCount(0);
 
   await page.goto("/payroll");
@@ -964,11 +968,11 @@ test("payroll manager role sees payroll/reports but no admin or loans", async ({
   await page.goto("/users");
   const managerRow = page.getByRole("row", { name: /manager-e2e@example.com/ });
   await managerRow
-    .getByLabel("เพิ่มบทบาทให้ manager-e2e@example.com")
+    .getByLabel(`เพิ่มบทบาทให้ ${managerEmail}`)
     .selectOption("payroll_manager");
   await expect(page.getByText(/เพิ่มบทบาท payroll_manager/)).toBeVisible();
 
-  await switchUser(page, "manager-e2e@example.com", "ManagerPass123!");
+  await switchUser(page, managerEmail, "ManagerPass123!");
   await expect(page.getByRole("link", { name: "รอบเงินเดือน", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "รายงาน" })).toBeVisible();
   await expect(page.getByRole("link", { name: "ตั้งค่า" })).toHaveCount(0);
@@ -997,7 +1001,7 @@ test("manager approves step one, HR approves step two", async ({ page }) => {
   await page.getByTestId("request-leave").click();
   await expect(page.getByTestId("leave-row").filter({ hasText: "E2E-MANAGER" })).toContainText("รออนุมัติ");
 
-  await switchUser(page, "manager-e2e@example.com", "ManagerPass123!");
+  await switchUser(page, managerEmail, "ManagerPass123!");
   await page.goto("/leave");
   const inbox = page.getByTestId("approval-row").filter({ hasText: "E2E-MANAGER" });
   await expect(inbox.getByTestId("leave-step")).toContainText("ขั้น 1/2");

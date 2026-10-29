@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Icon from "@/components/Icon";
@@ -116,6 +117,9 @@ export default function LoginPage() {
             {busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}
           </button>
         </form>
+        <p className="hint" style={{ marginTop: 16 }}>
+          <Link href="/setup">ติดตั้งระบบครั้งแรก</Link>
+        </p>
       </div>
     </div>
   );

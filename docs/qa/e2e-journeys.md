@@ -1,6 +1,7 @@
 # E2E journeys (real user clicks)
 
-Playwright (`web/e2e/app.spec.ts`, serial, one seeded tenant) covers:
+Playwright (`web/e2e/app.spec.ts`, serial) starts from an empty database, creates
+the tenant/admin through `/setup`, and builds every fixture through real UI clicks:
 
 | Area | Cases |
 |---|---|

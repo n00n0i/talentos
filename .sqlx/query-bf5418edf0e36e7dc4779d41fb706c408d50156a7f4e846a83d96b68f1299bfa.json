@@ -97,6 +97,16 @@
         "ordinal": 18,
         "name": "reimbursement",
         "type_info": "Numeric"
+      },
+      {
+        "ordinal": 19,
+        "name": "loan_principal",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 20,
+        "name": "loan_interest",
+        "type_info": "Numeric"
       }
     ],
     "parameters": {
@@ -106,6 +116,8 @@
       ]
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,

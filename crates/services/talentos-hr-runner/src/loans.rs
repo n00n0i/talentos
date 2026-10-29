@@ -157,6 +157,8 @@ pub struct InstallmentView {
     pub loan_id: Uuid,
     pub payroll_run_id: Uuid,
     pub amount: Decimal,
+    pub principal_amount: Decimal,
+    pub interest_amount: Decimal,
     pub created_at: DateTime<Utc>,
     pub reversed_at: Option<DateTime<Utc>>,
     pub run_status: String,
@@ -172,8 +174,9 @@ pub async fn list_installments(
 ) -> Result<Vec<InstallmentView>, sqlx::Error> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let rows = sqlx::query(
-        "SELECT li.id, li.loan_id, li.payroll_run_id, li.amount, li.created_at,
-                li.reversed_at, pr.status AS run_status, pr.period_start, pr.period_end
+        "SELECT li.id, li.loan_id, li.payroll_run_id, li.amount, li.principal_amount,
+                li.interest_amount, li.created_at, li.reversed_at,
+                pr.status AS run_status, pr.period_start, pr.period_end
            FROM loan_installments li
            JOIN payroll_runs pr ON pr.id = li.payroll_run_id
           WHERE li.loan_id = $1 AND li.tenant_id = $2
@@ -192,6 +195,8 @@ pub async fn list_installments(
                 loan_id: row.try_get("loan_id")?,
                 payroll_run_id: row.try_get("payroll_run_id")?,
                 amount: row.try_get("amount")?,
+                principal_amount: row.try_get("principal_amount")?,
+                interest_amount: row.try_get("interest_amount")?,
                 created_at: row.try_get("created_at")?,
                 reversed_at: row.try_get("reversed_at")?,
                 run_status: row.try_get("run_status")?,
@@ -229,7 +234,7 @@ pub async fn reverse_installment(
     };
 
     let installment = sqlx::query(
-        "SELECT id, amount FROM loan_installments
+        "SELECT id, principal_amount FROM loan_installments
           WHERE loan_id = $1 AND payroll_run_id = $2 AND tenant_id = $3
             AND reversed_at IS NULL FOR UPDATE",
     )
@@ -269,7 +274,9 @@ pub async fn reverse_installment(
         return Err(ReverseError::InvalidRunState(run_status));
     }
 
-    let amount: Decimal = installment.try_get("amount")?;
+    // Reversal restores the principal portion only; interest is written off and
+    // never added back to the balance.
+    let principal: Decimal = installment.try_get("principal_amount")?;
     let installment_id: i64 = installment.try_get("id")?;
 
     sqlx::query(
@@ -290,7 +297,7 @@ pub async fn reverse_installment(
                 updated_at = now()
           WHERE id = $2 AND tenant_id = $3",
     )
-    .bind(amount)
+    .bind(principal)
     .bind(loan_id)
     .bind(tenant_id.0)
     .execute(&mut *tx)

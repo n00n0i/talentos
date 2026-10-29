@@ -130,12 +130,19 @@ impl PayrollDag {
             error: None,
         });
 
-        // 6. Loan / advance deduction
+        // 6. Loan / advance deduction. Net uses the total (`loan_deduction`);
+        // the principal/interest split is carried through to the payslip and GL.
         let loan_deduction = input.loan_deduction;
+        let loan_principal = input.loan_principal;
+        let loan_interest = input.loan_interest;
         trace.push(StepResult {
             step: "loan".into(),
             input: serde_json::to_value(loan_deduction)?,
-            output: serde_json::to_value(loan_deduction)?,
+            output: serde_json::json!({
+                "total": loan_deduction,
+                "principal": loan_principal,
+                "interest": loan_interest,
+            }),
             error: None,
         });
 
@@ -183,6 +190,8 @@ impl PayrollDag {
             tax_withheld: tax_money,
             pf_employee: pf_money,
             loan_deduction,
+            loan_principal,
+            loan_interest,
             reimbursement,
             net_pay,
             anomalies: Self::detect_anomalies(&input, &gross_with_ot, &net_pay),
@@ -295,6 +304,8 @@ mod tests {
             is_sso_enrolled: true,
             is_pf_member: false,
             loan_deduction: Money::ZERO,
+            loan_principal: Money::ZERO,
+            loan_interest: Money::ZERO,
             reimbursement: Money::ZERO,
         }
     }

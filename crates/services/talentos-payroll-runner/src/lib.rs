@@ -63,7 +63,12 @@ pub struct RunSummary {
 #[derive(Debug, Clone, Copy)]
 struct ActiveLoan {
     loan_id: Uuid,
-    amount: Decimal,
+    /// Principal portion of this run's installment (reduces the balance).
+    principal: Decimal,
+    /// Interest portion of this run's installment (written off, never reduces balance).
+    interest: Decimal,
+    /// Total deduction = principal + interest.
+    total: Decimal,
 }
 
 /// Approved expense claims selected for this run, grouped by employee.
@@ -263,7 +268,15 @@ pub async fn execute_run(
                 .unwrap_or((Decimal::ZERO, Decimal::ZERO, Decimal::ZERO));
             let loan_deduction = active_loans
                 .get(&employee_id)
-                .map(|loan| Money::from_baht(loan.amount))
+                .map(|loan| Money::from_baht(loan.total))
+                .unwrap_or(Money::ZERO);
+            let loan_principal = active_loans
+                .get(&employee_id)
+                .map(|loan| Money::from_baht(loan.principal))
+                .unwrap_or(Money::ZERO);
+            let loan_interest = active_loans
+                .get(&employee_id)
+                .map(|loan| Money::from_baht(loan.interest))
                 .unwrap_or(Money::ZERO);
             let reimbursement = approved_claims
                 .reimbursement_for(employee_id)
@@ -292,6 +305,8 @@ pub async fn execute_run(
                 is_sso_enrolled: sso_enrolled,
                 is_pf_member: pf_member,
                 loan_deduction,
+                loan_principal,
+                loan_interest,
                 reimbursement,
             })
         })
@@ -420,8 +435,9 @@ async fn write_payslip(
                payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings,
                ot_amount, total_deductions, net_pay, tax_withheld,
                sso_employee, sso_employer, pf_employee, pf_employer,
-               loan_deduction, reimbursement, anomalies, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'calculated')
+               loan_deduction, loan_principal, loan_interest, reimbursement,
+               anomalies, status)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'calculated')
            ON CONFLICT (payroll_run_id, employee_id) DO UPDATE SET
                gross_earnings = EXCLUDED.gross_earnings,
                ot_amount = EXCLUDED.ot_amount,
@@ -431,6 +447,8 @@ async fn write_payslip(
                sso_employee = EXCLUDED.sso_employee,
                pf_employee = EXCLUDED.pf_employee,
                loan_deduction = EXCLUDED.loan_deduction,
+               loan_principal = EXCLUDED.loan_principal,
+               loan_interest = EXCLUDED.loan_interest,
                reimbursement = EXCLUDED.reimbursement,
                anomalies = EXCLUDED.anomalies"#,
     )
@@ -448,6 +466,8 @@ async fn write_payslip(
     .bind(out.pf_employee.amount())
     .bind(out.pf_employee.amount())
     .bind(out.loan_deduction.amount())
+    .bind(out.loan_principal.amount())
+    .bind(out.loan_interest.amount())
     .bind(out.reimbursement.amount())
     .bind(anomalies)
     .execute(&mut **tx)
@@ -521,7 +541,7 @@ async fn load_active_loans(
     }
 
     let rows = sqlx::query(
-        r#"SELECT id, employee_id, balance, installment_amount
+        r#"SELECT id, employee_id, balance, installment_amount, interest_rate
            FROM employee_loans
            WHERE tenant_id = $1
              AND employee_id = ANY($2)
@@ -541,15 +561,35 @@ async fn load_active_loans(
         let employee_id: Uuid = row.try_get("employee_id")?;
         let balance: Decimal = row.try_get("balance")?;
         let installment: Decimal = row.try_get("installment_amount")?;
+        let rate: Decimal = row.try_get("interest_rate")?;
+        let (principal, interest) = amortize(balance, rate, installment);
         map.insert(
             employee_id,
             ActiveLoan {
                 loan_id,
-                amount: installment.min(balance),
+                principal,
+                interest,
+                total: principal + interest,
             },
         );
     }
     Ok(map)
+}
+
+/// Split one installment into interest and principal per the amortization rule.
+///
+/// Interest is `round(balance * rate, 2)`, capped at the installment. On the
+/// final payoff (`balance + interest <= installment`) the principal is the whole
+/// remaining balance and interest is whatever has accrued. Otherwise principal
+/// is `installment - interest`, capped at balance so it never goes negative.
+fn amortize(balance: Decimal, rate: Decimal, installment: Decimal) -> (Decimal, Decimal) {
+    let interest = (balance * rate).round_dp(2);
+    if balance + interest <= installment {
+        return (balance, interest);
+    }
+    let interest = interest.min(installment);
+    let principal = (installment - interest).min(balance);
+    (principal, interest)
 }
 
 /// Load effective PF contribution rates at the period end, keyed by employee.
@@ -664,20 +704,23 @@ async fn apply_loan_deduction(
     run_id: Uuid,
     loan: &ActiveLoan,
 ) -> Result<(), RunError> {
-    if loan.amount.is_zero() {
+    if loan.total.is_zero() {
         return Ok(());
     }
 
     let inserted: Option<i64> = sqlx::query_scalar(
-        r#"INSERT INTO loan_installments (tenant_id, loan_id, payroll_run_id, amount)
-           VALUES ($1, $2, $3, $4)
+        r#"INSERT INTO loan_installments (tenant_id, loan_id, payroll_run_id, amount,
+                                          principal_amount, interest_amount)
+           VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (loan_id, payroll_run_id) WHERE reversed_at IS NULL DO NOTHING
            RETURNING id"#,
     )
     .bind(tenant_id.0)
     .bind(loan.loan_id)
     .bind(run_id)
-    .bind(loan.amount)
+    .bind(loan.total)
+    .bind(loan.principal)
+    .bind(loan.interest)
     .fetch_optional(&mut **tx)
     .await?;
 
@@ -689,7 +732,7 @@ async fn apply_loan_deduction(
                    updated_at = now()
                WHERE id = $2 AND tenant_id = $3"#,
         )
-        .bind(loan.amount)
+        .bind(loan.principal)
         .bind(loan.loan_id)
         .bind(tenant_id.0)
         .execute(&mut **tx)
@@ -793,7 +836,8 @@ pub async fn render_payslip(
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let row = sqlx::query(
         r#"SELECT p.base_salary, p.ot_amount, p.gross_earnings, p.sso_employee,
-                  p.tax_withheld, p.pf_employee, p.loan_deduction, p.reimbursement,
+                  p.tax_withheld, p.pf_employee, p.loan_deduction, p.loan_principal,
+                  p.loan_interest, p.reimbursement,
                   p.total_deductions, p.net_pay, p.anomalies,
                   e.employee_code, e.first_name_th, e.last_name_th, e.position_title,
                   e.department, e.bank_name, e.bank_account_number,
@@ -839,6 +883,8 @@ pub async fn render_payslip(
         tax_withheld: row.try_get("tax_withheld")?,
         pf_employee: row.try_get("pf_employee")?,
         loan_deduction: row.try_get("loan_deduction")?,
+        loan_principal: row.try_get("loan_principal")?,
+        loan_interest: row.try_get("loan_interest")?,
         reimbursement: row.try_get("reimbursement")?,
         total_deductions: row.try_get("total_deductions")?,
         net_pay: row.try_get("net_pay")?,
@@ -938,4 +984,48 @@ pub async fn recover_stuck_runs(
         }
     }
     Ok(recovered)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::amortize;
+    use rust_decimal_macros::dec;
+
+    #[test]
+    fn zero_rate_pays_principal_only() {
+        // Matches the pre-interest behavior: installment capped at balance.
+        assert_eq!(
+            amortize(dec!(10000), dec!(0), dec!(1000)),
+            (dec!(1000), dec!(0))
+        );
+        assert_eq!(
+            amortize(dec!(500), dec!(0), dec!(1000)),
+            (dec!(500), dec!(0))
+        );
+    }
+
+    #[test]
+    fn interest_splits_from_principal() {
+        // balance 10,000 at 2% → interest 200; principal = 1000 - 200.
+        let (p, i) = amortize(dec!(10000), dec!(0.02), dec!(1000));
+        assert_eq!(i, dec!(200));
+        assert_eq!(p, dec!(800));
+    }
+
+    #[test]
+    fn final_payoff_uses_whole_balance_plus_accrued_interest() {
+        // balance 400 + interest 8 (2%) = 408 <= installment 1000 → pay off.
+        let (p, i) = amortize(dec!(400), dec!(0.02), dec!(1000));
+        assert_eq!(p, dec!(400));
+        assert_eq!(i, dec!(8));
+    }
+
+    #[test]
+    fn principal_never_exceeds_balance() {
+        // interest capped at installment so principal stays <= balance.
+        let (p, i) = amortize(dec!(100), dec!(0.10), dec!(10.05));
+        assert_eq!(i, dec!(10));
+        assert_eq!(p, dec!(0.05));
+        assert!(p <= dec!(100));
+    }
 }

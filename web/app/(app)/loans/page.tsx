@@ -19,6 +19,7 @@ type Loan = {
   balance: string;
   paid_amount: string;
   installment_amount: string;
+  interest_rate: string;
   start_date: string;
   status: string;
   note: string | null;
@@ -29,6 +30,8 @@ type Installment = {
   loan_id: string;
   payroll_run_id: string;
   amount: string;
+  principal_amount: string;
+  interest_amount: string;
   created_at: string;
   reversed_at: string | null;
   run_status: string;
@@ -50,6 +53,7 @@ export default function LoansPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [principal, setPrincipal] = useState("");
   const [installment, setInstallment] = useState("");
+  const [interestRate, setInterestRate] = useState("");
   const [startDate, setStartDate] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -84,6 +88,7 @@ export default function LoansPage() {
           employee_id: employeeId,
           principal: Number(principal),
           installment_amount: Number(installment),
+          interest_rate: Number(interestRate || "0") / 100,
           start_date: startDate,
           note: note.trim() || null,
         }),
@@ -92,6 +97,7 @@ export default function LoansPage() {
       setEmployeeId("");
       setPrincipal("");
       setInstallment("");
+      setInterestRate("");
       setStartDate("");
       setNote("");
       await load();
@@ -244,6 +250,20 @@ export default function LoansPage() {
             />
           </div>
           <div className="field">
+            <label htmlFor="loan-interest-rate">ดอกเบี้ยต่อเดือน (%)</label>
+            <input
+              id="loan-interest-rate"
+              data-testid="loan-interest-rate"
+              type="number"
+              min="0"
+              max="10"
+              step="0.01"
+              placeholder="0"
+              value={interestRate}
+              onChange={(e) => setInterestRate(e.target.value)}
+            />
+          </div>
+          <div className="field">
             <label htmlFor="loan-start">วันเริ่มผ่อน</label>
             <input
               id="loan-start"
@@ -285,6 +305,7 @@ export default function LoansPage() {
                 <th className="num">ชำระแล้ว</th>
                 <th className="num">คงเหลือ</th>
                 <th className="num">งวดผ่อน</th>
+                <th className="num">ดอกเบี้ย</th>
                 <th>วันเริ่มผ่อน</th>
                 <th>สถานะ</th>
                 <th />
@@ -301,6 +322,7 @@ export default function LoansPage() {
                     <td className="num">฿{thb(l.paid_amount)}</td>
                     <td className="num">฿{thb(l.balance)}</td>
                     <td className="num">฿{thb(l.installment_amount)}</td>
+                    <td className="num">{(Number(l.interest_rate) * 100).toFixed(2)}%</td>
                     <td>{thDate(l.start_date)}</td>
                     <td>
                       <span className={`badge ${l.status === "active" ? "warning" : l.status === "paid" ? "success" : ""}`}>
@@ -325,7 +347,7 @@ export default function LoansPage() {
                   </tr>
                   {installments[l.id] && (
                     <tr data-testid="loan-installments">
-                      <td colSpan={8}>
+                      <td colSpan={9}>
                         {installments[l.id]!.length === 0 ? (
                           <div className="empty">ยังไม่มีงวดผ่อน</div>
                         ) : (
@@ -335,6 +357,8 @@ export default function LoansPage() {
                                 <th>รอบเงินเดือน</th>
                                 <th>รันไอดี</th>
                                 <th className="num">งวด</th>
+                                <th className="num">เงินต้น</th>
+                                <th className="num">ดอกเบี้ย</th>
                                 <th>สถานะรอบ</th>
                                 <th />
                               </tr>
@@ -345,6 +369,8 @@ export default function LoansPage() {
                                   <td>{thDate(ins.period_start)} – {thDate(ins.period_end)}</td>
                                   <td className="mono">{ins.payroll_run_id.slice(0, 8)}…</td>
                                   <td className="num">฿{thb(ins.amount)}</td>
+                                  <td className="num">฿{thb(ins.principal_amount)}</td>
+                                  <td className="num">฿{thb(ins.interest_amount)}</td>
                                   <td>
                                     {ins.reversed_at ? (
                                       <span className="badge">กลับรายการแล้ว</span>

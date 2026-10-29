@@ -275,6 +275,17 @@ and interest, and the GL credits principal to 2230 and interest to 4900. An
 installment from a not-yet-approved run can be reversed
 (`.../installments/:run_id/reverse`); the run must then be recalculated.
 
+## Statutory form templates
+
+`/forms` (HR) edits versioned 50 ทวิ and สปส.1-10 templates: labels, header
+values (employer account/branch), and CSV columns mapped to payroll data. The
+global defaults follow public RD/SSO field structures; tenants save their own
+version, which overrides the default. Generate a printable 50 ทวิ per payslip
+(`GET /payroll/payslips/:id/50tawi`) and the 1-10 CSV per approved run
+(`GET /payroll/runs/:id/sso1-10.csv`). Official layouts change and must be
+signed off by an accountant before filing; the editor exists so fields can be
+corrected without a code change.
+
 ## Provident fund
 
 Membership is the employee `pf_member` toggle; the rate is effective-dated per

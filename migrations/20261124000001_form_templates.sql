@@ -52,8 +52,8 @@ VALUES
     "title": "แบบรายการแสดงการส่งเงินสมทบ",
     "header": [
       {"key":"employer_name","label":"ชื่อสถานประกอบการ","source":"entity_name"},
-      {"key":"employer_account","label":"เลขที่บัญชีนายจ้าง","source":"sso_account"},
-      {"key":"branch","label":"ลำดับที่สาขา","source":"branch"}
+      {"key":"employer_account","label":"เลขที่บัญชีนายจ้าง","value":""},
+      {"key":"branch","label":"ลำดับที่สาขา","value":"000000"}
     ],
     "columns": [
       {"label":"เลขประจำตัวประชาชน","source":"national_id"},

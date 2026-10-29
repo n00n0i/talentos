@@ -433,6 +433,14 @@ pub async fn export_sso1_10_csv(
         .as_ref()
         .map(|e| e.get::<String, _>("name"))
         .unwrap_or_default();
+    let entity_tax_id = entity
+        .as_ref()
+        .and_then(|e| e.get::<Option<String>, _>("tax_id"))
+        .unwrap_or_default();
+    let entity_address = entity
+        .as_ref()
+        .map(|e| e.get::<serde_json::Value, _>("address").to_string())
+        .unwrap_or_default();
 
     let rows = sqlx::query(
         "SELECT e.national_id, e.first_name_th, e.last_name_th, e.employee_code, \
@@ -453,6 +461,8 @@ pub async fn export_sso1_10_csv(
     for h in &template.config.header {
         let value = match h.source.as_deref() {
             Some("entity_name") => entity_name.clone(),
+            Some("entity_tax_id") => entity_tax_id.clone(),
+            Some("entity_address") => entity_address.clone(),
             Some(_) => String::new(),
             None => h.value.clone().unwrap_or_default(),
         };
@@ -508,7 +518,11 @@ pub async fn export_sso1_10_csv(
         .enumerate()
         .map(|(i, c)| {
             if i == 0 {
-                "รวม".to_string()
+                if NUMERIC_SOURCES.contains(&c.source.as_str()) {
+                    format!("รวม {}", format_money(totals[i]))
+                } else {
+                    "รวม".to_string()
+                }
             } else if NUMERIC_SOURCES.contains(&c.source.as_str()) {
                 format_money(totals[i])
             } else {

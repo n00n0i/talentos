@@ -3,8 +3,8 @@ mod common;
 
 use sqlx::PgPool;
 use talentos_hr_runner::forms::{
-    export_sso1_10_csv, load_active_template, render_50tawi, save_template, FormConfig,
-    FormError, FORM_TYPE_50TAWI, FORM_TYPE_SSO1_10,
+    export_sso1_10_csv, load_active_template, render_50tawi, save_template, FormConfig, FormError,
+    FORM_TYPE_50TAWI, FORM_TYPE_SSO1_10,
 };
 use uuid::Uuid;
 
@@ -171,7 +171,13 @@ async fn tenant_override_and_global_fallback() -> Result<(), Box<dyn std::error:
 
     // Save an override; version increments and the edited label is served.
     let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
-    let v1 = save_template(&mut *tx, FORM_TYPE_50TAWI, &tawi_config("นายจ้าง (แก้)"), seed.user_id).await?;
+    let v1 = save_template(
+        &mut *tx,
+        FORM_TYPE_50TAWI,
+        &tawi_config("นายจ้าง (แก้)"),
+        seed.user_id,
+    )
+    .await?;
     tx.commit().await?;
     assert_eq!(v1, 1);
 
@@ -194,8 +200,20 @@ async fn save_increments_version_and_keeps_old() -> Result<(), Box<dyn std::erro
     let seed = seed_tenant(&pool).await?;
 
     let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
-    let v1 = save_template(&mut *tx, FORM_TYPE_50TAWI, &tawi_config("หนึ่ง"), seed.user_id).await?;
-    let v2 = save_template(&mut *tx, FORM_TYPE_50TAWI, &tawi_config("สอง"), seed.user_id).await?;
+    let v1 = save_template(
+        &mut *tx,
+        FORM_TYPE_50TAWI,
+        &tawi_config("หนึ่ง"),
+        seed.user_id,
+    )
+    .await?;
+    let v2 = save_template(
+        &mut *tx,
+        FORM_TYPE_50TAWI,
+        &tawi_config("สอง"),
+        seed.user_id,
+    )
+    .await?;
     tx.commit().await?;
     assert_eq!((v1, v2), (1, 2));
 
@@ -224,7 +242,13 @@ async fn render_50tawi_uses_edited_labels_and_values() -> Result<(), Box<dyn std
     let run_id = seed_run(&pool, &seed, "approved").await?;
 
     let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
-    save_template(&mut *tx, FORM_TYPE_50TAWI, &tawi_config("ผู้จ่ายเงิน (แก้ไข)"), seed.user_id).await?;
+    save_template(
+        &mut *tx,
+        FORM_TYPE_50TAWI,
+        &tawi_config("ผู้จ่ายเงิน (แก้ไข)"),
+        seed.user_id,
+    )
+    .await?;
     tx.commit().await?;
 
     let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
@@ -243,9 +267,15 @@ async fn render_50tawi_uses_edited_labels_and_values() -> Result<(), Box<dyn std
     assert!(html.contains("ผู้จ่ายเงิน (แก้ไข)"), "edited label present");
     assert!(html.contains("Form Co"), "entity name resolved");
     assert!(html.contains("30000.00"), "gross resolved");
-    assert!(html.contains("1234567890123"), "national id decrypted/plaintext");
+    assert!(
+        html.contains("1234567890123"),
+        "national id decrypted/plaintext"
+    );
     assert!(html.contains("50T-"), "certificate number resolved");
-    assert!(html.contains(&run_id.to_string()[..8]), "cert no uses run short id");
+    assert!(
+        html.contains(&run_id.to_string()[..8]),
+        "cert no uses run short id"
+    );
 
     common::cleanup(&pool, seed.tenant_id).await;
     Ok(())
@@ -291,7 +321,7 @@ async fn sso_csv_honors_columns_order_and_totals() -> Result<(), Box<dyn std::er
     // data row: gross 30000.00, name, 750.00, 750.00.
     assert!(lines[2].starts_with("\"30000.00\",\"สมชาย ทดสอบ\",\"750.00\",\"750.00\""));
     // totals row: รวม, empty, 750.00, 750.00.
-    assert!(lines[3].starts_with("\"รวม\",\"\",\"750.00\",\"750.00\""));
+    assert!(lines[3].starts_with("\"รวม 30000.00\",\"\",\"750.00\",\"750.00\""));
 
     common::cleanup(&pool, seed.tenant_id).await;
     Ok(())
@@ -316,7 +346,8 @@ async fn sso_csv_rejects_unapproved_run() -> Result<(), Box<dyn std::error::Erro
 }
 
 #[tokio::test]
-async fn tenant_template_is_not_visible_to_other_tenant() -> Result<(), Box<dyn std::error::Error>> {
+async fn tenant_template_is_not_visible_to_other_tenant() -> Result<(), Box<dyn std::error::Error>>
+{
     let Some(url) = common::database_url() else {
         return Ok(());
     };
@@ -325,7 +356,13 @@ async fn tenant_template_is_not_visible_to_other_tenant() -> Result<(), Box<dyn 
     let b = seed_tenant(&pool).await?;
 
     let mut tx = tenant_conn(&pool, a.tenant_id).await?;
-    save_template(&mut *tx, FORM_TYPE_50TAWI, &tawi_config("เฉพาะ A"), a.user_id).await?;
+    save_template(
+        &mut *tx,
+        FORM_TYPE_50TAWI,
+        &tawi_config("เฉพาะ A"),
+        a.user_id,
+    )
+    .await?;
     tx.commit().await?;
 
     // Tenant B still sees the global default, not A's override.
@@ -337,12 +374,11 @@ async fn tenant_template_is_not_visible_to_other_tenant() -> Result<(), Box<dyn 
 
     // B cannot read A's rows directly through the tenant-scoped connection.
     let mut tx = tenant_conn(&pool, b.tenant_id).await?;
-    let visible: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM form_templates WHERE tenant_id = $1",
-    )
-    .bind(a.tenant_id)
-    .fetch_one(&mut *tx)
-    .await?;
+    let visible: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM form_templates WHERE tenant_id = $1")
+            .bind(a.tenant_id)
+            .fetch_one(&mut *tx)
+            .await?;
     tx.rollback().await?;
     assert_eq!(visible, 0);
 

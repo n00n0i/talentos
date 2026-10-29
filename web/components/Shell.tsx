@@ -22,6 +22,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
 const ADMIN_NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/users", label: "ผู้ใช้", icon: "user" },
   { href: "/settings", label: "ตั้งค่า", icon: "settings" },
+  { href: "/forms", label: "แบบฟอร์ม", icon: "file" },
   { href: "/audit", label: "ประวัติ", icon: "file" },
 ];
 

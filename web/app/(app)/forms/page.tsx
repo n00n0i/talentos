@@ -22,12 +22,17 @@ const ALLOWED_SOURCES = [
   "tax",
   "sso_employee",
   "sso_employer",
+  "annual_income",
+  "annual_tax",
   "payment_date",
   "period_start",
   "period_end",
   "income_type",
   "cert_no",
+  "year",
 ];
+
+type FormType = "50tawi" | "sso1_10" | "pnd1" | "pnd1a";
 
 function newKey(prefix: string, used: string[]) {
   let i = used.length + 1;
@@ -36,12 +41,13 @@ function newKey(prefix: string, used: string[]) {
 }
 
 export default function FormsPage() {
-  const [formType, setFormType] = useState<"50tawi" | "sso1_10">("50tawi");
+  const [formType, setFormType] = useState<FormType>("50tawi");
   const [config, setConfig] = useState<Config | null>(null);
   const [version, setVersion] = useState<number | null>(null);
   const [isOverride, setIsOverride] = useState(false);
   const [payslipId, setPayslipId] = useState("");
   const [runId, setRunId] = useState("");
+  const [year, setYear] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -64,7 +70,7 @@ export default function FormsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formType]);
 
-  function switchType(type: "50tawi" | "sso1_10") {
+  function switchType(type: FormType) {
     setFormType(type);
     setConfig(null);
     setVersion(null);
@@ -146,8 +152,8 @@ export default function FormsPage() {
       const body = {
         title: config.title,
         fields: formType === "50tawi" ? config.fields ?? [] : [],
-        header: formType === "sso1_10" ? config.header ?? [] : [],
-        columns: formType === "sso1_10" ? config.columns ?? [] : [],
+        header: formType === "50tawi" ? [] : config.header ?? [],
+        columns: formType === "50tawi" ? [] : config.columns ?? [],
       };
       const res = await gw<{ version: number }>(`api/v1/forms/${formType}`, {
         method: "PUT",
@@ -168,8 +174,14 @@ export default function FormsPage() {
       ? `/api/gw/api/v1/payroll/payslips/${encodeURIComponent(payslipId.trim())}/50tawi`
       : "";
   const runPreview =
-    runId.trim() && formType === "sso1_10"
-      ? `/api/gw/api/v1/payroll/runs/${encodeURIComponent(runId.trim())}/sso1-10.csv`
+    runId.trim() && (formType === "sso1_10" || formType === "pnd1")
+      ? `/api/gw/api/v1/payroll/runs/${encodeURIComponent(runId.trim())}/${
+          formType === "sso1_10" ? "sso1-10" : "pnd1"
+        }.csv`
+      : "";
+  const yearPreview =
+    year.trim() && formType === "pnd1a"
+      ? `/api/gw/api/v1/reports/pnd1a.csv?year=${encodeURIComponent(year.trim())}`
       : "";
 
   return (
@@ -177,7 +189,7 @@ export default function FormsPage() {
       <div className="page-head">
         <div>
           <h1>แบบฟอร์ม</h1>
-          <p className="page-sub">แก้ไขแม่แบบเอกสารราชการ (50 ทวิ / สปส.1-10) ก่อนส่งมอบนักบัญชี</p>
+          <p className="page-sub">แก้ไขแม่แบบเอกสารราชการ (50 ทวิ / สปส.1-10 / ภ.ง.ด.1 / ภ.ง.ด.1ก) ก่อนส่งมอบนักบัญชี</p>
         </div>
       </div>
 
@@ -192,10 +204,12 @@ export default function FormsPage() {
               id="form-type"
               data-testid="form-type"
               value={formType}
-              onChange={(e) => switchType(e.target.value as "50tawi" | "sso1_10")}
+              onChange={(e) => switchType(e.target.value as FormType)}
             >
               <option value="50tawi">50 ทวิ (หนังสือรับรองการหักภาษี ณ ที่จ่าย)</option>
               <option value="sso1_10">สปส.1-10 (รายการส่งเงินสมทบ)</option>
+              <option value="pnd1">ภ.ง.ด.1 (ภาษีหัก ณ ที่จ่ายรายเดือน)</option>
+              <option value="pnd1a">ภ.ง.ด.1ก (ภาษีหัก ณ ที่จ่ายรายปี)</option>
             </select>
           </div>
           <div className="field">
@@ -262,7 +276,7 @@ export default function FormsPage() {
               </div>
             )}
 
-            {formType === "sso1_10" && (
+            {formType !== "50tawi" && (
               <>
                 <div>
                   <div className="card-head" style={{ padding: "0 0 8px" }}>
@@ -393,6 +407,31 @@ export default function FormsPage() {
               </a>
             </div>
           </div>
+        ) : formType === "pnd1a" ? (
+          <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
+            <div className="field">
+              <label htmlFor="preview-year">ปีภาษี (คริสต์ศักราช)</label>
+              <input
+                id="preview-year"
+                data-testid="preview-year"
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                placeholder="เช่น 2026"
+              />
+            </div>
+            <div style={{ display: "flex", alignItems: "end" }}>
+              <a
+                className="btn btn-primary"
+                data-testid="form-preview"
+                href={yearPreview}
+                target="_blank"
+                rel="noreferrer"
+                aria-disabled={!yearPreview}
+              >
+                ดาวน์โหลด ภ.ง.ด.1ก
+              </a>
+            </div>
+          </div>
         ) : (
           <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
             <div className="field">
@@ -414,7 +453,7 @@ export default function FormsPage() {
                 rel="noreferrer"
                 aria-disabled={!runPreview}
               >
-                ดาวน์โหลด สปส.1-10
+                ดาวน์โหลด {formType === "pnd1" ? "ภ.ง.ด.1" : "สปส.1-10"}
               </a>
             </div>
           </div>

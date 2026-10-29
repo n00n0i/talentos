@@ -1,11 +1,12 @@
 //! Statutory form templates (50 ทวิ / สปส.1-10) and their render endpoints.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::dto::responses::ErrorResponse;
@@ -136,6 +137,64 @@ pub async fn export_sso1_10_csv(
         Err(talentos_hr_runner::FormError::NotFound) => not_found(),
         Err(e) => internal_err(&e.to_string()),
     }
+}
+
+/// GET /api/v1/payroll/runs/:id/pnd1.csv — ภ.ง.ด.1 CSV (approved runs).
+pub async fn export_pnd1_csv(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(run_id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "export_report") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let result = talentos_hr_runner::export_pnd1_csv(&mut tx, run_id, &state.pii).await;
+    let _ = tx.rollback().await;
+
+    match result {
+        Ok((filename, body)) => csv_response(filename, body),
+        Err(talentos_hr_runner::FormError::NotFound) => not_found(),
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+/// GET /api/v1/reports/pnd1a.csv?year= — ภ.ง.ด.1ก CSV (annual withholding).
+pub async fn export_pnd1a_csv(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Query(query): Query<Pnd1aQuery>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "export_report") {
+        return forbidden;
+    }
+    let year = match query.year {
+        Some(y) if (1950..=2100).contains(&y) => y,
+        _ => return unprocessable("year is required (a four-digit year)"),
+    };
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let result = talentos_hr_runner::export_pnd1a_csv(&mut tx, year, &state.pii).await;
+    let _ = tx.rollback().await;
+
+    match result {
+        Ok((filename, body)) => csv_response(filename, body),
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct Pnd1aQuery {
+    pub year: Option<i32>,
+}
+
+fn unprocessable(message: &str) -> Response {
+    error_response(StatusCode::UNPROCESSABLE_ENTITY, "invalid_request", message)
 }
 
 fn csv_response(filename: String, body: String) -> Response {

@@ -26,6 +26,8 @@ pub struct EntityBody {
     pub name: String,
     pub tax_id: Option<String>,
     pub address: Option<Value>,
+    pub sso_account: Option<String>,
+    pub branch: Option<String>,
 }
 
 /// GET /api/v1/settings/payroll
@@ -178,7 +180,7 @@ pub async fn get_organization(State(state): State<AppState>, Authed(ctx): Authed
         .fetch_optional(&mut *tx)
         .await;
     let entities = sqlx::query(
-        "SELECT id, name, tax_id, address, is_active FROM entities
+        "SELECT id, name, tax_id, address, sso_account, branch, is_active FROM entities
           WHERE tenant_id = $1 ORDER BY created_at",
     )
     .bind(ctx.tenant_id.0)
@@ -205,6 +207,8 @@ pub async fn get_organization(State(state): State<AppState>, Authed(ctx): Authed
                     "name": row.get::<String, _>("name"),
                     "tax_id": row.get::<Option<String>, _>("tax_id"),
                     "address": row.get::<Value, _>("address"),
+                    "sso_account": row.get::<Option<String>, _>("sso_account"),
+                    "branch": row.get::<String, _>("branch"),
                     "is_active": row.get::<bool, _>("is_active"),
                 })
             })
@@ -275,12 +279,15 @@ pub async fn put_entity(
     };
     let done = sqlx::query(
         "UPDATE entities
-            SET name = $1, tax_id = $2, address = COALESCE($3, address), updated_at = now()
-          WHERE id = $4 AND tenant_id = $5",
+            SET name = $1, tax_id = $2, address = COALESCE($3, address),
+                sso_account = COALESCE($4, sso_account), branch = COALESCE($5, branch), updated_at = now()
+          WHERE id = $6 AND tenant_id = $7",
     )
     .bind(body.name.trim())
     .bind(body.tax_id.as_deref())
     .bind(body.address)
+    .bind(body.sso_account.as_deref())
+    .bind(body.branch.as_deref())
     .bind(id)
     .bind(ctx.tenant_id.0)
     .execute(&mut *tx)

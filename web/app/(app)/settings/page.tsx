@@ -21,7 +21,14 @@ type PayrollSettings = {
   gl_claim_account: string;
 };
 type Tenant = { id: string; name: string; slug: string };
-type Entity = { id: string; name: string; tax_id: string | null; is_active: boolean };
+type Entity = {
+  id: string;
+  name: string;
+  tax_id: string | null;
+  sso_account: string | null;
+  branch: string;
+  is_active: boolean;
+};
 type System = {
   database: { role: string; rls_enforced: boolean; superuser: boolean; bypass_rls: boolean };
   migrations: { tracked: boolean; applied: number; latest: number | null };
@@ -242,15 +249,21 @@ export default function SettingsPage() {
     }
   }
 
-  async function saveEntity(entity: Entity, name: string, taxId: string) {
+  async function saveEntity(entity: Entity, name: string, taxId: string, ssoAccount: string, branch: string) {
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/settings/entities/${entity.id}`, {
         method: "PUT",
-        body: JSON.stringify({ name, tax_id: taxId || null }),
+        body: JSON.stringify({ name, tax_id: taxId || null, sso_account: ssoAccount || null, branch: branch || null }),
       });
-      setEntities((list) => list.map((e) => (e.id === entity.id ? { ...e, name, tax_id: taxId || null } : e)));
+      setEntities((list) =>
+        list.map((e) =>
+          e.id === entity.id
+            ? { ...e, name, tax_id: taxId || null, sso_account: ssoAccount || null, branch: branch || "000000" }
+            : e
+        )
+      );
       setNotice("บันทึกข้อมูลนิติบุคคลแล้ว");
     } catch (e) {
       handleApiError(e, setError);
@@ -925,6 +938,8 @@ export default function SettingsPage() {
             <tr>
               <th>ชื่อ</th>
               <th>เลขผู้เสียภาษี</th>
+              <th>เลขบัญชีประกันสังคม</th>
+              <th>สาขา</th>
               <th>สถานะ</th>
               <th />
             </tr>
@@ -959,10 +974,12 @@ function EntityRow({
 }: {
   entity: Entity;
   busy: boolean;
-  onSave: (entity: Entity, name: string, taxId: string) => void;
+  onSave: (entity: Entity, name: string, taxId: string, ssoAccount: string, branch: string) => void;
 }) {
   const [name, setName] = useState(entity.name);
   const [taxId, setTaxId] = useState(entity.tax_id ?? "");
+  const [ssoAccount, setSsoAccount] = useState(entity.sso_account ?? "");
+  const [branch, setBranch] = useState(entity.branch ?? "");
   return (
     <tr>
       <td>
@@ -983,12 +1000,32 @@ function EntityRow({
         />
       </td>
       <td>
+        <input
+          value={ssoAccount}
+          onChange={(e) => setSsoAccount(e.target.value)}
+          placeholder="เลขบัญชีนายจ้าง"
+          data-testid="entity-sso-account"
+          className="compact-input"
+          style={{ width: 180, borderRadius: 10 }}
+        />
+      </td>
+      <td>
+        <input
+          value={branch}
+          onChange={(e) => setBranch(e.target.value)}
+          placeholder="000000"
+          data-testid="entity-branch"
+          className="compact-input"
+          style={{ width: 100, borderRadius: 10 }}
+        />
+      </td>
+      <td>
         <span className={`badge ${entity.is_active ? "success" : "danger"}`}>
           {entity.is_active ? "ใช้งาน" : "ปิด"}
         </span>
       </td>
       <td className="num">
-        <button className="btn btn-sm" disabled={busy} onClick={() => onSave(entity, name, taxId)}>
+        <button className="btn btn-sm" disabled={busy} onClick={() => onSave(entity, name, taxId, ssoAccount, branch)}>
           บันทึก
         </button>
       </td>

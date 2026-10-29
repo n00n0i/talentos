@@ -51,6 +51,8 @@ pub struct PayslipRenderData {
     pub tax_withheld: Decimal,
     pub pf_employee: Decimal,
     pub loan_deduction: Decimal,
+    pub loan_principal: Decimal,
+    pub loan_interest: Decimal,
     pub reimbursement: Decimal,
     pub total_deductions: Decimal,
     pub net_pay: Decimal,
@@ -272,11 +274,29 @@ pub fn render_html(t: &PayslipTemplate, d: &PayslipRenderData) -> String {
         );
     }
     if !d.loan_deduction.is_zero() {
-        let _ = writeln!(
-            h,
-            "<tr><td>หักเงินกู้/เบิกล่วงหน้า</td><td class=\"num\">-{}</td></tr>",
-            baht(d.loan_deduction)
-        );
+        if d.loan_interest.is_zero() {
+            let _ = writeln!(
+                h,
+                "<tr><td>หักเงินกู้</td><td class=\"num\">-{}</td></tr>",
+                baht(d.loan_deduction)
+            );
+        } else {
+            let _ = writeln!(
+                h,
+                "<tr><td>หักเงินกู้ (เงินต้น/ดอกเบี้ย)</td><td class=\"num\">-{}</td></tr>",
+                baht(d.loan_deduction)
+            );
+            let _ = writeln!(
+                h,
+                "<tr><td class=\"muted\">— เงินต้น</td><td class=\"num\">-{}</td></tr>",
+                baht(d.loan_principal)
+            );
+            let _ = writeln!(
+                h,
+                "<tr><td class=\"muted\">— ดอกเบี้ย</td><td class=\"num\">-{}</td></tr>",
+                baht(d.loan_interest)
+            );
+        }
     }
     let _ = writeln!(
         h,
@@ -337,6 +357,8 @@ mod tests {
             tax_withheld: dec!(9416.67),
             pf_employee: dec!(4250),
             loan_deduction: dec!(0),
+            loan_principal: dec!(0),
+            loan_interest: dec!(0),
             reimbursement: dec!(0),
             total_deductions: dec!(14416.67),
             net_pay: dec!(72083.33),
@@ -408,11 +430,27 @@ mod tests {
     fn renders_loan_deduction_line_when_present() {
         let mut d = data();
         d.loan_deduction = dec!(1500);
+        d.loan_principal = dec!(1500);
         d.total_deductions += dec!(1500);
         d.net_pay -= dec!(1500);
         let html = render_html(&PayslipTemplate::default(), &d);
-        assert!(html.contains("หักเงินกู้/เบิกล่วงหน้า"));
+        assert!(html.contains("หักเงินกู้"));
         assert!(html.contains("1,500.00"));
+    }
+
+    #[test]
+    fn renders_loan_principal_and_interest_split_when_interest_present() {
+        let mut d = data();
+        d.loan_deduction = dec!(1040);
+        d.loan_principal = dec!(1000);
+        d.loan_interest = dec!(40);
+        d.total_deductions += dec!(1040);
+        d.net_pay -= dec!(1040);
+        let html = render_html(&PayslipTemplate::default(), &d);
+        assert!(html.contains("หักเงินกู้ (เงินต้น/ดอกเบี้ย)"));
+        assert!(html.contains("1,040.00"));
+        assert!(html.contains("1,000.00"));
+        assert!(html.contains("40.00"));
     }
 
     #[test]

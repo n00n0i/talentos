@@ -28,10 +28,17 @@ pub struct EmployeePayrollInput {
     /// Social Security Act §33 coverage. Independent of the provident fund.
     pub is_sso_enrolled: bool,
     pub is_pf_member: bool,
-    /// Employee loan / advance installment to deduct this run. Default zero
+    /// Employee loan / advance installment to deduct this run. Total of
+    /// `loan_principal + loan_interest`; kept for compatibility. Default zero
     /// keeps existing inputs and tests working without changes.
     #[serde(default = "zero_money")]
     pub loan_deduction: Money,
+    /// Principal portion of the loan deduction (amortization). Default zero.
+    #[serde(default = "zero_money")]
+    pub loan_principal: Money,
+    /// Interest portion of the loan deduction. Default zero.
+    #[serde(default = "zero_money")]
+    pub loan_interest: Money,
     /// Approved expense-claim reimbursement to add to net pay this run.
     /// Non-taxable; default zero keeps existing inputs and tests working.
     #[serde(default = "zero_money")]

@@ -101,8 +101,9 @@ async fn seed_run_and_installment(
     .await
     .expect("run");
     sqlx::query(
-        "INSERT INTO loan_installments (tenant_id, loan_id, payroll_run_id, amount)
-         VALUES ($1,$2,$3,$4)",
+        "INSERT INTO loan_installments (tenant_id, loan_id, payroll_run_id, amount,
+                                        principal_amount, interest_amount)
+         VALUES ($1,$2,$3,$4,$4,0)",
     )
     .bind(tenant_id)
     .bind(loan_id)
@@ -459,6 +460,69 @@ async fn reversal_caps_at_principal() {
         .await
         .expect("reverse");
 
+    let (balance, status) = loan_state(&raw, tenant_id, loan_id).await;
+    assert_eq!(balance, dec!(1_000));
+    assert_eq!(status, "active");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn reversal_restores_principal_only_and_writes_off_interest() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let (entity_id, employee_id) = entities[0];
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+    let loan_id = seed_loan(&raw, tenant_id, user_id, employee_id, dec!(1_000)).await;
+
+    // Installment 1_040 = principal 1_000 + interest 40; loan fully paid off.
+    let run_id = Uuid::new_v4();
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        r#"INSERT INTO payroll_runs
+             (id, tenant_id, entity_id, period_start, period_end, payment_date, status, created_by)
+           VALUES ($1,$2,$3,'2026-10-01','2026-10-31','2026-11-01','draft',$4)"#,
+    )
+    .bind(run_id)
+    .bind(tenant_id)
+    .bind(entity_id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await
+    .expect("run");
+    sqlx::query(
+        "INSERT INTO loan_installments (tenant_id, loan_id, payroll_run_id, amount,
+                                        principal_amount, interest_amount)
+         VALUES ($1,$2,$3,1040,1000,40)",
+    )
+    .bind(tenant_id)
+    .bind(loan_id)
+    .bind(run_id)
+    .execute(&mut *tx)
+    .await
+    .expect("installment");
+    sqlx::query("UPDATE employee_loans SET balance = 0, status = 'closed' WHERE id = $1")
+        .bind(loan_id)
+        .execute(&mut *tx)
+        .await
+        .expect("loan state");
+    tx.commit().await.expect("commit");
+
+    reverse_installment(&pool, TenantId(tenant_id), user_id, loan_id, run_id)
+        .await
+        .expect("reverse");
+
+    // Only the principal is restored; the interest is written off.
     let (balance, status) = loan_state(&raw, tenant_id, loan_id).await;
     assert_eq!(balance, dec!(1_000));
     assert_eq!(status, "active");

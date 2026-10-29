@@ -291,8 +291,9 @@ async fn insert_payslip(
         "INSERT INTO payslips \
            (id, payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings, \
             total_deductions, net_pay, tax_withheld, sso_employee, sso_employer, \
-            pf_employee, pf_employer, loan_deduction, reimbursement, anomalies, status, created_at) \
-         VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'[]','approved',now())",
+            pf_employee, pf_employer, loan_deduction, loan_principal, loan_interest, \
+            reimbursement, anomalies, status, created_at) \
+         VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,0,$14,'[]','approved',now())",
     )
     .bind(run_id)
     .bind(tenant_id)
@@ -666,6 +667,85 @@ async fn gl_export_balances_with_loan_deduction() -> Result<(), Box<dyn std::err
         total_credit += credit;
     }
     assert!((total_debit - total_credit).abs() <= dec!(0.01));
+
+    cleanup_tenant(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn gl_export_splits_loan_principal_and_interest() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    let run_id = Uuid::new_v4();
+    let period_start = NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
+    let period_end = NaiveDate::from_ymd_opt(2026, 3, 31).unwrap();
+    let payment_date = NaiveDate::from_ymd_opt(2026, 4, 5).unwrap();
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    sqlx::query(
+        "INSERT INTO payroll_runs \
+           (id, tenant_id, entity_id, period_start, period_end, payment_date, status, \
+            total_employees, created_by, created_at) \
+         VALUES ($1,$2,$3,$4,$5,$6,'approved',1,$7,now())",
+    )
+    .bind(run_id)
+    .bind(seed.tenant_id)
+    .bind(seed.entity_id)
+    .bind(period_start)
+    .bind(period_end)
+    .bind(payment_date)
+    .bind(seed.user_id)
+    .execute(&mut *tx)
+    .await?;
+
+    // loan_deduction 1,040 = principal 1,000 + interest 40.
+    sqlx::query(
+        "INSERT INTO payslips \
+           (id, payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings, \
+            total_deductions, net_pay, tax_withheld, sso_employee, sso_employer, \
+            pf_employee, pf_employer, loan_deduction, loan_principal, loan_interest, \
+            reimbursement, anomalies, status, created_at) \
+         VALUES (gen_random_uuid(),$1,$2,$3,30000,30000,2790,27210,2000,750,750,0,0,1040,1000,40,0,'[]','approved',now())",
+    )
+    .bind(run_id)
+    .bind(seed.tenant_id)
+    .bind(seed.emp_active_it)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    let mut tx = tenant_tx(&pool, seed.tenant_id).await?;
+    let (_, body) = export_gl_csv(&mut *tx, run_id).await?;
+    tx.rollback().await?;
+
+    assert!(body.contains("2230"));
+    assert!(body.contains("เงินให้กู้พนักงาน"));
+    assert!(body.contains("4900"));
+    assert!(body.contains("รายได้ดอกเบี้ย"));
+
+    // 2230 line credits 1000, 4900 line credits 40.
+    let mut principal_credit = dec!(0);
+    let mut interest_credit = dec!(0);
+    for line in body.lines().skip(1) {
+        if line.is_empty() {
+            continue;
+        }
+        let cols: Vec<&str> = line.split(',').collect();
+        let code = strip_csv_quotes(cols[0]);
+        let credit = Decimal::from_str(strip_csv_quotes(cols[4])).unwrap_or_default();
+        if code == "2230" {
+            principal_credit += credit;
+        }
+        if code == "4900" {
+            interest_credit += credit;
+        }
+    }
+    assert_eq!(principal_credit, dec!(1000));
+    assert_eq!(interest_credit, dec!(40));
 
     cleanup_tenant(&pool, seed.tenant_id).await;
     Ok(())

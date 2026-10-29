@@ -16,6 +16,8 @@ pub struct EmployeePayrollOutput {
     pub tax_withheld: Money,
     pub pf_employee: Money,
     pub loan_deduction: Money,
+    pub loan_principal: Money,
+    pub loan_interest: Money,
     pub reimbursement: Money,
     pub net_pay: Money,
     pub anomalies: Vec<Anomaly>,

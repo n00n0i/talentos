@@ -19,6 +19,7 @@ async fn seed_loan(
     employee_id: Uuid,
     principal: Decimal,
     installment: Decimal,
+    rate: Decimal,
 ) {
     let mut tx = pool.begin().await.expect("begin seed_loan");
     sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
@@ -29,14 +30,15 @@ async fn seed_loan(
     sqlx::query(
         r#"INSERT INTO employee_loans
              (id, tenant_id, employee_id, principal, balance, installment_amount,
-              start_date, status, created_by)
-           VALUES ($1,$2,$3,$4,$4,$5,'2026-10-01','active',$6)"#,
+              interest_rate, start_date, status, created_by)
+           VALUES ($1,$2,$3,$4,$4,$5,$6,'2026-10-01','active',$7)"#,
     )
     .bind(Uuid::new_v4())
     .bind(tenant_id)
     .bind(employee_id)
     .bind(principal)
     .bind(installment)
+    .bind(rate)
     .bind(user_id)
     .execute(&mut *tx)
     .await
@@ -166,6 +168,7 @@ async fn execute_run_deducts_loan_installment_and_reduces_balance() {
         employee_id,
         dec!(10_000),
         dec!(1_000),
+        dec!(0),
     )
     .await;
 
@@ -227,6 +230,7 @@ async fn rerun_does_not_double_deduct() {
         employee_id,
         dec!(10_000),
         dec!(1_000),
+        dec!(0),
     )
     .await;
 
@@ -303,6 +307,7 @@ async fn failed_payslip_skips_loan_deduction() {
         employee_id,
         dec!(10_000),
         dec!(5_000),
+        dec!(0),
     )
     .await;
 
@@ -360,6 +365,7 @@ async fn final_installment_caps_at_balance_and_closes() {
         employee_id,
         dec!(1_500),
         dec!(2_000),
+        dec!(0),
     )
     .await;
 
@@ -418,6 +424,7 @@ async fn recalc_after_reversal_creates_new_installment_and_deducts_once() {
         employee_id,
         dec!(10_000),
         dec!(1_000),
+        dec!(0),
     )
     .await;
     let loan_id = loan_id_of(&raw, tenant_id, employee_id).await;
@@ -466,6 +473,268 @@ async fn recalc_after_reversal_creates_new_installment_and_deducts_once() {
         2,
         "one reversed + one fresh installment"
     );
+
+    cleanup(&raw, tenant_id).await;
+}
+
+async fn payslip_loan_split(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    run_id: Uuid,
+    employee_id: Uuid,
+) -> (Decimal, Decimal) {
+    let mut tx = pool.begin().await.expect("begin payslip_loan_split");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query(
+        "SELECT loan_principal, loan_interest FROM payslips
+          WHERE payroll_run_id = $1 AND employee_id = $2 AND tenant_id = current_tenant_id()",
+    )
+    .bind(run_id)
+    .bind(employee_id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("payslip split");
+    let principal: Decimal = row.try_get("loan_principal").expect("principal");
+    let interest: Decimal = row.try_get("loan_interest").expect("interest");
+    let _ = tx.rollback().await;
+    (principal, interest)
+}
+
+async fn installment_split(
+    pool: &PgPool,
+    tenant_id: Uuid,
+    employee_id: Uuid,
+) -> (Decimal, Decimal) {
+    let mut tx = pool.begin().await.expect("begin installment_split");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let row = sqlx::query(
+        r#"SELECT li.principal_amount, li.interest_amount
+             FROM loan_installments li
+             JOIN employee_loans l ON l.id = li.loan_id
+            WHERE l.employee_id = $1 AND l.tenant_id = current_tenant_id()"#,
+    )
+    .bind(employee_id)
+    .fetch_one(&mut *tx)
+    .await
+    .expect("installment split");
+    let principal: Decimal = row.try_get("principal_amount").expect("principal");
+    let interest: Decimal = row.try_get("interest_amount").expect("interest");
+    let _ = tx.rollback().await;
+    (principal, interest)
+}
+
+#[tokio::test]
+async fn execute_run_splits_interest_and_principal() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, employee_ids) =
+        seed(&raw, &[("EMP200", Decimal::new(30_000, 0))]).await;
+    let employee_id = employee_ids[0];
+
+    let user_id: Uuid = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM users WHERE tenant_id = current_tenant_id() LIMIT 1",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("user");
+        let _ = tx.rollback().await;
+        id
+    };
+
+    // principal 10,000 at 2% monthly, installment 1,000.
+    seed_loan(
+        &raw,
+        tenant_id,
+        user_id,
+        employee_id,
+        dec!(10_000),
+        dec!(1_000),
+        dec!(0.02),
+    )
+    .await;
+
+    let summary = talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("run should succeed");
+
+    // interest = 200, principal = 800, total = 1,000.
+    assert_eq!(summary.total_loan, dec!(1_000));
+
+    let (principal, interest) = payslip_loan_split(&raw, tenant_id, run_id, employee_id).await;
+    assert_eq!(principal, dec!(800));
+    assert_eq!(interest, dec!(200));
+
+    let (ip, ii) = installment_split(&raw, tenant_id, employee_id).await;
+    assert_eq!(ip, dec!(800));
+    assert_eq!(ii, dec!(200));
+
+    // Balance amortizes by the principal portion only.
+    let (balance, status) = loan_state(&raw, tenant_id, employee_id).await;
+    assert_eq!(balance, dec!(9_200));
+    assert_eq!(status, "active");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn final_installment_with_interest_pays_off() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, _entity_id, run_id, employee_ids) =
+        seed(&raw, &[("EMP201", Decimal::new(30_000, 0))]).await;
+    let employee_id = employee_ids[0];
+
+    let user_id: Uuid = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM users WHERE tenant_id = current_tenant_id() LIMIT 1",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("user");
+        let _ = tx.rollback().await;
+        id
+    };
+
+    // principal 1,000 at 2%, installment 1,020 → balance + interest = 1,020 pays off.
+    seed_loan(
+        &raw,
+        tenant_id,
+        user_id,
+        employee_id,
+        dec!(1_000),
+        dec!(1_020),
+        dec!(0.02),
+    )
+    .await;
+
+    let summary = talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("run should succeed");
+
+    assert_eq!(summary.total_loan, dec!(1_020));
+
+    let (principal, interest) = payslip_loan_split(&raw, tenant_id, run_id, employee_id).await;
+    assert_eq!(principal, dec!(1_000));
+    assert_eq!(interest, dec!(20));
+
+    let (balance, status) = loan_state(&raw, tenant_id, employee_id).await;
+    assert_eq!(balance, dec!(0));
+    assert_eq!(status, "closed");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn installment_amortizes_across_runs_without_negative_balance() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let tenant_pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
+    let (tenant_id, entity_id, run_id, employee_ids) =
+        seed(&raw, &[("EMP202", Decimal::new(30_000, 0))]).await;
+    let employee_id = employee_ids[0];
+
+    let user_id: Uuid = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM users WHERE tenant_id = current_tenant_id() LIMIT 1",
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("user");
+        let _ = tx.rollback().await;
+        id
+    };
+
+    // principal 1,800 at 5%, installment 1,000.
+    seed_loan(
+        &raw,
+        tenant_id,
+        user_id,
+        employee_id,
+        dec!(1_800),
+        dec!(1_000),
+        dec!(0.05),
+    )
+    .await;
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run_id)
+        .await
+        .expect("first run");
+
+    // Run 1: interest 90, principal 910, balance → 890.
+    let (balance, status) = loan_state(&raw, tenant_id, employee_id).await;
+    assert_eq!(balance, dec!(890));
+    assert_eq!(status, "active");
+
+    // Second period: a fresh run deducts the final installment.
+    let run2 = Uuid::new_v4();
+    {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        sqlx::query(
+            "INSERT INTO payroll_runs
+               (id, tenant_id, entity_id, period_start, period_end, payment_date, status, created_by)
+             VALUES ($1,$2,$3,'2026-11-01','2026-11-30','2026-12-01','draft',$4)",
+        )
+        .bind(run2)
+        .bind(tenant_id)
+        .bind(entity_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .expect("second run");
+        tx.commit().await.expect("commit second run");
+    }
+
+    talentos_payroll_runner::execute_run(&tenant_pool, TenantId(tenant_id), run2)
+        .await
+        .expect("second run");
+
+    // Run 2: interest 44.50, principal 890, balance → 0 (never negative).
+    let (balance, status) = loan_state(&raw, tenant_id, employee_id).await;
+    assert_eq!(balance, dec!(0));
+    assert_eq!(status, "closed");
 
     cleanup(&raw, tenant_id).await;
 }

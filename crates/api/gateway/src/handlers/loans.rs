@@ -35,6 +35,9 @@ pub struct LoanBody {
     pub installment_amount: Decimal,
     pub start_date: NaiveDate,
     pub note: Option<String>,
+    /// Monthly interest rate as a fraction (0–0.10). Defaults to zero.
+    #[serde(default)]
+    pub interest_rate: Decimal,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,6 +56,7 @@ pub struct LoanDto {
     pub balance: String,
     pub paid_amount: String,
     pub installment_amount: String,
+    pub interest_rate: String,
     pub start_date: String,
     pub status: String,
     pub note: Option<String>,
@@ -75,6 +79,8 @@ pub struct InstallmentDto {
     pub loan_id: Uuid,
     pub payroll_run_id: Uuid,
     pub amount: String,
+    pub principal_amount: String,
+    pub interest_amount: String,
     pub created_at: String,
     pub reversed_at: Option<String>,
     pub run_status: String,
@@ -100,7 +106,7 @@ pub async fn list(
 
     let rows = sqlx::query(
         r#"SELECT l.id, l.employee_id, l.principal, l.balance, l.installment_amount,
-                  l.start_date, l.status, l.note, l.created_at,
+                  l.interest_rate, l.start_date, l.status, l.note, l.created_at,
                   e.employee_code, e.first_name_th, e.last_name_th
              FROM employee_loans l
              JOIN employees e ON e.id = l.employee_id
@@ -134,8 +140,8 @@ pub async fn create(
     if let Err(forbidden) = require(&ctx, "employee", "update") {
         return forbidden;
     }
-    if let Some(message) = validate(&body) {
-        return bad_request(&message);
+    if let Some((status, message)) = validate(&body) {
+        return error_response(status, "invalid_request", &message);
     }
 
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
@@ -166,14 +172,15 @@ pub async fn create(
     let insert = sqlx::query(
         r#"INSERT INTO employee_loans
              (id, tenant_id, employee_id, principal, balance, installment_amount,
-              start_date, status, note, created_by)
-           VALUES ($1,$2,$3,$4,$4,$5,$6,'active',$7,$8)"#,
+              interest_rate, start_date, status, note, created_by)
+           VALUES ($1,$2,$3,$4,$4,$5,$6,$7,'active',$8,$9)"#,
     )
     .bind(id)
     .bind(ctx.tenant_id.0)
     .bind(body.employee_id)
     .bind(body.principal)
     .bind(body.installment_amount)
+    .bind(body.interest_rate)
     .bind(body.start_date)
     .bind(body.note.as_deref())
     .bind(ctx.user_id.0)
@@ -351,6 +358,8 @@ pub async fn installments(
                     loan_id: i.loan_id,
                     payroll_run_id: i.payroll_run_id,
                     amount: i.amount.to_string(),
+                    principal_amount: i.principal_amount.to_string(),
+                    interest_amount: i.interest_amount.to_string(),
                     created_at: i.created_at.to_rfc3339(),
                     reversed_at: i.reversed_at.map(|d| d.to_rfc3339()),
                     run_status: i.run_status,
@@ -406,7 +415,7 @@ pub async fn me_loans(State(state): State<AppState>, Authed(ctx): Authed) -> Res
 
     let rows = sqlx::query(
         r#"SELECT l.id, l.employee_id, l.principal, l.balance, l.installment_amount,
-                  l.start_date, l.status, l.note, l.created_at,
+                  l.interest_rate, l.start_date, l.status, l.note, l.created_at,
                   e.employee_code, e.first_name_th, e.last_name_th
              FROM employee_loans l
              JOIN employees e ON e.id = l.employee_id
@@ -436,7 +445,7 @@ async fn fetch_one(state: &AppState, tenant_id: Uuid, id: Uuid) -> Result<Option
         .map_err(|e| e.to_string())?;
     let row = sqlx::query(
         r#"SELECT l.id, l.employee_id, l.principal, l.balance, l.installment_amount,
-                  l.start_date, l.status, l.note, l.created_at,
+                  l.interest_rate, l.start_date, l.status, l.note, l.created_at,
                   e.employee_code, e.first_name_th, e.last_name_th
              FROM employee_loans l
              JOIN employees e ON e.id = l.employee_id
@@ -456,6 +465,7 @@ fn row_to_dto(row: &sqlx::postgres::PgRow) -> LoanDto {
     let principal: Decimal = row.get("principal");
     let balance: Decimal = row.get("balance");
     let installment: Decimal = row.get("installment_amount");
+    let interest_rate: Decimal = row.get("interest_rate");
     LoanDto {
         id: row.get("id"),
         employee_id: row.get("employee_id"),
@@ -469,6 +479,7 @@ fn row_to_dto(row: &sqlx::postgres::PgRow) -> LoanDto {
         balance: balance.to_string(),
         paid_amount: (principal - balance).to_string(),
         installment_amount: installment.to_string(),
+        interest_rate: interest_rate.to_string(),
         start_date: row.get::<NaiveDate, _>("start_date").to_string(),
         status: row.get("status"),
         note: row.get("note"),
@@ -478,15 +489,38 @@ fn row_to_dto(row: &sqlx::postgres::PgRow) -> LoanDto {
     }
 }
 
-fn validate(body: &LoanBody) -> Option<String> {
+fn validate(body: &LoanBody) -> Option<(StatusCode, String)> {
     if body.principal <= Decimal::ZERO {
-        return Some("principal must be greater than 0".into());
+        return Some((
+            StatusCode::BAD_REQUEST,
+            "principal must be greater than 0".into(),
+        ));
     }
     if body.installment_amount <= Decimal::ZERO {
-        return Some("installment_amount must be greater than 0".into());
+        return Some((
+            StatusCode::BAD_REQUEST,
+            "installment_amount must be greater than 0".into(),
+        ));
     }
     if body.installment_amount > body.principal {
-        return Some("installment_amount must not exceed principal".into());
+        return Some((
+            StatusCode::BAD_REQUEST,
+            "installment_amount must not exceed principal".into(),
+        ));
+    }
+    if body.interest_rate < Decimal::ZERO || body.interest_rate > Decimal::new(1, 1) {
+        return Some((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "interest_rate must be between 0 and 0.10".into(),
+        ));
+    }
+    // The installment must amortize: interest on the full principal must leave
+    // a positive principal portion, otherwise the loan never pays down.
+    if body.installment_amount <= body.principal * body.interest_rate {
+        return Some((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "installment_amount must exceed principal * interest_rate".into(),
+        ));
     }
     None
 }

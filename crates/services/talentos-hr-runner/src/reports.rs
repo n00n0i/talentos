@@ -8,6 +8,10 @@ use uuid::Uuid;
 
 const UNKNOWN_DEPARTMENT: &str = "ไม่ระบุ";
 
+/// Interest income is always credited to this fixed account (Thai standard
+/// revenue code), independent of tenant-configured payroll GL accounts.
+const INTEREST_INCOME_ACCOUNT: &str = "4900";
+
 #[derive(Debug, Clone)]
 pub struct Headcount {
     pub active: i64,
@@ -390,7 +394,8 @@ pub async fn export_gl_csv(
                 COALESCE(SUM(p.tax_withheld), 0) AS tax, \
                 COALESCE(SUM(p.sso_employee), 0) AS sso_employee, \
                 COALESCE(SUM(p.pf_employee), 0) AS pf_employee, \
-                COALESCE(SUM(p.loan_deduction), 0) AS loan_deduction, \
+                COALESCE(SUM(p.loan_principal), 0) AS loan_principal, \
+                COALESCE(SUM(p.loan_interest), 0) AS loan_interest, \
                 COALESCE(SUM(p.reimbursement), 0) AS reimbursement \
          FROM payslips p \
          JOIN employees e ON e.id = p.employee_id \
@@ -417,7 +422,8 @@ pub async fn export_gl_csv(
         let tax: Decimal = row.get("tax");
         let sso_employee: Decimal = row.get("sso_employee");
         let pf_employee: Decimal = row.get("pf_employee");
-        let loan_deduction: Decimal = row.get("loan_deduction");
+        let loan_principal: Decimal = row.get("loan_principal");
+        let loan_interest: Decimal = row.get("loan_interest");
         let reimbursement: Decimal = row.get("reimbursement");
 
         let debit = gross + sso_employer + pf_employer;
@@ -466,9 +472,19 @@ pub async fn export_gl_csv(
             account_name: "เงินให้กู้พนักงาน".into(),
             department: department.clone(),
             debit: Decimal::ZERO,
-            credit: loan_deduction,
+            credit: loan_principal,
             description: description.clone(),
         });
+        if !loan_interest.is_zero() {
+            lines.push(GlLine {
+                account_code: INTEREST_INCOME_ACCOUNT.into(),
+                account_name: "รายได้ดอกเบี้ย".into(),
+                department: department.clone(),
+                debit: Decimal::ZERO,
+                credit: loan_interest,
+                description: description.clone(),
+            });
+        }
         lines.push(GlLine {
             account_code: accounts.claim.clone(),
             account_name: "ค่าใช้จ่ายพนักงาน".into(),

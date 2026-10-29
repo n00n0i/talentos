@@ -270,9 +270,10 @@ Each payroll run deducts `min(installment, balance)` after SSO/tax/PF, records a
 are idempotent per run and the loan closes at zero. Employees see their loan at
 `GET /api/v1/me/loans`; the payslip shows the deduction line. HR can record an
 early/partial payoff (`POST /loans/:id/payoff`), which closes the loan at zero;
-future payroll installments use the reduced balance. Interest/amortization is not built. An installment from a
-not-yet-approved payroll run can be reversed (`.../installments/:run_id/reverse`);
-the run must then be recalculated so the payslip matches the restored balance.
+future payroll installments use the reduced balance. Loans can carry a monthly interest rate; each installment splits into principal
+and interest, and the GL credits principal to 2230 and interest to 4900. An
+installment from a not-yet-approved run can be reversed
+(`.../installments/:run_id/reverse`); the run must then be recalculated.
 
 ## Provident fund
 

@@ -170,6 +170,7 @@ pub async fn execute_run(
             leave_approval_chain: row
                 .try_get::<Option<Vec<String>>, _>("leave_approval_chain")?
                 .unwrap_or_else(|| vec!["hr_admin".to_string()]),
+            ot_approval_chain: vec!["hr_admin".to_string()],
             approval_sla_hours: row.try_get("approval_sla_hours")?,
             gl_salary_account: row.try_get("gl_salary_account")?,
             gl_net_account: row.try_get("gl_net_account")?,

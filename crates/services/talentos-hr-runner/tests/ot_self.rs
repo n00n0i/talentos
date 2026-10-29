@@ -13,7 +13,7 @@ use talentos_kernel::TenantId;
 use uuid::Uuid;
 
 mod common;
-use common::{cleanup, database_url, seed_tenant_entities, user_id_of};
+use common::{cleanup, database_url, ensure_role, seed_tenant_entities, user_id_of};
 
 fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
@@ -267,6 +267,7 @@ async fn rejected_request_frees_the_date() {
 
     let requester = user_id_of(&raw, tenant_id, entities[0].1).await;
     let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
 
     let req = create_request(
         &pool,
@@ -281,10 +282,10 @@ async fn rejected_request_frees_the_date() {
     .await
     .expect("create request");
 
-    let status = decide_request(&pool, tenant, approver, req.id, false)
+    let outcome = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, false)
         .await
         .expect("reject");
-    assert_eq!(status, "rejected");
+    assert_eq!(outcome.status, "rejected");
 
     create_request(
         &pool,
@@ -380,6 +381,7 @@ async fn decide_twice_returns_not_pending() {
 
     let requester = user_id_of(&raw, tenant_id, entities[0].1).await;
     let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
 
     let req = create_request(
         &pool,
@@ -394,12 +396,12 @@ async fn decide_twice_returns_not_pending() {
     .await
     .expect("create request");
 
-    let status = decide_request(&pool, tenant, approver, req.id, true)
+    let outcome = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, true)
         .await
         .expect("approve");
-    assert_eq!(status, "approved");
+    assert_eq!(outcome.status, "approved");
 
-    let err = decide_request(&pool, tenant, approver, req.id, false)
+    let err = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, false)
         .await
         .unwrap_err();
     assert!(matches!(err, talentos_hr_runner::ot::OtError::NotPending));
@@ -518,6 +520,7 @@ async fn tenant_requests_can_filter_by_status() {
 
     let requester = user_id_of(&raw, tenant_id, entities[0].1).await;
     let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
 
     let req = create_request(
         &pool,
@@ -540,10 +543,11 @@ async fn tenant_requests_can_filter_by_status() {
     assert_eq!(pending[0].status, "pending");
     assert!(pending[0].decided_at.is_none());
 
-    let approved_status = decide_request(&pool, tenant, approver, req.id, true)
-        .await
-        .expect("approve");
-    assert_eq!(approved_status, "approved");
+    let approved_status =
+        decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, true)
+            .await
+            .expect("approve");
+    assert_eq!(approved_status.status, "approved");
 
     let approved = tenant_requests(&pool, tenant, Some("approved"), None, None, 100)
         .await
@@ -694,6 +698,7 @@ async fn approved_request_raises_pending_day_ot() {
     let requester = entities[0].1;
     let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
     let requester_user = user_id_of(&raw, tenant_id, requester).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
 
     seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "pending").await;
 
@@ -710,10 +715,10 @@ async fn approved_request_raises_pending_day_ot() {
     .await
     .expect("create request");
 
-    let status = decide_request(&pool, tenant, approver, req.id, true)
+    let outcome = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, true)
         .await
         .expect("approve");
-    assert_eq!(status, "approved");
+    assert_eq!(outcome.status, "approved");
 
     let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
         .await
@@ -739,6 +744,7 @@ async fn rejected_request_keeps_pending_day_at_derived() {
     let requester = entities[0].1;
     let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
     let requester_user = user_id_of(&raw, tenant_id, requester).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
 
     seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "pending").await;
 
@@ -755,10 +761,10 @@ async fn rejected_request_keeps_pending_day_at_derived() {
     .await
     .expect("create request");
 
-    let status = decide_request(&pool, tenant, approver, req.id, false)
+    let outcome = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, false)
         .await
         .expect("reject");
-    assert_eq!(status, "rejected");
+    assert_eq!(outcome.status, "rejected");
 
     let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
         .await
@@ -827,6 +833,7 @@ async fn approved_day_blocks_request_that_would_raise_ot() {
     let requester = entities[0].1;
     let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
     let requester_user = user_id_of(&raw, tenant_id, requester).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
 
     seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "approved").await;
 
@@ -843,7 +850,7 @@ async fn approved_day_blocks_request_that_would_raise_ot() {
     .await
     .expect("create request");
 
-    let err = decide_request(&pool, tenant, approver, req.id, true)
+    let err = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, true)
         .await
         .unwrap_err();
     assert!(matches!(err, OtError::DayAlreadyApproved));
@@ -872,6 +879,7 @@ async fn request_not_exceeding_derived_is_no_op_on_approved_day() {
     let requester = entities[0].1;
     let approver = user_id_of(&raw, tenant_id, entities[1].1).await;
     let requester_user = user_id_of(&raw, tenant_id, requester).await;
+    ensure_role(&raw, tenant_id, "hr_admin", approver).await;
 
     seed_attendance_day(&raw, tenant_id, requester, d(2026, 10, 5), 60, "approved").await;
 
@@ -888,10 +896,10 @@ async fn request_not_exceeding_derived_is_no_op_on_approved_day() {
     .await
     .expect("create request");
 
-    let status = decide_request(&pool, tenant, approver, req.id, true)
+    let outcome = decide_request(&pool, tenant, approver, &["hr_admin".into()], req.id, true)
         .await
         .expect("approve no-op");
-    assert_eq!(status, "approved");
+    assert_eq!(outcome.status, "approved");
 
     let (derived, effective, status) = day_ot_minutes(&raw, tenant_id, requester, d(2026, 10, 5))
         .await

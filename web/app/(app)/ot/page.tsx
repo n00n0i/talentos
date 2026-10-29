@@ -10,7 +10,13 @@ type OtRequest = {
   reason: string | null;
   status: string;
 };
-type Pending = OtRequest & { employee_code: string; employee_name: string };
+type Pending = OtRequest & {
+  employee_code: string;
+  employee_name: string;
+  step_no: number;
+  total_steps: number;
+  approver_role: string;
+};
 
 const OT_ERRORS: { [k: string]: string } = {
   "a request already exists for this work date": "มีคำขอ OT สำหรับวันที่นี้อยู่แล้ว",
@@ -34,6 +40,8 @@ const STATUS: { [k: string]: { label: string; tone: string } } = {
 };
 
 const hours = (minutes: number) => String(minutes / 60);
+
+const roleLabel = (role: string) => (role === "manager" ? "หัวหน้างาน" : "HR");
 
 export default function OtPage() {
   const [isHr, setIsHr] = useState(false);
@@ -142,6 +150,9 @@ export default function OtPage() {
                     <tr key={r.id} data-testid="ot-approval-row">
                       <td>
                         {r.employee_code} · {r.employee_name}
+                        <span className="hint" data-testid="ot-step">
+                          ขั้น {r.step_no}/{r.total_steps} · {roleLabel(r.approver_role)}
+                        </span>
                       </td>
                       <td>{thDate(r.work_date)}</td>
                       <td className="num">{hours(r.minutes)}</td>

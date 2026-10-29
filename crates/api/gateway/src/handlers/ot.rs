@@ -152,16 +152,19 @@ pub async fn decide(
         &state.pool,
         ctx.tenant_id,
         ctx.user_id.0,
+        &ctx.roles,
         id,
         body.approve,
     )
     .await
     {
-        Ok(status) => (
+        Ok(outcome) => (
             StatusCode::OK,
             Json(json!({
                 "request_id": id.to_string(),
-                "status": status,
+                "status": outcome.status,
+                "step": outcome.step,
+                "total_steps": outcome.total_steps,
                 "decided_by": ctx.user_id.to_string(),
             })),
         )
@@ -204,6 +207,14 @@ fn map_ot_error(e: talentos_hr_runner::OtError) -> Response {
         talentos_hr_runner::OtError::DayAlreadyApproved => {
             conflict("attendance day is already approved; revoke approval before changing OT")
         }
+        talentos_hr_runner::OtError::Forbidden => (
+            StatusCode::FORBIDDEN,
+            Json(envelope(
+                "forbidden",
+                "approver is not authorised for this step",
+            )),
+        )
+            .into_response(),
         talentos_hr_runner::OtError::InvalidMinutes
         | talentos_hr_runner::OtError::InvalidReason
         | talentos_hr_runner::OtError::InvalidStatus => unprocessable(&e.to_string()),

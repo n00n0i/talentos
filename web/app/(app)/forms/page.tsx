@@ -71,6 +71,7 @@ export default function FormsPage() {
   }, [formType]);
 
   function switchType(type: FormType) {
+    if (type === formType) return;
     setFormType(type);
     setConfig(null);
     setVersion(null);

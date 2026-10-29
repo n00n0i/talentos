@@ -91,7 +91,7 @@ volume): migrate → gateway → web → nginx with the TLS overlay. HTTPS `/hea
 `talentos-gateway provision` created the first tenant through the compose
 service. This task did not re-run the compose/TLS verification; the new leave
 self-service, notifications, and TOTP were verified via API/DB tests and the
-21/21 Playwright E2E suite.
+35/35 Playwright E2E suite.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings, TOTP 2FA enrollment) and `/users` (invite, roles, deactivate,
@@ -104,7 +104,7 @@ classified holiday > weekend > weekday automatically. HTTPS is a compose overlay
 (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout.
-Browser E2E (`web/e2e`, Playwright) passes 21/21 locally and runs in CI: invite
+Browser E2E (`web/e2e`, Playwright) passes 35/35 locally and runs in CI: invite
 acceptance → login, settings + audit, employee → attendance → payroll → approval,
 holiday OT, user invite, password reset, self-service payslips, employee clock
 punch with GPS, HR shift creation and day correction/approval, and employee leave

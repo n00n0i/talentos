@@ -701,3 +701,226 @@ test("HR opens settings and sees the notification summary without error", async 
   const rows = page.getByTestId("notification-row");
   await expect(empty.or(rows.first())).toBeVisible();
 });
+
+async function switchUser(page: Page, email: string, password: string) {
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "เข้าสู่ระบบ" })).toBeVisible();
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill(email);
+  await page.getByLabel("รหัสผ่าน").fill(password);
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+}
+
+test("rejects a wrong password and stays on the login page", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill("e2e@example.com");
+  await page.getByLabel("รหัสผ่าน").fill("definitely-wrong-password");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.locator(".error")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "เข้าสู่ระบบ" })).toBeVisible();
+});
+
+test("employee navigation hides HR/admin areas", async ({ page }) => {
+  await login(page);
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await expect(page.getByRole("link", { name: "ลงเวลา" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "พนักงาน" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "ตั้งค่า" })).toHaveCount(0);
+
+  await page.goto("/employees");
+  await expect(page.locator(".error")).toBeVisible();
+  await expect(page.getByRole("row", { name: /E2E001/ })).toHaveCount(0);
+  await page.goto("/settings");
+  await expect(page.locator(".error")).toBeVisible();
+});
+
+test("leave rejects an inverted date range", async ({ page }) => {
+  await login(page);
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await page.goto("/leave");
+  await page.getByTestId("leave-type").selectOption("annual");
+  await page.getByTestId("leave-start").fill("2026-12-10");
+  await page.getByTestId("leave-end").fill("2026-12-09");
+  await page.getByTestId("leave-reason").fill("E2E-BAD-RANGE");
+  await page.getByTestId("request-leave").click();
+  await expect(page.locator(".error")).toBeVisible();
+  await expect(page.getByTestId("leave-row").filter({ hasText: "E2E-BAD-RANGE" })).toHaveCount(0);
+});
+
+test("employee cancels a pending leave request", async ({ page }) => {
+  await login(page);
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await page.goto("/leave");
+  await page.getByTestId("leave-type").selectOption("annual");
+  await page.getByTestId("leave-start").fill("2026-12-11");
+  await page.getByTestId("leave-end").fill("2026-12-12");
+  await page.getByTestId("leave-reason").fill("E2E-CANCEL");
+  await page.getByTestId("request-leave").click();
+  const row = page.getByTestId("leave-row").filter({ hasText: "E2E-CANCEL" });
+  await expect(row).toContainText("รออนุมัติ");
+  await row.getByTestId("cancel-leave").click();
+  await expect(row).toContainText("ยกเลิกแล้ว");
+
+  await login(page);
+  await page.goto("/leave");
+  await expect(page.getByTestId("approval-row").filter({ hasText: "E2E-CANCEL" })).toHaveCount(0);
+});
+
+test("HR rejects a leave request and the employee sees it", async ({ page }) => {
+  await login(page);
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await page.goto("/leave");
+  await page.getByTestId("leave-type").selectOption("annual");
+  await page.getByTestId("leave-start").fill("2026-12-13");
+  await page.getByTestId("leave-end").fill("2026-12-14");
+  await page.getByTestId("leave-reason").fill("E2E-REJECT");
+  await page.getByTestId("request-leave").click();
+  await expect(page.getByTestId("leave-row").filter({ hasText: "E2E-REJECT" })).toContainText("รออนุมัติ");
+
+  await login(page);
+  await page.goto("/leave");
+  const inbox = page.getByTestId("approval-row").filter({ hasText: "E2E-REJECT" });
+  await expect(inbox).toBeVisible();
+  await inbox.getByTestId("reject-leave").click();
+  await expect(inbox).toHaveCount(0);
+
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await page.goto("/leave");
+  await expect(page.getByTestId("leave-row").filter({ hasText: "E2E-REJECT" })).toContainText("ไม่อนุมัติ");
+});
+
+test("employee cancels OT and HR rejects another request", async ({ page }) => {
+  await login(page);
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await page.goto("/ot");
+  await page.getByTestId("ot-date").fill("2026-12-15");
+  await page.getByTestId("ot-hours").fill("1");
+  await page.getByTestId("ot-reason").fill("E2E-OT-CANCEL");
+  await page.getByTestId("request-ot").click();
+  const row = page.getByTestId("ot-row").filter({ hasText: "E2E-OT-CANCEL" });
+  await expect(row).toContainText("รออนุมัติ");
+  await row.getByTestId("cancel-ot").click();
+  await expect(row).toContainText("ยกเลิกแล้ว");
+
+  await page.getByTestId("ot-date").fill("2026-12-16");
+  await page.getByTestId("ot-hours").fill("1");
+  await page.getByTestId("ot-reason").fill("E2E-OT-REJECT");
+  await page.getByTestId("request-ot").click();
+
+  await login(page);
+  await page.goto("/ot");
+  const inbox = page.getByTestId("ot-approval-row").filter({ hasText: "E2E-OT-REJECT" });
+  await expect(inbox).toBeVisible();
+  await inbox.getByTestId("reject-ot").click();
+  await expect(inbox).toHaveCount(0);
+
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await page.goto("/ot");
+  await expect(page.getByTestId("ot-row").filter({ hasText: "E2E-OT-REJECT" })).toContainText("ไม่อนุมัติ");
+});
+
+test("employee cost center and PF rate persist", async ({ page }) => {
+  await login(page);
+  await page.goto("/employees");
+  let row = page.getByRole("row", { name: /E2E001/ });
+  await row.getByRole("button", { name: "แก้ไข" }).click();
+  await page.getByTestId("employee-cost-center").fill("CC-E2E");
+  await page.getByLabel("เป็นสมาชิกกองทุนสำรองเลี้ยงชีพ").check();
+  await page.getByTestId("employee-pf-rate").fill("3");
+  await page.getByTestId("employee-pf-rate-from").fill("2026-01-01");
+  await page.getByTestId("save-employee").click();
+  await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
+
+  await page.reload();
+  row = page.getByRole("row", { name: /E2E001/ });
+  await row.getByRole("button", { name: "แก้ไข" }).click();
+  await expect(page.getByTestId("employee-cost-center")).toHaveValue("CC-E2E");
+  await expect(page.getByTestId("employee-pf-rate")).toHaveValue("3");
+});
+
+test("bulk import dry-run blocks an invalid file", async ({ page }) => {
+  await login(page);
+  await page.goto("/employees");
+  const csv = [
+    "employee_code,first_name_th,last_name_th,position_title,department,base_salary,hire_date",
+    "E2E-BAD,ทดสอบ,ทดสอบ,Dev,IT,not-a-number,2024-01-01",
+  ].join("\n");
+  await page.getByTestId("import-csv").setInputFiles({
+    name: "bad.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csv),
+  });
+  await page.getByTestId("dry-run-import").click();
+  await expect(page.getByTestId("import-summary")).toContainText("ผิดพลาด");
+  await expect(page.getByTestId("confirm-import")).toBeDisabled();
+});
+
+test("form template edits persist", async ({ page }) => {
+  await login(page);
+  await page.goto("/forms");
+  await page.getByTestId("form-type").selectOption("50tawi");
+  await page.getByTestId("form-title").fill("50 ทวิ (E2E)");
+  await page.getByTestId("form-save").click();
+  await expect(page.getByText("บันทึกแบบฟอร์มแล้ว")).toBeVisible();
+  await page.reload();
+  await page.getByTestId("form-type").selectOption("50tawi");
+  await expect(page.getByTestId("form-title")).toHaveValue("50 ทวิ (E2E)");
+
+  await page.getByTestId("form-title").fill("หนังสือรับรองการหักภาษี ณ ที่จ่าย");
+  await page.getByTestId("form-save").click();
+});
+
+test("audit page lists login events", async ({ page }) => {
+  await login(page);
+  await page.goto("/audit");
+  await expect(page.getByText("auth.login").first()).toBeVisible();
+});
+
+test("final settlement rejects a termination before hire", async ({ page }) => {
+  await login(page);
+  await page.goto("/final-settlement");
+  const employeeSelect = page.getByTestId("settlement-employee");
+  const employeeValue = await employeeSelect
+    .locator("option")
+    .filter({ hasText: "E2E001" })
+    .getAttribute("value");
+  await employeeSelect.selectOption(employeeValue ?? "");
+  await page.getByTestId("settlement-date").fill("2020-01-01");
+  await page.getByTestId("settlement-unused").fill("0");
+  await page.getByTestId("settlement-notice").fill("0");
+  await page.getByTestId("compute-settlement").click();
+  await expect(page.locator(".error")).toBeVisible();
+  await expect(page.getByTestId("settlement-total")).toHaveCount(0);
+});
+
+test("reports shows an empty state for an empty period", async ({ page }) => {
+  await login(page);
+  await page.goto("/reports");
+  await page.getByTestId("cost-from").fill("1990-01-01");
+  await page.getByTestId("cost-to").fill("1990-12-31");
+  await page.getByTestId("cost-load").click();
+  await expect(page.getByText("ไม่มีข้อมูลต้นทุนในช่วงที่เลือก")).toBeVisible();
+});
+
+test("2FA rejects a wrong enrollment code", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings");
+  await page.getByTestId("setup-2fa").click();
+  await expect(page.getByTestId("totp-secret")).toBeVisible();
+  await page.getByTestId("totp-enable-code").fill("000000");
+  await page.getByTestId("enable-2fa").click();
+  await expect(page.locator(".error")).toBeVisible();
+  await expect(page.getByTestId("disable-2fa")).toHaveCount(0);
+});
+
+test("session management lists and revokes all sessions", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings");
+  await expect(page.getByTestId("session-row").first()).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByTestId("revoke-all-sessions").click();
+  await expect(page.locator(".error")).toHaveCount(0);
+});

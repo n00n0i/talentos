@@ -30,7 +30,7 @@
 |------|--------|
 | `cargo fmt --all -- --check` | ✅ clean |
 | `cargo clippy -p talentos-hr-runner -p talentos-gateway -p talentos-authz --all-targets -- -D warnings` | ✅ clean |
-| `cargo test -p talentos-hr-runner` (full, DB-backed) | ✅ 143 passed (incl. 5 delegation + 12 leave_approval + 15 leave_self) |
+| `cargo test -p talentos-hr-runner` (full, DB-backed) | ✅ 140 passed (incl. 5 delegation + 12 leave_approval + 15 leave_self) |
 | `cargo test -p talentos-gateway -p talentos-authz` | ✅ 94 passed |
 | `npm run build` (web) | ✅ built |
 | Playwright | ⚠️ not run (21/21 preserved) — see below |

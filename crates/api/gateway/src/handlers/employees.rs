@@ -635,6 +635,88 @@ pub async fn terminate(
         .into_response()
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PfRateBody {
+    pub effective_from: NaiveDate,
+    pub rate: Decimal,
+}
+
+/// GET /api/v1/employees/:id/pf-rates — the employee's effective-dated PF rates.
+pub async fn list_pf_rates(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+    match fetch_one(&state, ctx.tenant_id.0, id).await {
+        Ok(None) => return not_found(),
+        Err(e) => return internal_err(&e),
+        Ok(Some(_)) => {}
+    }
+    let rates = match talentos_hr_runner::list_rates(
+        &state.pool,
+        talentos_kernel::TenantId(ctx.tenant_id.0),
+        id,
+    )
+    .await
+    {
+        Ok(rates) => rates,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    (StatusCode::OK, Json(json!({ "rates": rates }))).into_response()
+}
+
+/// POST /api/v1/employees/:id/pf-rates — upsert a rate for `effective_from`.
+pub async fn upsert_pf_rate(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<PfRateBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    if body.rate < Decimal::ZERO || body.rate > Decimal::new(15, 2) {
+        return bad_request("rate must be between 0 and 0.15");
+    }
+    let employee = match fetch_one(&state, ctx.tenant_id.0, id).await {
+        Ok(Some(employee)) => employee,
+        Ok(None) => return not_found(),
+        Err(e) => return internal_err(&e),
+    };
+    match talentos_hr_runner::upsert_rate(
+        &state.pool,
+        talentos_kernel::TenantId(ctx.tenant_id.0),
+        employee.id,
+        body.effective_from,
+        body.rate,
+        Some(ctx.user_id.0),
+    )
+    .await
+    {
+        Ok(()) => {
+            let rates = match talentos_hr_runner::list_rates(
+                &state.pool,
+                talentos_kernel::TenantId(ctx.tenant_id.0),
+                employee.id,
+            )
+            .await
+            {
+                Ok(rates) => rates,
+                Err(e) => return internal_err(&e.to_string()),
+            };
+            (StatusCode::OK, Json(json!({ "rates": rates }))).into_response()
+        }
+        Err(talentos_hr_runner::PfError::RateOutOfRange) => {
+            bad_request("rate must be between 0 and 0.15")
+        }
+        Err(talentos_hr_runner::PfError::EmployeeNotFound) => not_found(),
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
 // Same axum trade-off as the RBAC guard: a ready-to-send response is the error.
 #[allow(clippy::result_large_err)]
 async fn resolve_entity(

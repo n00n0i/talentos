@@ -9,6 +9,7 @@ pub mod delegations;
 pub mod leave;
 pub mod notify;
 pub mod ot;
+pub mod pf;
 pub mod reports;
 pub mod settlement;
 
@@ -37,6 +38,7 @@ pub use ot::{
     pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests, OtError,
     OtInput, OtRequestView, PendingOt,
 };
+pub use pf::{list_rates, rate_for, upsert_rate, PfError, PfRate, DEFAULT_PF_RATE, MAX_PF_RATE};
 pub use settlement::{
     compute_and_store, list_settlements, SettlementError, SettlementInput, SettlementView,
 };

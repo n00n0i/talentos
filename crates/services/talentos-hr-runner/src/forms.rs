@@ -13,6 +13,8 @@ use uuid::Uuid;
 
 pub const FORM_TYPE_50TAWI: &str = "50tawi";
 pub const FORM_TYPE_SSO1_10: &str = "sso1_10";
+pub const FORM_TYPE_PND1: &str = "pnd1";
+pub const FORM_TYPE_PND1A: &str = "pnd1a";
 
 /// Data keys a template field/column may pull from. Anything else is rejected.
 pub const ALLOWED_SOURCES: &[&str] = &[
@@ -28,15 +30,25 @@ pub const ALLOWED_SOURCES: &[&str] = &[
     "tax",
     "sso_employee",
     "sso_employer",
+    "annual_income",
+    "annual_tax",
     "payment_date",
     "period_start",
     "period_end",
     "income_type",
     "cert_no",
+    "year",
 ];
 
 /// Sources whose values are summed in the CSV totals row.
-const NUMERIC_SOURCES: &[&str] = &["gross", "tax", "sso_employee", "sso_employer"];
+const NUMERIC_SOURCES: &[&str] = &[
+    "gross",
+    "tax",
+    "sso_employee",
+    "sso_employer",
+    "annual_income",
+    "annual_tax",
+];
 
 /// 1..=40 rows of fields/columns.
 const MAX_ROWS: usize = 40;
@@ -99,7 +111,10 @@ pub enum FormError {
 }
 
 fn is_form_type(form_type: &str) -> bool {
-    matches!(form_type, FORM_TYPE_50TAWI | FORM_TYPE_SSO1_10)
+    matches!(
+        form_type,
+        FORM_TYPE_50TAWI | FORM_TYPE_SSO1_10 | FORM_TYPE_PND1 | FORM_TYPE_PND1A
+    )
 }
 
 fn source_allowed(source: &str) -> bool {
@@ -130,7 +145,7 @@ pub fn validate(form_type: &str, config: &FormConfig) -> Result<(), FormError> {
                 }
             }
         }
-        FORM_TYPE_SSO1_10 => {
+        FORM_TYPE_SSO1_10 | FORM_TYPE_PND1 | FORM_TYPE_PND1A => {
             if config.columns.is_empty() || config.columns.len() > MAX_ROWS {
                 return Err(FormError::Invalid(format!(
                     "columns must have 1..{MAX_ROWS} rows"
@@ -389,81 +404,73 @@ pub async fn render_50tawi(
     ))
 }
 
-/// GET /api/v1/payroll/runs/:id/sso1-10.csv — สปส.1-10 CSV from the active
-/// template. Approved runs only. Returns `(filename, body)`.
-pub async fn export_sso1_10_csv(
-    conn: &mut PgConnection,
-    run_id: Uuid,
-    pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
-) -> Result<(String, String), FormError> {
-    let template = load_active_template(conn, FORM_TYPE_SSO1_10).await?;
+/// Metadata values available for a column-based CSV form's header.
+#[derive(Default)]
+struct HeaderContext {
+    entity_name: String,
+    entity_tax_id: String,
+    entity_address: String,
+    sso_account: String,
+    branch: String,
+    period_start: String,
+    period_end: String,
+    year: String,
+}
 
-    let run = sqlx::query(
-        "SELECT status, period_start, period_end, entity_id \
-         FROM payroll_runs WHERE id = $1 AND tenant_id = current_tenant_id()",
-    )
-    .bind(run_id)
-    .fetch_optional(&mut *conn)
-    .await?;
-
-    let (period_start, period_end, entity_id) = match run {
-        Some(row) => {
-            let status: String = row.get("status");
-            if status != "approved" {
-                return Err(FormError::NotFound);
-            }
-            (
-                row.get::<chrono::NaiveDate, _>("period_start"),
-                row.get::<chrono::NaiveDate, _>("period_end"),
-                row.get::<Uuid, _>("entity_id"),
-            )
+impl HeaderContext {
+    fn resolve(&self, source: &str) -> String {
+        match source {
+            "entity_name" => self.entity_name.clone(),
+            "entity_tax_id" => self.entity_tax_id.clone(),
+            "entity_address" => self.entity_address.clone(),
+            "sso_account" => self.sso_account.clone(),
+            "branch" => self.branch.clone(),
+            "period_start" => self.period_start.clone(),
+            "period_end" => self.period_end.clone(),
+            "year" => self.year.clone(),
+            _ => String::new(),
         }
-        None => return Err(FormError::NotFound),
-    };
+    }
+}
 
+async fn load_header_context(
+    conn: &mut PgConnection,
+    entity_id: Uuid,
+) -> Result<HeaderContext, FormError> {
     let entity = sqlx::query(
-        "SELECT name, tax_id, address FROM entities \
+        "SELECT name, tax_id, address, sso_account, branch FROM entities \
          WHERE id = $1 AND tenant_id = current_tenant_id()",
     )
     .bind(entity_id)
     .fetch_optional(&mut *conn)
     .await?;
+    Ok(match entity {
+        Some(e) => HeaderContext {
+            entity_name: e.get("name"),
+            entity_tax_id: e.get::<Option<String>, _>("tax_id").unwrap_or_default(),
+            entity_address: e.get::<serde_json::Value, _>("address").to_string(),
+            sso_account: e
+                .get::<Option<String>, _>("sso_account")
+                .unwrap_or_default(),
+            branch: e.get("branch"),
+            ..Default::default()
+        },
+        None => HeaderContext::default(),
+    })
+}
 
-    let entity_name = entity
-        .as_ref()
-        .map(|e| e.get::<String, _>("name"))
-        .unwrap_or_default();
-    let entity_tax_id = entity
-        .as_ref()
-        .and_then(|e| e.get::<Option<String>, _>("tax_id"))
-        .unwrap_or_default();
-    let entity_address = entity
-        .as_ref()
-        .map(|e| e.get::<serde_json::Value, _>("address").to_string())
-        .unwrap_or_default();
-
-    let rows = sqlx::query(
-        "SELECT e.national_id, e.first_name_th, e.last_name_th, e.employee_code, \
-                p.gross_earnings, p.tax_withheld, p.sso_employee, p.sso_employer \
-         FROM payslips p \
-         JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id \
-         WHERE p.payroll_run_id = $1 AND p.tenant_id = current_tenant_id() \
-         ORDER BY e.employee_code",
-    )
-    .bind(run_id)
-    .fetch_all(&mut *conn)
-    .await?;
-
-    let filename = format!("sso1-10-{run_id}-{period_start}-{period_end}.csv");
-
+/// Render header rows, the column header, data rows and a totals row for a
+/// column-based CSV form.
+fn render_columns_csv(
+    config: &FormConfig,
+    header: &HeaderContext,
+    rows: &[sqlx::postgres::PgRow],
+    resolve_row: &dyn Fn(&str, &sqlx::postgres::PgRow) -> String,
+) -> String {
     let mut body = String::from("\u{feff}");
-    // Header metadata (label, value pairs from template.header).
-    for h in &template.config.header {
+    for h in &config.header {
         let value = match h.source.as_deref() {
-            Some("entity_name") => entity_name.clone(),
-            Some("entity_tax_id") => entity_tax_id.clone(),
-            Some("entity_address") => entity_address.clone(),
-            Some(_) => String::new(),
+            Some(src) => header.resolve(src),
             None => h.value.clone().unwrap_or_default(),
         };
         body.push_str(&format!(
@@ -473,10 +480,8 @@ pub async fn export_sso1_10_csv(
         ));
     }
 
-    // Column header row.
     body.push_str(
-        &template
-            .config
+        &config
             .columns
             .iter()
             .map(|c| csv_field(&c.label))
@@ -485,15 +490,14 @@ pub async fn export_sso1_10_csv(
     );
     body.push_str("\r\n");
 
-    let mut totals = vec![rust_decimal::Decimal::ZERO; template.config.columns.len()];
-    for row in &rows {
-        let values: Vec<String> = template
-            .config
+    let mut totals = vec![rust_decimal::Decimal::ZERO; config.columns.len()];
+    for row in rows {
+        let values: Vec<String> = config
             .columns
             .iter()
-            .map(|c| resolve_column_value(&c.source, row, pii))
+            .map(|c| resolve_row(&c.source, row))
             .collect();
-        for (i, c) in template.config.columns.iter().enumerate() {
+        for (i, c) in config.columns.iter().enumerate() {
             if NUMERIC_SOURCES.contains(&c.source.as_str()) {
                 if let Ok(d) = values[i].parse::<rust_decimal::Decimal>() {
                     totals[i] += d;
@@ -511,8 +515,7 @@ pub async fn export_sso1_10_csv(
     }
 
     // Totals row: first column "รวม", numeric columns summed, others empty.
-    let total_values: Vec<String> = template
-        .config
+    let total_values: Vec<String> = config
         .columns
         .iter()
         .enumerate()
@@ -539,6 +542,134 @@ pub async fn export_sso1_10_csv(
     );
     body.push_str("\r\n");
 
+    body
+}
+
+async fn export_approved_run_csv(
+    conn: &mut PgConnection,
+    form_type: &str,
+    prefix: &str,
+    run_id: Uuid,
+    pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
+) -> Result<(String, String), FormError> {
+    let template = load_active_template(conn, form_type).await?;
+
+    let run = sqlx::query(
+        "SELECT status, period_start, period_end, entity_id \
+         FROM payroll_runs WHERE id = $1 AND tenant_id = current_tenant_id()",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let (period_start, period_end, entity_id) = match run {
+        Some(row) => {
+            let status: String = row.get("status");
+            if status != "approved" {
+                return Err(FormError::NotFound);
+            }
+            (
+                row.get::<chrono::NaiveDate, _>("period_start"),
+                row.get::<chrono::NaiveDate, _>("period_end"),
+                row.get::<Uuid, _>("entity_id"),
+            )
+        }
+        None => return Err(FormError::NotFound),
+    };
+
+    let mut header = load_header_context(conn, entity_id).await?;
+    header.period_start = format_date(period_start);
+    header.period_end = format_date(period_end);
+
+    let rows = sqlx::query(
+        "SELECT e.national_id, e.first_name_th, e.last_name_th, e.employee_code, \
+                p.gross_earnings, p.tax_withheld, p.sso_employee, p.sso_employer \
+         FROM payslips p \
+         JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id \
+         WHERE p.payroll_run_id = $1 AND p.tenant_id = current_tenant_id() \
+         ORDER BY e.employee_code",
+    )
+    .bind(run_id)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let filename = format!("{prefix}-{run_id}-{period_start}-{period_end}.csv");
+    let body = render_columns_csv(&template.config, &header, &rows, &|src, row| {
+        resolve_column_value(src, row, pii)
+    });
+
+    Ok((filename, body))
+}
+
+/// GET /api/v1/payroll/runs/:id/sso1-10.csv — สปส.1-10 CSV from the active
+/// template. Approved runs only. Returns `(filename, body)`.
+pub async fn export_sso1_10_csv(
+    conn: &mut PgConnection,
+    run_id: Uuid,
+    pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
+) -> Result<(String, String), FormError> {
+    export_approved_run_csv(conn, FORM_TYPE_SSO1_10, "sso1-10", run_id, pii).await
+}
+
+/// GET /api/v1/payroll/runs/:id/pnd1.csv — ภ.ง.ด.1 CSV (monthly withholding)
+/// from the active template. Approved runs only. Returns `(filename, body)`.
+pub async fn export_pnd1_csv(
+    conn: &mut PgConnection,
+    run_id: Uuid,
+    pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
+) -> Result<(String, String), FormError> {
+    export_approved_run_csv(conn, FORM_TYPE_PND1, "pnd1", run_id, pii).await
+}
+
+/// GET /api/v1/reports/pnd1a.csv?year= — ภ.ง.ด.1ก CSV (annual withholding),
+/// summing gross/tax per employee across approved runs whose period_end falls
+/// in `year`. Returns `(filename, body)`.
+pub async fn export_pnd1a_csv(
+    conn: &mut PgConnection,
+    year: i32,
+    pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
+) -> Result<(String, String), FormError> {
+    let template = load_active_template(conn, FORM_TYPE_PND1A).await?;
+
+    let entity_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM entities WHERE tenant_id = current_tenant_id() AND is_active \
+         ORDER BY created_at LIMIT 1",
+    )
+    .fetch_optional(&mut *conn)
+    .await?;
+    let mut header = match entity_id {
+        Some(id) => load_header_context(conn, id).await?,
+        None => HeaderContext::default(),
+    };
+    header.year = year.to_string();
+
+    let from = chrono::NaiveDate::from_ymd_opt(year, 1, 1)
+        .ok_or_else(|| FormError::Invalid("invalid year".into()))?;
+    let to = chrono::NaiveDate::from_ymd_opt(year, 12, 31)
+        .ok_or_else(|| FormError::Invalid("invalid year".into()))?;
+
+    let rows = sqlx::query(
+        "SELECT e.national_id, e.first_name_th, e.last_name_th, e.employee_code, \
+                SUM(p.gross_earnings) AS annual_income, SUM(p.tax_withheld) AS annual_tax \
+         FROM payslips p \
+         JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id \
+         JOIN payroll_runs r ON r.id = p.payroll_run_id \
+         WHERE p.tenant_id = current_tenant_id() \
+           AND r.status = 'approved' \
+           AND r.period_end >= $1 AND r.period_end <= $2 \
+         GROUP BY e.id, e.employee_code, e.first_name_th, e.last_name_th, e.national_id \
+         ORDER BY e.employee_code",
+    )
+    .bind(from)
+    .bind(to)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let filename = format!("pnd1a-{year}.csv");
+    let body = render_columns_csv(&template.config, &header, &rows, &|src, row| {
+        resolve_column_value(src, row, pii)
+    });
+
     Ok((filename, body))
 }
 
@@ -559,6 +690,14 @@ fn resolve_column_value(
         "tax" => format_money(row.get("tax_withheld")),
         "sso_employee" => format_money(row.get("sso_employee")),
         "sso_employer" => format_money(row.get("sso_employer")),
+        "annual_income" => row
+            .try_get::<rust_decimal::Decimal, _>("annual_income")
+            .map(format_money)
+            .unwrap_or_default(),
+        "annual_tax" => row
+            .try_get::<rust_decimal::Decimal, _>("annual_tax")
+            .map(format_money)
+            .unwrap_or_default(),
         _ => String::new(),
     }
 }
@@ -650,5 +789,40 @@ mod tests {
         assert_eq!(html_escape("<a&b>"), "&lt;a&amp;b&gt;");
         assert_eq!(csv_field("=cmd"), "\"'=cmd\"");
         assert_eq!(csv_field("a\"b"), "\"a\"\"b\"");
+    }
+
+    #[test]
+    fn validates_pnd_column_forms() {
+        let c = sso_config();
+        assert!(validate(FORM_TYPE_PND1, &c).is_ok());
+        assert!(validate(FORM_TYPE_PND1A, &c).is_ok());
+
+        let mut empty = sso_config();
+        empty.columns.clear();
+        assert!(matches!(
+            validate(FORM_TYPE_PND1, &empty),
+            Err(FormError::Invalid(_))
+        ));
+        assert!(matches!(
+            validate(FORM_TYPE_PND1A, &empty),
+            Err(FormError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn validates_annual_sources() {
+        let c: FormConfig = serde_json::from_value(serde_json::json!({
+            "title": "P",
+            "columns": [{"label":"L","source":"annual_income"}],
+        }))
+        .unwrap();
+        assert!(validate(FORM_TYPE_PND1A, &c).is_ok());
+
+        let mut bad = c;
+        bad.columns[0].source = "nope".into();
+        assert!(matches!(
+            validate(FORM_TYPE_PND1A, &bad),
+            Err(FormError::Invalid(_))
+        ));
     }
 }

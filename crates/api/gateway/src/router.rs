@@ -147,6 +147,11 @@ pub fn build(state: AppState) -> Router {
             get(forms::export_sso1_10_csv),
         )
         .route(
+            "/api/v1/payroll/runs/:id/pnd1.csv",
+            get(forms::export_pnd1_csv),
+        )
+        .route("/api/v1/reports/pnd1a.csv", get(forms::export_pnd1a_csv))
+        .route(
             "/api/v1/payroll/payslips/:id/50tawi",
             get(forms::render_50tawi),
         )

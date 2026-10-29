@@ -1,10 +1,10 @@
 #![allow(clippy::explicit_auto_deref)]
 mod common;
 
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use talentos_hr_runner::forms::{
-    export_sso1_10_csv, load_active_template, render_50tawi, save_template, FormConfig, FormError,
-    FORM_TYPE_50TAWI, FORM_TYPE_SSO1_10,
+    export_pnd1_csv, export_pnd1a_csv, export_sso1_10_csv, load_active_template, render_50tawi,
+    save_template, FormConfig, FormError, FORM_TYPE_50TAWI, FORM_TYPE_SSO1_10,
 };
 use uuid::Uuid;
 
@@ -111,6 +111,47 @@ async fn seed_run(
     .bind(run_id)
     .bind(seed.tenant_id)
     .bind(seed.employee_id)
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(run_id)
+}
+
+async fn seed_run_period(
+    pool: &PgPool,
+    seed: &Seed,
+    period_start: &str,
+    period_end: &str,
+    gross: i64,
+    tax: i64,
+) -> Result<Uuid, Box<dyn std::error::Error>> {
+    let run_id = Uuid::new_v4();
+    let mut tx = tenant_conn(pool, seed.tenant_id).await?;
+    sqlx::query(
+        "INSERT INTO payroll_runs \
+           (id, tenant_id, entity_id, period_start, period_end, payment_date, status, total_employees, created_by) \
+         VALUES ($1,$2,$3,$4::date,$5::date,$5::date,'approved',1,$6)",
+    )
+    .bind(run_id)
+    .bind(seed.tenant_id)
+    .bind(seed.entity_id)
+    .bind(period_start)
+    .bind(period_end)
+    .bind(seed.user_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        "INSERT INTO payslips \
+           (id, payroll_run_id, tenant_id, employee_id, base_salary, gross_earnings, \
+            total_deductions, net_pay, tax_withheld, sso_employee, sso_employer, \
+            pf_employee, pf_employer, anomalies, status) \
+         VALUES (gen_random_uuid(),$1,$2,$3,$4,$4,0,$4,$5,750,750,0,0,'[]','approved')",
+    )
+    .bind(run_id)
+    .bind(seed.tenant_id)
+    .bind(seed.employee_id)
+    .bind(gross)
+    .bind(tax)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
@@ -381,6 +422,152 @@ async fn tenant_template_is_not_visible_to_other_tenant() -> Result<(), Box<dyn 
             .await?;
     tx.rollback().await?;
     assert_eq!(visible, 0);
+
+    common::cleanup(&pool, a.tenant_id).await;
+    common::cleanup(&pool, b.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn sso_header_resolves_entity_account_and_branch() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    // Persist SSO account / branch on the entity.
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    sqlx::query("UPDATE entities SET sso_account = $1, branch = $2 WHERE id = $3")
+        .bind("001234567890")
+        .bind("000001")
+        .bind(seed.entity_id)
+        .execute(&mut *tx)
+        .await?;
+    let row = sqlx::query("SELECT sso_account, branch FROM entities WHERE id = $1")
+        .bind(seed.entity_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let sso_account: Option<String> = row.get("sso_account");
+    let branch: String = row.get("branch");
+    assert_eq!(sso_account.as_deref(), Some("001234567890"));
+    assert_eq!(branch, "000001");
+    tx.commit().await?;
+
+    let run_id = seed_run(&pool, &seed, "approved").await?;
+
+    // The global สปส.1-10 default now sources sso_account / branch.
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    let (_, body) = export_sso1_10_csv(&mut *tx, run_id, &None).await?;
+    tx.rollback().await?;
+
+    assert!(body.contains("001234567890"), "sso account resolved");
+    assert!(body.contains("000001"), "branch resolved");
+
+    common::cleanup(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pnd1_csv_rows_and_totals() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+    let run_id = seed_run(&pool, &seed, "approved").await?;
+
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    let (filename, body) = export_pnd1_csv(&mut *tx, run_id, &None).await?;
+    tx.rollback().await?;
+
+    assert!(filename.starts_with("pnd1-"));
+    let lines: Vec<&str> = body.lines().collect();
+    // header (4) + column header (1) + data (1) + totals (1).
+    assert_eq!(lines.len(), 7);
+    assert!(lines[0].contains("Form Co"), "payer name");
+    assert!(lines[1].contains("0105544000001"), "payer tax id");
+    assert!(lines[2].contains("01/01/2026"), "period start");
+    assert!(lines[3].contains("31/01/2026"), "period end");
+    assert!(lines[4]
+        .starts_with("\"รหัสพนักงาน\",\"ชื่อ-สกุล\",\"เลขประจำตัวประชาชน\",\"เงินได้\",\"ภาษีหัก ณ ที่จ่าย\""));
+    assert!(
+        lines[5].starts_with("\"E001\",\"สมชาย ทดสอบ\",\"1234567890123\",\"30000.00\",\"2000.00\"")
+    );
+    assert!(lines[6].starts_with("\"รวม\",\"\",\"\",\"30000.00\",\"2000.00\""));
+
+    common::cleanup(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pnd1_csv_rejects_unapproved_run() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+    let run_id = seed_run(&pool, &seed, "draft").await?;
+
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    let result = export_pnd1_csv(&mut *tx, run_id, &None).await;
+    tx.rollback().await?;
+    assert!(matches!(result, Err(FormError::NotFound)));
+
+    common::cleanup(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pnd1a_csv_aggregates_only_requested_year() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    // Two 2026 runs + one 2027 run for the same employee.
+    seed_run_period(&pool, &seed, "2026-01-01", "2026-01-31", 30000, 2000).await?;
+    seed_run_period(&pool, &seed, "2026-06-01", "2026-06-30", 40000, 3000).await?;
+    seed_run_period(&pool, &seed, "2027-01-01", "2027-01-31", 50000, 4000).await?;
+
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    let (filename, body) = export_pnd1a_csv(&mut *tx, 2026, &None).await?;
+    tx.rollback().await?;
+
+    assert!(filename.starts_with("pnd1a-2026"));
+    let lines: Vec<&str> = body.lines().collect();
+    // header (3) + column header (1) + data (1) + totals (1).
+    assert_eq!(lines.len(), 6);
+    assert!(lines[0].contains("Form Co"), "payer name");
+    assert!(lines[2].contains("2026"), "year header");
+    // annual sums: gross 30000+40000=70000, tax 2000+3000=5000 (2027 excluded).
+    assert!(
+        lines[4].starts_with("\"E001\",\"สมชาย ทดสอบ\",\"1234567890123\",\"70000.00\",\"5000.00\"")
+    );
+    assert!(lines[5].starts_with("\"รวม\",\"\",\"\",\"70000.00\",\"5000.00\""));
+
+    common::cleanup(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn pnd1a_csv_is_tenant_scoped() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let a = seed_tenant(&pool).await?;
+    let b = seed_tenant(&pool).await?;
+    seed_run_period(&pool, &a, "2026-01-01", "2026-01-31", 30000, 2000).await?;
+    seed_run_period(&pool, &b, "2026-01-01", "2026-01-31", 99999, 8888).await?;
+
+    let mut tx = tenant_conn(&pool, a.tenant_id).await?;
+    let (_, body) = export_pnd1a_csv(&mut *tx, 2026, &None).await?;
+    tx.rollback().await?;
+
+    assert!(body.contains("30000.00"), "own tenant rows present");
+    assert!(!body.contains("99999.00"), "other tenant rows absent");
 
     common::cleanup(&pool, a.tenant_id).await;
     common::cleanup(&pool, b.tenant_id).await;

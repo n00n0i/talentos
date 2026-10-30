@@ -97,6 +97,15 @@ export default function MyPayslipsPage() {
                       rel="noreferrer"
                     >
                       PDF
+                    </a>{" "}
+                    <a
+                      className="badge"
+                      data-testid="payslip-50tawi"
+                      href={`/api/gw/api/v1/me/payslips/${p.id}/50tawi`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      50 ทวิ
                     </a>
                   </td>
                   <td data-testid="payslip-ack-status">

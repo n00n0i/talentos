@@ -89,6 +89,54 @@ pub async fn payslips(State(state): State<AppState>, Authed(ctx): Authed) -> Res
     }
 }
 
+/// GET /api/v1/me/payslips/:id/50tawi — own withholding certificate.
+pub async fn payslip_50tawi(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payslip", "view_self") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let owned: Option<Uuid> = match sqlx::query_scalar(
+        r#"SELECT p.id FROM payslips p
+             JOIN employees e ON e.id = p.employee_id
+            WHERE p.id = $1 AND p.tenant_id = $2 AND e.user_id = $3"#,
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0)
+    .fetch_optional(&mut *tx)
+    .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(&e.to_string());
+        }
+    };
+    if owned.is_none() {
+        let _ = tx.rollback().await;
+        return not_found();
+    }
+    let rendered = talentos_hr_runner::render_50tawi(&mut tx, id, &state.pii).await;
+    let _ = tx.rollback().await;
+    match rendered {
+        Ok(html) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+            html,
+        )
+            .into_response(),
+        Err(talentos_hr_runner::FormError::NotFound) => not_found(),
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
 /// POST /api/v1/me/payslips/:id/acknowledge — idempotent receipt confirmation.
 pub async fn acknowledge(
     State(state): State<AppState>,

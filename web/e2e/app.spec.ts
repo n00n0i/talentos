@@ -249,6 +249,13 @@ test("links an employee account and shows self-service payslips", async ({ page 
   await expect(page.getByTestId("payslip-ack-status").first()).toContainText("ยืนยันแล้ว");
   await page.reload();
   await expect(page.getByTestId("payslip-ack-status").first()).toContainText("ยืนยันแล้ว");
+
+  const [cert] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByTestId("payslip-50tawi").first().click(),
+  ]);
+  await expect(cert.getByRole("heading", { name: /หนังสือรับรองการหักภาษี/ })).toBeVisible();
+  await cert.close();
 });
 
 test("employee punches in and out from the clock page", async ({ page, context }) => {

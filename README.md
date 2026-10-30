@@ -436,7 +436,8 @@ ownership is checked
 against `employees.user_id`, so `payslip.view_self` never exposes a colleague's
 slip. Employees confirm receipt with `POST /api/v1/me/payslips/:id/acknowledge`
 (idempotent); HR sees the acknowledgement time in the payroll run payslip list.
-The payslip-ready notification links to `/me/payslips`.
+The same page downloads their own 50 ทวิ
+(`GET /api/v1/me/payslips/:id/50tawi`, ownership checked) and the payslip PDF.
 
 `GET /api/v1/audit` (permission `audit_log.read`) lists the tenant audit trail;
 the admin UI is at `/audit`.

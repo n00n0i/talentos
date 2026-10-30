@@ -161,7 +161,10 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
         .collect();
     assert!(codes.contains(&"EMP000"));
     assert!(codes.contains(&"EMP002"));
-    let first = &employees[0];
+    let first = employees
+        .iter()
+        .find(|e| e["employee_code"] == "EMP000")
+        .expect("employee A is exported");
     assert_eq!(
         first["national_id"], "1234567890123",
         "legacy plaintext passes"

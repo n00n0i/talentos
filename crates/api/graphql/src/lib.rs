@@ -61,6 +61,8 @@ pub struct PayrollRun {
     pub total_tax: String,
     pub total_sso: String,
     pub total_pf: String,
+    pub paid_at: Option<String>,
+    pub payment_reference: Option<String>,
 }
 
 #[derive(SimpleObject, Debug, Clone)]
@@ -176,7 +178,7 @@ impl QueryRoot {
         let mut tx = gql.pool.begin_tenant(gql.tenant.tenant_id).await?;
         let rows = sqlx::query(
             r#"SELECT id, period_start, period_end, payment_date, status, total_employees,
-                      total_gross, total_net, total_tax, total_sso, total_pf
+                      total_gross, total_net, total_tax, total_sso, total_pf, paid_at, payment_reference
                FROM payroll_runs
                WHERE tenant_id = $1
                ORDER BY period_start DESC
@@ -203,6 +205,10 @@ impl QueryRoot {
                 total_tax: r.get::<rust_decimal::Decimal, _>("total_tax").to_string(),
                 total_sso: r.get::<rust_decimal::Decimal, _>("total_sso").to_string(),
                 total_pf: r.get::<rust_decimal::Decimal, _>("total_pf").to_string(),
+                paid_at: r
+                    .get::<Option<chrono::DateTime<chrono::Utc>>, _>("paid_at")
+                    .map(|t| t.to_rfc3339()),
+                payment_reference: r.get("payment_reference"),
             })
             .collect())
     }

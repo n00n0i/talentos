@@ -305,6 +305,15 @@ An approved payroll run exports `GET /api/v1/payroll/runs/:id/pf-remittance.csv`
 with per-employee and employer amounts plus totals, deterministic and
 CSV-injection safe. `/payroll` links it next to the GL export.
 
+## Bank payout
+
+`GET /payroll/runs/:id/bank-payout.csv` exports an approved (or completed) run
+using the editable `bank_payout` template in `/forms` (default columns:
+employee code, name, bank, account, net). Bank-specific layouts are Phase 0
+inputs. `POST /payroll/runs/:id/mark-paid {reference?}` moves `approved →
+completed`, stores `paid_at`/reference, and keeps the file downloadable.
+Verify bank accounts before uploading; missing accounts render empty cells.
+
 ## Team calendar
 
 `/calendar` (HR/payroll/manager) shows a month of holidays, pending/approved

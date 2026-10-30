@@ -162,6 +162,29 @@ pub async fn export_pnd1_csv(
     }
 }
 
+/// GET /api/v1/payroll/runs/:id/bank-payout.csv — bank transfer file (approved).
+pub async fn export_bank_payout_csv(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(run_id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "export_report") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let result = talentos_hr_runner::export_bank_payout_csv(&mut tx, run_id, &state.pii).await;
+    let _ = tx.rollback().await;
+
+    match result {
+        Ok((filename, body)) => csv_response(filename, body),
+        Err(talentos_hr_runner::FormError::NotFound) => not_found(),
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
 /// GET /api/v1/reports/pnd1a.csv?year= — ภ.ง.ด.1ก CSV (annual withholding).
 pub async fn export_pnd1a_csv(
     State(state): State<AppState>,

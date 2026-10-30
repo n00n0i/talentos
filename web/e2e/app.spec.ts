@@ -136,6 +136,26 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await expect(page.getByText("อนุมัติรอบเงินเดือนแล้ว")).toBeVisible();
   await expect(page.getByText("อนุมัติแล้ว").first()).toBeVisible();
 
+  // Bank payout: download link is visible and yields a CSV with the transfer columns.
+  const bankLink = page.getByRole("link", { name: "ดาวน์โหลดไฟล์โอน" });
+  await expect(bankLink).toBeVisible();
+  const bankHref = await bankLink.getAttribute("href");
+  expect(bankHref).toContain("bank-payout.csv");
+  // Fetch the CSV response (the Next proxy strips the attachment header, so
+  // assert the body instead of a download event).
+  const csvText = await page.evaluate(async (href) => {
+    const res = await fetch(href!);
+    return await res.text();
+  }, bankHref);
+  expect(csvText).toContain("employee_code");
+  expect(csvText).toContain("amount");
+
+  // Mark paid (reference prompt), then the run shows completed + reference.
+  page.once("dialog", (dialog) => dialog.accept("E2E-REF-1"));
+  await page.getByTestId("mark-paid").click();
+  await expect(page.getByText("จ่ายแล้ว").first()).toBeVisible();
+  await expect(page.getByText("E2E-REF-1")).toBeVisible();
+
   // Expand the run and check the payslip (40,000 salary + 4h weekday OT = 41,000).
   await page.getByRole("cell", { name: /–/ }).first().click();
   await expect(page.getByText("41,000.00").first()).toBeVisible();

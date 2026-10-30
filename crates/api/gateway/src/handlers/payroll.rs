@@ -291,6 +291,65 @@ pub async fn approve_payroll_run(
         .into_response()
 }
 
+/// POST /api/v1/payroll/runs/:id/mark-paid — record the payment date/reference.
+/// Only `approved → completed`; any other state is a 409.
+pub async fn mark_paid(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<MarkPaidRequest>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "approve") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
+
+    let reference = body
+        .reference
+        .map(|r| r.trim().to_string())
+        .filter(|r| !r.is_empty());
+
+    let row = sqlx::query(
+        "UPDATE payroll_runs SET status = 'completed', paid_at = now(), payment_reference = $3 \
+         WHERE id = $1 AND tenant_id = $2 AND status = 'approved' RETURNING paid_at",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .bind(reference.as_deref())
+    .fetch_optional(&mut *tx)
+    .await;
+
+    match row {
+        Ok(Some(r)) => {
+            let paid_at: chrono::DateTime<chrono::Utc> = r.get("paid_at");
+            if let Err(e) = tx.commit().await {
+                return internal_err(e);
+            }
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "run_id": id.to_string(),
+                    "status": "completed",
+                    "paid_at": paid_at.to_rfc3339(),
+                    "reference": reference,
+                })),
+            )
+                .into_response()
+        }
+        Ok(None) => {
+            let _ = tx.rollback().await;
+            conflict("payroll run must be approved before marking paid")
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            internal_err(e)
+        }
+    }
+}
+
 /// GET /api/v1/payroll/runs/:id/export.csv — payroll register for accountants.
 pub async fn export_payroll_csv(
     State(state): State<AppState>,
@@ -748,6 +807,12 @@ pub struct ApprovePayrollRequest {
     /// Optional human note; persisted with the approval audit entry.
     #[allow(dead_code)]
     pub reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct MarkPaidRequest {
+    /// Optional payment reference (e.g. batch id); stored verbatim.
+    pub reference: Option<String>,
 }
 
 #[derive(Deserialize)]

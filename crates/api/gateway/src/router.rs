@@ -125,6 +125,10 @@ pub fn build(state: AppState) -> Router {
             post(payroll::approve_payroll_run),
         )
         .route(
+            "/api/v1/payroll/runs/:id/mark-paid",
+            post(payroll::mark_paid),
+        )
+        .route(
             "/api/v1/payroll/runs/:id/payslips",
             get(payroll::list_payslips),
         )
@@ -151,6 +155,10 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/v1/payroll/runs/:id/pnd1.csv",
             get(forms::export_pnd1_csv),
+        )
+        .route(
+            "/api/v1/payroll/runs/:id/bank-payout.csv",
+            get(forms::export_bank_payout_csv),
         )
         .route("/api/v1/reports/pnd1a.csv", get(forms::export_pnd1a_csv))
         .route(

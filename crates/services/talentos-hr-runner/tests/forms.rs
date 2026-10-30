@@ -3,8 +3,9 @@ mod common;
 
 use sqlx::{PgPool, Row};
 use talentos_hr_runner::forms::{
-    export_pnd1_csv, export_pnd1a_csv, export_sso1_10_csv, load_active_template, render_50tawi,
-    save_template, FormConfig, FormError, FORM_TYPE_50TAWI, FORM_TYPE_SSO1_10,
+    export_bank_payout_csv, export_pnd1_csv, export_pnd1a_csv, export_sso1_10_csv,
+    load_active_template, render_50tawi, save_template, FormConfig, FormError, FORM_TYPE_50TAWI,
+    FORM_TYPE_BANK_PAYOUT, FORM_TYPE_SSO1_10,
 };
 use uuid::Uuid;
 
@@ -571,5 +572,205 @@ async fn pnd1a_csv_is_tenant_scoped() -> Result<(), Box<dyn std::error::Error>> 
 
     common::cleanup(&pool, a.tenant_id).await;
     common::cleanup(&pool, b.tenant_id).await;
+    Ok(())
+}
+
+fn bank_config(order: &[&str]) -> FormConfig {
+    let columns: Vec<serde_json::Value> = order
+        .iter()
+        .map(|s| {
+            let label = match *s {
+                "employee_code" => "employee_code",
+                "employee_name" => "employee_name",
+                "bank_name" => "bank_name",
+                "bank_account" => "bank_account",
+                "net" => "amount",
+                _ => *s,
+            };
+            serde_json::json!({"label": label, "source": s})
+        })
+        .collect();
+    serde_json::from_value(serde_json::json!({
+        "title": "Bank Payout",
+        "columns": columns,
+    }))
+    .unwrap()
+}
+
+async fn set_bank(
+    pool: &PgPool,
+    seed: &Seed,
+    bank_name: &str,
+    account: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut tx = tenant_conn(pool, seed.tenant_id).await?;
+    sqlx::query("UPDATE employees SET bank_name = $1, bank_account_number = $2 WHERE id = $3")
+        .bind(bank_name)
+        .bind(account)
+        .bind(seed.employee_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn bank_payout_csv_columns_order_and_decrypt() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+
+    // Encrypt the account the way production does, so the export must decrypt it.
+    let cipher = talentos_db::pii::PiiCipher::from_hex(&"11".repeat(32))?;
+    let encrypted = cipher.encrypt("0123456789")?;
+    set_bank(&pool, &seed, "BBL", &encrypted).await?;
+    let run_id = seed_run(&pool, &seed, "approved").await?;
+
+    // Reorder columns and drop bank_name to prove order + source mapping.
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    save_template(
+        &mut *tx,
+        FORM_TYPE_BANK_PAYOUT,
+        &bank_config(&["net", "employee_code", "bank_account", "employee_name"]),
+        seed.user_id,
+    )
+    .await?;
+    tx.commit().await?;
+
+    let pii = Some(std::sync::Arc::new(cipher));
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    let (filename, body) = export_bank_payout_csv(&mut *tx, run_id, &pii).await?;
+    tx.rollback().await?;
+
+    assert!(filename.starts_with("bank-payout-"));
+    let lines: Vec<&str> = body.lines().collect();
+    // column header + one data row (no metadata/totals for bank upload).
+    assert_eq!(lines.len(), 2);
+    assert_eq!(
+        lines[0].trim_start_matches('\u{feff}'),
+        "\"amount\",\"employee_code\",\"bank_account\",\"employee_name\""
+    );
+    assert!(
+        lines[1].starts_with("\"27750.00\",\"E001\",\"0123456789\",\"สมชาย ทดสอบ\""),
+        "decrypted account and net resolved: {}",
+        lines[1]
+    );
+
+    common::cleanup(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn bank_payout_csv_legacy_plaintext_account() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+    // Legacy plaintext (no `v1:` prefix) passes through the cipher untouched.
+    set_bank(&pool, &seed, "KTB", "9876543210").await?;
+    let run_id = seed_run(&pool, &seed, "approved").await?;
+
+    let cipher = talentos_db::pii::PiiCipher::from_hex(&"11".repeat(32))?;
+    let pii = Some(std::sync::Arc::new(cipher));
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    let (_, body) = export_bank_payout_csv(&mut *tx, run_id, &pii).await?;
+    tx.rollback().await?;
+
+    assert!(body.contains("9876543210"), "plaintext account intact");
+
+    common::cleanup(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn bank_payout_csv_rejects_unapproved_run() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+    let run_id = seed_run(&pool, &seed, "draft").await?;
+
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    let result = export_bank_payout_csv(&mut *tx, run_id, &None).await;
+    tx.rollback().await?;
+    assert!(matches!(result, Err(FormError::NotFound)));
+
+    common::cleanup(&pool, seed.tenant_id).await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn mark_paid_transition_only_from_approved() -> Result<(), Box<dyn std::error::Error>> {
+    let Some(url) = common::database_url() else {
+        return Ok(());
+    };
+    let pool = PgPool::connect(&url).await?;
+    let seed = seed_tenant(&pool).await?;
+    let run_id = seed_run(&pool, &seed, "approved").await?;
+
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    // The exact transition the mark-paid endpoint runs.
+    let paid = sqlx::query(
+        "UPDATE payroll_runs SET status = 'completed', paid_at = now(), payment_reference = $2 \
+         WHERE id = $1 AND tenant_id = current_tenant_id() AND status = 'approved' RETURNING paid_at",
+    )
+    .bind(run_id)
+    .bind("E2E-REF")
+    .fetch_optional(&mut *tx)
+    .await?;
+    assert!(paid.is_some(), "approved run transitions to completed");
+
+    // Second attempt: no longer approved → no row (409 semantics).
+    let again = sqlx::query(
+        "UPDATE payroll_runs SET status = 'completed', paid_at = now() \
+         WHERE id = $1 AND tenant_id = current_tenant_id() AND status = 'approved' RETURNING paid_at",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    assert!(again.is_none(), "completed run is not re-marked");
+
+    let (status, paid_at, reference): (
+        String,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<String>,
+    ) = sqlx::query_as("SELECT status, paid_at, payment_reference FROM payroll_runs WHERE id = $1")
+        .bind(run_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    assert_eq!(status, "completed");
+    assert!(paid_at.is_some());
+    assert_eq!(reference.as_deref(), Some("E2E-REF"));
+    tx.rollback().await?;
+
+    // A draft run cannot be marked paid.
+    let draft = Uuid::new_v4();
+    let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
+    sqlx::query(
+        "INSERT INTO payroll_runs \
+           (id, tenant_id, entity_id, period_start, period_end, payment_date, status, total_employees, created_by) \
+         VALUES ($1,$2,$3,'2026-02-01','2026-02-28','2026-03-05','draft',1,$4)",
+    )
+    .bind(draft)
+    .bind(seed.tenant_id)
+    .bind(seed.entity_id)
+    .bind(seed.user_id)
+    .execute(&mut *tx)
+    .await?;
+    let nope = sqlx::query(
+        "UPDATE payroll_runs SET status = 'completed', paid_at = now() \
+         WHERE id = $1 AND tenant_id = current_tenant_id() AND status = 'approved' RETURNING paid_at",
+    )
+    .bind(draft)
+    .fetch_optional(&mut *tx)
+    .await?;
+    assert!(nope.is_none(), "draft run is not marked paid");
+    tx.rollback().await?;
+
+    common::cleanup(&pool, seed.tenant_id).await;
     Ok(())
 }

@@ -93,6 +93,22 @@ export type PayrollRun = {
   paymentReference?: string | null;
 };
 
+export type PayrollAnomaly = {
+  employee_code: string;
+  employee_name: string;
+  code: string;
+  severity: string;
+  message: string;
+};
+
+export type PayrollAnomalies = {
+  run_id: string;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  counts: { error: number; warning: number };
+  anomalies: PayrollAnomaly[];
+};
+
 export type Payslip = {
   payslip_id: string;
   employee_id: string;

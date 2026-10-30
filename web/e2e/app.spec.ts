@@ -132,6 +132,11 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await expect(page.getByText("สร้างรอบเงินเดือนแล้ว")).toBeVisible();
   await expect(page.getByText("รออนุมัติ")).toBeVisible({ timeout: 45_000 });
 
+  // The run carries an anomaly (SSO cap on a 40k salary), so it must be reviewed first.
+  await page.getByText("รออนุมัติ").first().click();
+  await page.getByTestId("review-anomalies").click();
+  await expect(page.getByText("ตรวจสอบความผิดปกติแล้ว")).toBeVisible();
+
   await page.getByTestId("approve-run").click();
   await expect(page.getByText("อนุมัติรอบเงินเดือนแล้ว")).toBeVisible();
   await expect(page.getByText("อนุมัติแล้ว").first()).toBeVisible();
@@ -156,8 +161,8 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await expect(page.getByText("จ่ายแล้ว").first()).toBeVisible();
   await expect(page.getByText("E2E-REF-1")).toBeVisible();
 
-  // Expand the run and check the payslip (40,000 salary + 4h weekday OT = 41,000).
-  await page.getByRole("cell", { name: /–/ }).first().click();
+  // The run is already expanded from the anomaly review above; check the payslip
+  // (40,000 salary + 4h weekday OT = 41,000).
   await expect(page.getByText("41,000.00").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "PDF" }).first()).toBeVisible();
   await expect(page.getByRole("link", { name: "CSV" }).first()).toBeVisible();

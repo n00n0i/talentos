@@ -5,6 +5,7 @@ import {
   gw,
   gql,
   handleApiError,
+  PayrollAnomalies,
   PayrollRun,
   Payslip,
   RUN_STATUS,
@@ -28,6 +29,7 @@ export default function PayrollPage() {
   const [runs, setRuns] = useState<PayrollRun[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [payslips, setPayslips] = useState<Record<string, Payslip[]>>({});
+  const [anomalies, setAnomalies] = useState<Record<string, PayrollAnomalies>>({});
   const [periodStart, setPeriodStart] = useState(defaults.current.start);
   const [periodEnd, setPeriodEnd] = useState(defaults.current.end);
   const [paymentDate, setPaymentDate] = useState(defaults.current.pay);
@@ -92,6 +94,29 @@ export default function PayrollPage() {
       } catch (e) {
         handleApiError(e, setError);
       }
+    }
+    if (!anomalies[run.id]) {
+      try {
+        const a = await gw<PayrollAnomalies>(`api/v1/payroll/runs/${run.id}/anomalies`);
+        setAnomalies((prev) => ({ ...prev, [run.id]: a }));
+      } catch (e) {
+        handleApiError(e, setError);
+      }
+    }
+  }
+
+  async function reviewAnomalies(run: PayrollRun) {
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/payroll/runs/${run.id}/anomalies/review`, { method: "POST" });
+      setNotice("ตรวจสอบความผิดปกติแล้ว");
+      const a = await gw<PayrollAnomalies>(`api/v1/payroll/runs/${run.id}/anomalies`);
+      setAnomalies((prev) => ({ ...prev, [run.id]: a }));
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -228,10 +253,12 @@ export default function PayrollPage() {
                     status={status}
                     open={open}
                     payslips={payslips[run.id]}
+                    anomalies={anomalies[run.id]}
                     busy={busy}
                     pfState={pfStates[run.id]}
                     onToggle={() => toggle(run)}
                     onApprove={() => approve(run)}
+                    onReviewAnomalies={() => reviewAnomalies(run)}
                     onSendPf={() => sendPf(run)}
                     onMarkPaid={() => markPaid(run)}
                   />
@@ -250,10 +277,12 @@ function RunRow({
   status,
   open,
   payslips,
+  anomalies,
   busy,
   pfState,
   onToggle,
   onApprove,
+  onReviewAnomalies,
   onSendPf,
   onMarkPaid,
 }: {
@@ -261,13 +290,17 @@ function RunRow({
   status: { label: string; tone: string };
   open: boolean;
   payslips: Payslip[] | undefined;
+  anomalies: PayrollAnomalies | undefined;
   busy: boolean;
   pfState?: { status: string; last_error?: string };
   onToggle: () => void;
   onApprove: () => void;
+  onReviewAnomalies: () => void;
   onSendPf: () => void;
   onMarkPaid: () => void;
 }) {
+  const anomalyCount = anomalies ? anomalies.counts.error + anomalies.counts.warning : 0;
+  const needsReview = anomalyCount > 0 && !anomalies?.reviewed_at;
   return (
     <>
       <tr className="clickable" onClick={onToggle}>
@@ -360,15 +393,28 @@ function RunRow({
             </span>
           )}
           {run.status === "pending_approval" && (
-            <button className="btn btn-sm btn-primary" data-testid="approve-run" disabled={busy} onClick={onApprove}>
-              อนุมัติ
-            </button>
+            <>
+              <button
+                className="btn btn-sm btn-primary"
+                data-testid="approve-run"
+                disabled={busy || needsReview}
+                onClick={onApprove}
+              >
+                อนุมัติ
+              </button>
+              {needsReview && (
+                <span className="badge danger" style={{ marginLeft: 6 }} data-testid="needs-review">
+                  ตรวจความผิดปกติก่อนอนุมัติ
+                </span>
+              )}
+            </>
           )}
         </td>
       </tr>
       {open && (
         <tr>
           <td colSpan={7} style={{ background: "#fbfbfd" }}>
+            <AnomalyPanel anomalies={anomalies} busy={busy} onReview={onReviewAnomalies} />
             {!payslips ? (
               <div className="spinner">กำลังโหลดสลิป…</div>
             ) : payslips.length === 0 ? (
@@ -414,5 +460,72 @@ function RunRow({
         </tr>
       )}
     </>
+  );
+}
+
+function AnomalyPanel({
+  anomalies,
+  busy,
+  onReview,
+}: {
+  anomalies: PayrollAnomalies | undefined;
+  busy: boolean;
+  onReview: () => void;
+}) {
+  if (!anomalies) return null;
+  const total = anomalies.counts.error + anomalies.counts.warning;
+  return (
+    <div className="card card-pad" style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <h3 style={{ margin: 0 }}>ตรวจความผิดปกติ</h3>
+        {total > 0 &&
+          (anomalies.reviewed_at ? (
+            <span className="badge success" data-testid="anomaly-reviewed">
+              ตรวจสอบแล้ว · {thDate(anomalies.reviewed_at.slice(0, 10))}
+            </span>
+          ) : (
+            <button className="btn btn-sm btn-primary" data-testid="review-anomalies" disabled={busy} onClick={onReview}>
+              ตรวจสอบแล้ว
+            </button>
+          ))}
+      </div>
+      {total === 0 ? (
+        <div className="empty">ไม่พบความผิดปกติ</div>
+      ) : (
+        <>
+          <div style={{ margin: "8px 0" }}>
+            <span className="badge danger">ข้อผิดพลาด {anomalies.counts.error}</span>{" "}
+            <span className="badge warning">คำเตือน {anomalies.counts.warning}</span>
+          </div>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>พนักงาน</th>
+                <th>ระดับ</th>
+                <th>รหัส</th>
+                <th>รายละเอียด</th>
+              </tr>
+            </thead>
+            <tbody>
+              {anomalies.anomalies.map((a, i) => (
+                <tr key={i}>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{a.employee_name}</div>
+                    <div className="hint">{a.employee_code}</div>
+                  </td>
+                  <td>
+                    <span className={`badge ${a.severity === "error" ? "danger" : "warning"}`}>
+                      {a.severity === "error" ? "ข้อผิดพลาด" : "คำเตือน"}
+                    </span>
+                  </td>
+                  <td className="hint">{a.code}</td>
+                  <td>{a.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
   );
 }

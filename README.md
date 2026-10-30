@@ -556,8 +556,10 @@ records directly to exercise the payroll boundary at scale.
 - GPS geofencing deters buddy-punching from outside the site, but it does not
   cryptographically prove location; a motivated user can spoof coordinates.
 - No face recognition / liveness check.
-- No offline queue: punches require a live connection. If the request fails, the
-  employee must retry.
+- Offline punches made while disconnected are queued in `localStorage` and replayed
+  with their original timestamp (up to 7 days old) when the connection returns.
+  The installable shell (`manifest.webmanifest` + `sw.js`) caches navigations only;
+  API calls always go to the network.
 - No shift swaps or self-scheduling; HR assigns shifts.
 - Holiday/weekend OT policy: all hours on a holiday or weekend are classified as
   OT (holiday 3x, weekend 2x). There is no separate "holiday pay" multiplier
@@ -723,12 +725,12 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
       beyond 500 employees, secrets rotation runbook.
 - [ ] English UI and TH/EN toggle.
 
-### Phase 5 (not started)
+### Phase 5 (partially started)
 
 - [ ] Recruitment pipeline, offer letters/e-signature, onboarding checklist.
 - [ ] Employee documents with expiry alerts (contracts, work permits, visas).
 - [ ] Performance reviews/OKRs, training records.
-- [ ] Mobile PWA offline support; native app if required.
+- [x] Mobile PWA shell and offline punch queue; native app if required.
 
 ### Dev environment notes
 

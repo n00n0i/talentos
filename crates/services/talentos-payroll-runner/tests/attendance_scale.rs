@@ -65,6 +65,8 @@ async fn link_user(raw: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
 
 fn input(kind: PunchKind) -> PunchInput {
     PunchInput {
+        client_time: None,
+        client_id: None,
         kind,
         lat: LAT,
         lng: LNG,

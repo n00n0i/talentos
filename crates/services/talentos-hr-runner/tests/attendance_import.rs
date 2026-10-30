@@ -277,6 +277,8 @@ async fn mobile_punched_day_is_skipped() {
         TenantId(tenant_id),
         user_id,
         PunchInput {
+            client_time: None,
+            client_id: None,
             kind: talentos_attendance::PunchKind::In,
             lat: OFFICE_LAT,
             lng: OFFICE_LNG,

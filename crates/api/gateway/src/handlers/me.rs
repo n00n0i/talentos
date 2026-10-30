@@ -360,6 +360,9 @@ pub struct PunchBody {
     pub lat: f64,
     pub lng: f64,
     pub accuracy_m: Option<f64>,
+    pub client_id: Option<String>,
+    /// RFC 3339 instant for a punch queued while offline.
+    pub client_time: Option<String>,
 }
 
 /// Response for a mobile punch.
@@ -407,6 +410,20 @@ pub async fn punch(
         lat: body.lat,
         lng: body.lng,
         accuracy_m: body.accuracy_m,
+        client_id: body.client_id,
+        client_time: match body.client_time {
+            Some(value) => match chrono::DateTime::parse_from_rfc3339(&value) {
+                Ok(t) => Some(t.with_timezone(&chrono::Utc)),
+                Err(_) => {
+                    return error_response(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "invalid_client_time",
+                        "client_time must be an RFC 3339 timestamp",
+                    )
+                }
+            },
+            None => None,
+        },
     };
 
     match talentos_hr_runner::attendance::punch(&state.pool, ctx.tenant_id, ctx.user_id.0, input)

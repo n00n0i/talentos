@@ -35,12 +35,17 @@ pub struct ShiftView {
 }
 
 /// Input for a mobile punch.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct PunchInput {
     pub kind: PunchKind,
     pub lat: f64,
     pub lng: f64,
     pub accuracy_m: Option<f64>,
+    /// Client-generated UUID; replays with the same id are idempotent.
+    pub client_id: Option<String>,
+    /// Original punch instant for a queued offline punch. Bounded to the last
+    /// 7 days (with a small clock-skew allowance into the future).
+    pub client_time: Option<DateTime<Utc>>,
 }
 
 /// One row of a device import batch.
@@ -98,6 +103,8 @@ pub enum AttendanceError {
     NotFound,
     #[error("invalid import")]
     InvalidImport,
+    #[error("client_time must be within the last 7 days")]
+    InvalidClientTime,
     #[error("attendance rule error: {0}")]
     Rule(#[from] AttendanceRuleError),
     #[error("attendance values exceed allowed range")]
@@ -301,7 +308,15 @@ pub async fn punch(
     user_id: Uuid,
     input: PunchInput,
 ) -> Result<DayView, AttendanceError> {
-    punch_at(pool, tenant_id, user_id, input, Utc::now()).await
+    let now = Utc::now();
+    let occurred_at = match input.client_time {
+        Some(t) if t > now + Duration::minutes(5) || t < now - Duration::days(7) => {
+            return Err(AttendanceError::InvalidClientTime)
+        }
+        Some(t) => t,
+        None => now,
+    };
+    punch_at(pool, tenant_id, user_id, input, occurred_at).await
 }
 
 /// Record a mobile punch at a fixed timestamp (public for tests).
@@ -339,10 +354,12 @@ pub async fn punch_at(
         return Err(AttendanceError::OutsideGeofence { distance, allowed });
     }
 
-    let event_id = sqlx::query_scalar::<_, Uuid>(
+    let inserted_id = sqlx::query_scalar::<_, Uuid>(
         r#"INSERT INTO attendance_events
-             (tenant_id, employee_id, kind, source, occurred_at, work_date, distance_m, accuracy_m)
-           VALUES ($1,$2,$3,'mobile',$4,$5,$6,$7)
+             (tenant_id, employee_id, kind, source, occurred_at, work_date, distance_m, accuracy_m, client_id)
+           VALUES ($1,$2,$3,'mobile',$4,$5,$6,$7,$8)
+           ON CONFLICT (tenant_id, employee_id, client_id) WHERE client_id IS NOT NULL
+           DO NOTHING
            RETURNING id"#,
     )
     .bind(tenant_id.0)
@@ -352,28 +369,42 @@ pub async fn punch_at(
     .bind(work_date)
     .bind(distance)
     .bind(input.accuracy_m)
-    .fetch_one(&mut *tx)
+    .bind(&input.client_id)
+    .fetch_optional(&mut *tx)
     .await?;
 
-    let day = recompute_day(&mut tx, employee_id, &shift, work_date).await?;
+    let day = if let Some(event_id) = inserted_id {
+        let day = recompute_day(&mut tx, employee_id, &shift, work_date).await?;
 
-    sqlx::query(
-        r#"INSERT INTO audit_log
-             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
-           VALUES ($1, 'user', $2, 'attendance.punch', 'attendance_event', $3, $4)"#,
-    )
-    .bind(tenant_id.0)
-    .bind(user_id.to_string())
-    .bind(event_id.to_string())
-    .bind(json!({
-        "employee_id": employee_id,
-        "work_date": work_date,
-        "kind": kind_to_str(input.kind),
-        "distance_m": distance,
-        "accuracy_m": input.accuracy_m,
-    }))
-    .execute(&mut *tx)
-    .await?;
+        sqlx::query(
+            r#"INSERT INTO audit_log
+                 (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+               VALUES ($1, 'user', $2, 'attendance.punch', 'attendance_event', $3, $4)"#,
+        )
+        .bind(tenant_id.0)
+        .bind(user_id.to_string())
+        .bind(event_id.to_string())
+        .bind(json!({
+            "employee_id": employee_id,
+            "work_date": work_date,
+            "kind": kind_to_str(input.kind),
+            "distance_m": distance,
+            "accuracy_m": input.accuracy_m,
+            "occurred_at": occurred_at,
+            "client_time": input.client_time,
+        }))
+        .execute(&mut *tx)
+        .await?;
+
+        day
+    } else {
+        // A replayed client_id is a no-op: do not recompute (that would reopen an
+        // approved day and withdraw its payroll row) or write a second audit row.
+        match load_day(&mut tx, employee_id, work_date).await? {
+            Some(day) => day,
+            None => recompute_day(&mut tx, employee_id, &shift, work_date).await?,
+        }
+    };
 
     tx.commit().await?;
     Ok(day)
@@ -520,6 +551,27 @@ fn haversine_m(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
 }
 
 /// Recompute and upsert the attendance day summary from stored punches.
+async fn load_day(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    employee_id: Uuid,
+    work_date: NaiveDate,
+) -> Result<Option<DayView>, AttendanceError> {
+    let row = sqlx::query(
+        r#"SELECT id, employee_id, work_date, worked_minutes, late_minutes,
+                  early_leave_minutes, derived_ot_minutes, ot_minutes, ot_kind,
+                  incomplete, status
+             FROM attendance_days
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $1
+              AND work_date = $2"#,
+    )
+    .bind(employee_id)
+    .bind(work_date)
+    .fetch_optional(&mut **tx)
+    .await?;
+    row.map(map_day).transpose().map_err(Into::into)
+}
+
 async fn recompute_day(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     employee_id: Uuid,

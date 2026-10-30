@@ -15,6 +15,7 @@ pub mod loans;
 pub mod notify;
 pub mod ot;
 pub mod pf;
+pub mod privacy;
 pub mod reports;
 pub mod settlement;
 

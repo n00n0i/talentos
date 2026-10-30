@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { expect, Page, test } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
@@ -1096,4 +1097,29 @@ test("HR creates a holiday and sees it on the team calendar", async ({ page }) =
   const day = page.getByTestId("calendar-day").filter({ hasText: "วันลอยกระทง" });
   await expect(day).toBeVisible();
   await expect(day).toContainText("25 พ.ย. 2569");
+});
+
+test("employee accepts the privacy notice and exports their personal data", async ({ page }) => {
+  await login(page);
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill(invitedEmail);
+  await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+
+  await page.goto("/privacy");
+  await expect(page.getByRole("heading", { name: /ความเป็นส่วนตัว/ })).toBeVisible();
+  await page.getByTestId("accept-consent").click();
+  await expect(page.getByTestId("consent-status")).toContainText("รับทราบประกาศความเป็นส่วนตัว");
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId("export-data").click(),
+  ]);
+  const data = JSON.parse(readFileSync((await download.path())!, "utf8"));
+  expect(data.employee.employee_code).toBe("E2E001");
+  expect(data.account.email).toBe(invitedEmail);
+  expect(data.notice_version).toBeTruthy();
+  expect(Array.isArray(data.payslips)).toBe(true);
 });

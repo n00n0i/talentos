@@ -902,6 +902,27 @@ async fn event_count(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid, date: Na
     row.get::<i64, _>(0)
 }
 
+async fn audit_count(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> i64 {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let count = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log
+          WHERE tenant_id = $1 AND action = 'attendance.punch'
+            AND after_state->>'employee_id' = $2",
+    )
+    .bind(tenant_id)
+    .bind(employee_id.to_string())
+    .fetch_one(&mut *tx)
+    .await
+    .expect("audit count");
+    let _ = tx.rollback().await;
+    count
+}
+
 async fn user_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
     let mut tx = pool.begin().await.expect("begin");
     sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
@@ -984,6 +1005,11 @@ async fn client_id_replay_is_idempotent() {
         1,
         "same client id must not duplicate the event"
     );
+    assert_eq!(
+        audit_count(&raw, tenant_id, employee_id).await,
+        1,
+        "a replay must not write a second audit row"
+    );
 
     // A distinct client id creates a new event.
     punch_at(
@@ -999,6 +1025,11 @@ async fn client_id_replay_is_idempotent() {
         event_count(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await,
         2,
         "a distinct client id must create a second event"
+    );
+    assert_eq!(
+        audit_count(&raw, tenant_id, employee_id).await,
+        2,
+        "each real punch writes one audit row"
     );
 
     cleanup(&raw, tenant_id).await;
@@ -1085,6 +1116,100 @@ async fn client_time_preserves_offline_punch_instant() {
     .await
     .expect_err("8-day-old client_time must be rejected");
     assert!(matches!(too_old, AttendanceError::InvalidClientTime));
+
+    cleanup(&raw, tenant_id).await;
+}
+
+/// Replaying a punch whose response was lost must not reopen an approved day.
+#[tokio::test]
+async fn replay_after_approval_keeps_day_approved() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(9, 0),
+        bkk_time(18, 0),
+    )
+    .await;
+
+    let client = Uuid::new_v4().to_string();
+    let punch_in = |client_id: Option<String>| PunchInput {
+        client_time: None,
+        client_id,
+        kind: talentos_attendance::PunchKind::In,
+        lat: OFFICE_LAT,
+        lng: OFFICE_LNG,
+        accuracy_m: Some(10.0),
+    };
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        punch_in(Some(client.clone())),
+        bkk_at(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("in punch");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        PunchInput {
+            client_time: None,
+            client_id: Some(Uuid::new_v4().to_string()),
+            kind: talentos_attendance::PunchKind::Out,
+            lat: OFFICE_LAT,
+            lng: OFFICE_LNG,
+            accuracy_m: Some(10.0),
+        },
+        bkk_at(2026, 10, 27, 18, 0),
+    )
+    .await
+    .expect("out punch");
+
+    approve_day(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await;
+
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        punch_in(Some(client)),
+        bkk_at(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("replayed punch");
+
+    assert_eq!(
+        day_status(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await,
+        Some("approved".into()),
+        "a replay must not turn an approved day back into pending"
+    );
+    assert_eq!(
+        audit_count(&raw, tenant_id, employee_id).await,
+        2,
+        "the replay must not audit again"
+    );
 
     cleanup(&raw, tenant_id).await;
 }

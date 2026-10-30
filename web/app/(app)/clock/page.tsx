@@ -125,12 +125,19 @@ export default function ClockPage() {
         handled.add(item.client_id);
         synced += 1;
       } catch (e) {
-        if (e instanceof ApiError) {
-          // Business rejection (e.g. outside geofence): retrying won't change it.
+        if (
+          e instanceof ApiError &&
+          e.status >= 400 &&
+          e.status < 500 &&
+          e.status !== 408 &&
+          e.status !== 429
+        ) {
+          // Business rejection (e.g. outside geofence, stale timestamp): retrying
+          // will not change it. Transient/auth errors stay queued below.
           handled.add(item.client_id);
           skipped += 1;
         } else {
-          break; // still offline: keep this and the rest for later
+          break; // still offline/transient: keep this and the rest for later
         }
       }
     }

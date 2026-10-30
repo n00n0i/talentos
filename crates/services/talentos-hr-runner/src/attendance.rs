@@ -373,10 +373,9 @@ pub async fn punch_at(
     .fetch_optional(&mut *tx)
     .await?;
 
-    let day = recompute_day(&mut tx, employee_id, &shift, work_date).await?;
+    let day = if let Some(event_id) = inserted_id {
+        let day = recompute_day(&mut tx, employee_id, &shift, work_date).await?;
 
-    // A replayed client_id is a no-op: no second event and no second audit row.
-    if let Some(event_id) = inserted_id {
         sqlx::query(
             r#"INSERT INTO audit_log
                  (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
@@ -391,10 +390,21 @@ pub async fn punch_at(
             "kind": kind_to_str(input.kind),
             "distance_m": distance,
             "accuracy_m": input.accuracy_m,
+            "occurred_at": occurred_at,
+            "client_time": input.client_time,
         }))
         .execute(&mut *tx)
         .await?;
-    }
+
+        day
+    } else {
+        // A replayed client_id is a no-op: do not recompute (that would reopen an
+        // approved day and withdraw its payroll row) or write a second audit row.
+        match load_day(&mut tx, employee_id, work_date).await? {
+            Some(day) => day,
+            None => recompute_day(&mut tx, employee_id, &shift, work_date).await?,
+        }
+    };
 
     tx.commit().await?;
     Ok(day)
@@ -541,6 +551,27 @@ fn haversine_m(lat1: f64, lng1: f64, lat2: f64, lng2: f64) -> f64 {
 }
 
 /// Recompute and upsert the attendance day summary from stored punches.
+async fn load_day(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    employee_id: Uuid,
+    work_date: NaiveDate,
+) -> Result<Option<DayView>, AttendanceError> {
+    let row = sqlx::query(
+        r#"SELECT id, employee_id, work_date, worked_minutes, late_minutes,
+                  early_leave_minutes, derived_ot_minutes, ot_minutes, ot_kind,
+                  incomplete, status
+             FROM attendance_days
+            WHERE tenant_id = current_tenant_id()
+              AND employee_id = $1
+              AND work_date = $2"#,
+    )
+    .bind(employee_id)
+    .bind(work_date)
+    .fetch_optional(&mut **tx)
+    .await?;
+    row.map(map_day).transpose().map_err(Into::into)
+}
+
 async fn recompute_day(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     employee_id: Uuid,

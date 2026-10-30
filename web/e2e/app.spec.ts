@@ -1118,8 +1118,8 @@ test("employee accepts the privacy notice and exports their personal data", asyn
     page.getByTestId("export-data").click(),
   ]);
   const data = JSON.parse(readFileSync((await download.path())!, "utf8"));
-  expect(data.employee.employee_code).toBe("E2E001");
+  expect(data.employees[0].employee_code).toBe("E2E001");
   expect(data.account.email).toBe(invitedEmail);
   expect(data.notice_version).toBeTruthy();
-  expect(Array.isArray(data.payslips)).toBe(true);
+  expect(Array.isArray(data.employees[0].payslips)).toBe(true);
 });

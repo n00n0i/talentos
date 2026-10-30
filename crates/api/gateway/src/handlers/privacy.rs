@@ -59,11 +59,6 @@ pub async fn export(State(state): State<AppState>, Authed(ctx): Authed) -> Respo
             Err(e) => return map_error(e),
         };
 
-    if let Err(e) = record_export(&state, ctx.tenant_id.0, ctx.user_id.0).await {
-        tracing::error!(error = %e, "privacy export audit failed");
-        return internal_err();
-    }
-
     let filename = format!(
         "talentos-personal-data-{}.json",
         chrono::Utc::now().format("%Y-%m-%d")
@@ -83,28 +78,6 @@ pub async fn export(State(state): State<AppState>, Authed(ctx): Authed) -> Respo
         Json(data),
     )
         .into_response()
-}
-
-async fn record_export(
-    state: &AppState,
-    tenant_id: Uuid,
-    user_id: Uuid,
-) -> Result<(), sqlx::Error> {
-    let mut tx = state
-        .pool
-        .begin_tenant(talentos_kernel::TenantId(tenant_id))
-        .await?;
-    sqlx::query(
-        r#"INSERT INTO audit_log
-             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
-           VALUES ($1, 'user', $2, 'privacy.export', 'user', $2, $3)"#,
-    )
-    .bind(tenant_id)
-    .bind(user_id.to_string())
-    .bind(json!({ "notice_version": privacy::NOTICE_VERSION }))
-    .execute(&mut *tx)
-    .await?;
-    tx.commit().await
 }
 
 fn map_error(e: PrivacyError) -> Response {

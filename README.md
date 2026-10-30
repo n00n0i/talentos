@@ -316,8 +316,9 @@ the fresh anomalies must be checked again.
 
 Every user has `/privacy`: accept the current privacy-notice version (recorded
 with a timestamp in `privacy_consents`) and download a JSON copy of their own
-data — account, roles, consent history, employee profile (decrypted PII),
-attendance, leave, OT, claims, loans, and payslips. Exports are tenant-scoped
+data — account, roles, consent history, notifications, every linked employee
+profile (decrypted PII), punch events, attendance days, leave, OT, claims,
+loans, and payslips. Exports are tenant-scoped
 and audited as `privacy.export`. Automatic deletion/anonymisation is not
 implemented; the notice states the statutory retention position.
 

@@ -103,7 +103,9 @@ async fn scalar_json(
     Ok(value.unwrap_or_else(|| json!([])))
 }
 
-/// Complete personal-data copy for the authenticated user.
+/// Complete personal-data copy for the authenticated user. Includes every
+/// employee row linked to the user (multi-entity) and is audited in the same
+/// transaction.
 pub async fn export_personal_data(
     pool: &TenantPool,
     tenant_id: TenantId,
@@ -113,7 +115,7 @@ pub async fn export_personal_data(
     let mut tx = pool.begin_tenant(tenant_id).await?;
 
     let account = sqlx::query(
-        "SELECT email, full_name_th, full_name_en, created_at
+        "SELECT email, full_name_th, full_name_en, line_user_id, created_at
            FROM users WHERE tenant_id = $1 AND id = $2",
     )
     .bind(tenant_id.0)
@@ -125,6 +127,7 @@ pub async fn export_personal_data(
             "email": row.get::<String, _>("email"),
             "full_name_th": row.get::<Option<String>, _>("full_name_th"),
             "full_name_en": row.get::<Option<String>, _>("full_name_en"),
+            "line_user_id": row.get::<Option<String>, _>("line_user_id"),
             "created_at": row.get::<DateTime<Utc>, _>("created_at"),
         })
     });
@@ -149,21 +152,119 @@ pub async fn export_personal_data(
     .fetch_one(&mut *tx)
     .await?;
 
-    let employee_row = sqlx::query(
+    let notifications: Value = sqlx::query_scalar(
+        r#"SELECT COALESCE(json_agg(json_build_object(
+                 'channel', channel, 'subject', subject, 'body', body,
+                 'status', status, 'sent_at', sent_at, 'created_at', created_at)
+               ORDER BY created_at), '[]'::json)
+             FROM notifications WHERE tenant_id = $1 AND user_id = $2"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    // No status filter: a terminated employee still has the right to their data.
+    let employee_rows = sqlx::query(
         r#"SELECT id, employee_code, first_name_th, last_name_th, first_name_en, last_name_en,
                   national_id, birth_date, hire_date, termination_date, position_title, department,
                   cost_center, base_salary, bank_name, bank_account_number, sso_number, pf_member,
                   status, created_at, updated_at
              FROM employees
-            WHERE tenant_id = $1 AND user_id = $2 AND status <> 'terminated'"#,
+            WHERE tenant_id = $1 AND user_id = $2
+            ORDER BY created_at, id"#,
     )
     .bind(tenant_id.0)
     .bind(user_id)
-    .fetch_optional(&mut *tx)
+    .fetch_all(&mut *tx)
     .await?;
 
-    let employee = employee_row.as_ref().map(|row| {
-        json!({
+    let mut employees = Vec::with_capacity(employee_rows.len());
+    for row in &employee_rows {
+        let id: Uuid = row.get("id");
+        let attendance_days = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'work_date', work_date, 'worked_minutes', worked_minutes,
+                   'late_minutes', late_minutes, 'early_leave_minutes', early_leave_minutes,
+                   'ot_minutes', ot_minutes, 'ot_kind', ot_kind,
+                   'incomplete', incomplete, 'status', status) ORDER BY work_date)
+                 FROM attendance_days WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
+        let attendance_events = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'kind', kind, 'source', source, 'occurred_at', occurred_at,
+                   'work_date', work_date, 'distance_m', distance_m, 'accuracy_m', accuracy_m)
+                 ORDER BY occurred_at)
+                 FROM attendance_events WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
+        let leave = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'leave_type', leave_type, 'start_date', start_date, 'end_date', end_date,
+                   'days', days::text, 'reason', reason, 'status', status,
+                   'created_at', created_at) ORDER BY start_date)
+                 FROM leave_requests WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
+        let ot = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'work_date', work_date, 'minutes', minutes, 'reason', reason,
+                   'status', status, 'created_at', created_at) ORDER BY work_date)
+                 FROM ot_requests WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
+        let claims = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'category', category, 'amount', amount::text, 'expense_date', expense_date,
+                   'description', description, 'status', status, 'created_at', created_at)
+                 ORDER BY expense_date)
+                 FROM expense_claims WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
+        let loans = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'principal', principal::text, 'balance', balance::text,
+                   'installment_amount', installment_amount::text, 'start_date', start_date,
+                   'status', status, 'note', note, 'created_at', created_at) ORDER BY created_at)
+                 FROM employee_loans WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
+        let payslips = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'period_start', r.period_start, 'period_end', r.period_end,
+                   'base_salary', p.base_salary::text, 'gross', p.gross_earnings::text,
+                   'deductions', p.total_deductions::text, 'net', p.net_pay::text,
+                   'tax', p.tax_withheld::text, 'sso_employee', p.sso_employee::text,
+                   'sso_employer', p.sso_employer::text, 'pf_employee', p.pf_employee::text,
+                   'pf_employer', p.pf_employer::text, 'status', p.status) ORDER BY r.period_start)
+                 FROM payslips p JOIN payroll_runs r ON r.id = p.payroll_run_id
+                WHERE p.tenant_id = $1 AND p.employee_id = $2 AND r.tenant_id = $1"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
+
+        employees.push(json!({
             "employee_code": row.get::<String, _>("employee_code"),
             "first_name_th": row.get::<String, _>("first_name_th"),
             "last_name_th": row.get::<String, _>("last_name_th"),
@@ -184,92 +285,26 @@ pub async fn export_personal_data(
             "status": row.get::<String, _>("status"),
             "created_at": row.get::<DateTime<Utc>, _>("created_at"),
             "updated_at": row.get::<DateTime<Utc>, _>("updated_at"),
-        })
-    });
+            "attendance_days": attendance_days,
+            "attendance_events": attendance_events,
+            "leave_requests": leave,
+            "ot_requests": ot,
+            "expense_claims": claims,
+            "loans": loans,
+            "payslips": payslips,
+        }));
+    }
 
-    let (attendance, leave, ot, claims, loans, payslips) =
-        if let Some(id) = employee_row.as_ref().map(|row| row.get::<Uuid, _>("id")) {
-            let attendance = scalar_json(
-                &mut tx,
-                r#"SELECT json_agg(json_build_object(
-                   'work_date', work_date, 'worked_minutes', worked_minutes,
-                   'late_minutes', late_minutes, 'early_leave_minutes', early_leave_minutes,
-                   'ot_minutes', ot_minutes, 'ot_kind', ot_kind,
-                   'incomplete', incomplete, 'status', status) ORDER BY work_date)
-                 FROM attendance_days WHERE tenant_id = $1 AND employee_id = $2"#,
-                tenant_id.0,
-                id,
-            )
-            .await?;
-            let leave = scalar_json(
-                &mut tx,
-                r#"SELECT json_agg(json_build_object(
-                   'leave_type', leave_type, 'start_date', start_date, 'end_date', end_date,
-                   'days', days::text, 'reason', reason, 'status', status,
-                   'created_at', created_at) ORDER BY start_date)
-                 FROM leave_requests WHERE tenant_id = $1 AND employee_id = $2"#,
-                tenant_id.0,
-                id,
-            )
-            .await?;
-            let ot = scalar_json(
-                &mut tx,
-                r#"SELECT json_agg(json_build_object(
-                   'work_date', work_date, 'minutes', minutes, 'reason', reason,
-                   'status', status, 'created_at', created_at) ORDER BY work_date)
-                 FROM ot_requests WHERE tenant_id = $1 AND employee_id = $2"#,
-                tenant_id.0,
-                id,
-            )
-            .await?;
-            let claims = scalar_json(
-                &mut tx,
-                r#"SELECT json_agg(json_build_object(
-                   'category', category, 'amount', amount::text, 'expense_date', expense_date,
-                   'description', description, 'status', status, 'created_at', created_at)
-                 ORDER BY expense_date)
-                 FROM expense_claims WHERE tenant_id = $1 AND employee_id = $2"#,
-                tenant_id.0,
-                id,
-            )
-            .await?;
-            let loans = scalar_json(
-                &mut tx,
-                r#"SELECT json_agg(json_build_object(
-                   'principal', principal::text, 'balance', balance::text,
-                   'installment_amount', installment_amount::text, 'start_date', start_date,
-                   'status', status, 'note', note, 'created_at', created_at) ORDER BY created_at)
-                 FROM employee_loans WHERE tenant_id = $1 AND employee_id = $2"#,
-                tenant_id.0,
-                id,
-            )
-            .await?;
-            let payslips = scalar_json(
-                &mut tx,
-                r#"SELECT json_agg(json_build_object(
-                   'period_start', r.period_start, 'period_end', r.period_end,
-                   'base_salary', p.base_salary::text, 'gross', p.gross_earnings::text,
-                   'deductions', p.total_deductions::text, 'net', p.net_pay::text,
-                   'tax', p.tax_withheld::text, 'sso_employee', p.sso_employee::text,
-                   'sso_employer', p.sso_employer::text, 'pf_employee', p.pf_employee::text,
-                   'pf_employer', p.pf_employer::text, 'status', p.status) ORDER BY r.period_start)
-                 FROM payslips p JOIN payroll_runs r ON r.id = p.payroll_run_id
-                WHERE p.tenant_id = $1 AND p.employee_id = $2"#,
-                tenant_id.0,
-                id,
-            )
-            .await?;
-            (attendance, leave, ot, claims, loans, payslips)
-        } else {
-            (
-                json!([]),
-                json!([]),
-                json!([]),
-                json!([]),
-                json!([]),
-                json!([]),
-            )
-        };
+    sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'privacy.export', 'user', $2, $3)"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id.to_string())
+    .bind(json!({ "notice_version": NOTICE_VERSION }))
+    .execute(&mut *tx)
+    .await?;
 
     tx.commit().await?;
 
@@ -279,12 +314,7 @@ pub async fn export_personal_data(
         "account": account,
         "roles": roles,
         "consents": consents,
-        "employee": employee,
-        "attendance_days": attendance,
-        "leave_requests": leave,
-        "ot_requests": ot,
-        "expense_claims": claims,
-        "loans": loans,
-        "payslips": payslips,
+        "notifications": notifications,
+        "employees": employees,
     }))
 }

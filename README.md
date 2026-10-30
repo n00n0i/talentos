@@ -279,7 +279,8 @@ installment from a not-yet-approved run can be reversed
 
 With an empty database, open `/setup` and create the organization, entity, and
 first HR admin through the UI. The endpoint (`POST /api/v1/setup`) refuses once
-a tenant exists. The E2E suite uses this path — it does not seed test data.
+a tenant exists, unless `SETUP_TOKEN` is set (non-production) and supplied — the
+E2E suite uses that to give each spec an isolated tenant. It does not seed data.
 
 ## Statutory form templates
 

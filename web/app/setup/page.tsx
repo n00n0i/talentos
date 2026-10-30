@@ -12,6 +12,7 @@ export default function SetupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [setupToken, setSetupToken] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -33,6 +34,7 @@ export default function SetupPage() {
           entity_name: entity,
           admin_email: email,
           password,
+          setup_token: setupToken || null,
         }),
       });
       const body = await res.json().catch(() => ({}));
@@ -75,6 +77,10 @@ export default function SetupPage() {
           <div className="field">
             <label htmlFor="setup-password">รหัสผ่าน (12+ ตัวอักษร)</label>
             <input id="setup-password" data-testid="setup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label htmlFor="setup-token">Setup token (เฉพาะติดตั้งเพิ่ม/ทดสอบ)</label>
+            <input id="setup-token" data-testid="setup-token" value={setupToken} onChange={(e) => setSetupToken(e.target.value)} />
           </div>
           <div className="field">
             <label htmlFor="setup-confirm">ยืนยันรหัสผ่าน</label>

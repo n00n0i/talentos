@@ -26,6 +26,8 @@ pub struct SetupBody {
     pub geofence_lat: Option<f64>,
     pub geofence_lng: Option<f64>,
     pub geofence_radius_m: Option<i32>,
+    /// Test/non-production bootstrap secret; allows additional tenants.
+    pub setup_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -65,7 +67,12 @@ pub async fn setup(State(state): State<AppState>, Json(body): Json<SetupBody>) -
         Err(e) => return internal(&e.to_string()),
     };
     if occupied {
-        return conflict("this installation is already initialized");
+        let expected = std::env::var("SETUP_TOKEN").unwrap_or_default();
+        let production = std::env::var("APP_ENV").unwrap_or_default() == "production";
+        let supplied = body.setup_token.as_deref().unwrap_or("");
+        if production || expected.is_empty() || supplied != expected {
+            return conflict("this installation is already initialized");
+        }
     }
 
     let hash = match tokio::task::spawn_blocking({

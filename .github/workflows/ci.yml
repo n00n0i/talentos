@@ -139,6 +139,7 @@ jobs:
           RUST_LOG: warn
           # Test-only key so the 2FA enrollment E2E can encrypt the TOTP secret.
           PII_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          SETUP_TOKEN: e2e-setup-token
         run: nohup ./target/debug/talentos-gateway > /tmp/gateway.log 2>&1 &
       - uses: actions/setup-node@v4
         with:

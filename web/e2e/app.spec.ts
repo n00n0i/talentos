@@ -5,6 +5,7 @@ test.describe.configure({ mode: "serial" });
 
 let invitedEmail = "";
 const managerEmail = "manager-e2e@example.com";
+const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? "e2e-setup-token";
 
 async function login(page: Page) {
   await page.goto("/login");
@@ -46,6 +47,7 @@ test("first-run setup creates the tenant and admin", async ({ page }) => {
   await page.getByTestId("setup-email").fill("e2e@example.com");
   await page.getByTestId("setup-password").fill("E2ePassword123!");
   await page.getByTestId("setup-confirm").fill("E2ePassword123!");
+  await page.getByTestId("setup-token").fill(SETUP_TOKEN);
   await page.getByTestId("setup-submit").click();
   await expect(page.getByRole("heading", { name: "เข้าสู่ระบบ" })).toBeVisible();
   await login(page);

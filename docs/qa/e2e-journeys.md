@@ -1,7 +1,9 @@
 # E2E journeys (real user clicks)
 
-Playwright (`web/e2e/app.spec.ts`, serial) starts from an empty database, creates
-the tenant/admin through `/setup`, and builds every fixture through real UI clicks:
+Playwright starts from an empty database, creates each tenant/admin through
+`/setup`, and builds every fixture through real UI clicks. `roles.spec.ts` creates
+an isolated tenant (via the non-production `SETUP_TOKEN`) and runs the full
+role-access matrix. Coverage:
 
 | Area | Cases |
 |---|---|

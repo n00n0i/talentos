@@ -19,7 +19,8 @@ async fn recalc_clears_anomaly_review() {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
-    let raw = PgPool::connect(&url).await.expect("connect");
+    let admin_url = std::env::var("DATABASE_ADMIN_URL").unwrap_or_else(|_| url.clone());
+    let raw = PgPool::connect(&admin_url).await.expect("connect admin");
     let pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
 
     let (tenant_id, _entity_id, run_id, _employees) =
@@ -91,7 +92,8 @@ async fn high_salary_records_sso_cap_warning() {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
-    let raw = PgPool::connect(&url).await.expect("connect");
+    let admin_url = std::env::var("DATABASE_ADMIN_URL").unwrap_or_else(|_| url.clone());
+    let raw = PgPool::connect(&admin_url).await.expect("connect admin");
     let pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
 
     let (tenant_id, _entity_id, run_id, _employees) =
@@ -122,7 +124,8 @@ async fn anomalies_are_tenant_scoped() {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
-    let raw = PgPool::connect(&url).await.expect("connect");
+    let admin_url = std::env::var("DATABASE_ADMIN_URL").unwrap_or_else(|_| url.clone());
+    let raw = PgPool::connect(&admin_url).await.expect("connect admin");
     let pool = TenantPool::connect(&url, 4).await.expect("tenant pool");
 
     let (ta, _ea, run_a, _emp_a) = seed(&raw, &[("EMPA01", Decimal::new(85_000, 0))]).await;

@@ -305,6 +305,13 @@ An approved payroll run exports `GET /api/v1/payroll/runs/:id/pf-remittance.csv`
 with per-employee and employer amounts plus totals, deterministic and
 CSV-injection safe. `/payroll` links it next to the GL export.
 
+## Payroll anomaly review
+
+Before approving a run, `/payroll` shows the payslip anomalies (severity, code,
+employee). If any exist, approval is blocked until HR reviews them
+(`POST /payroll/runs/:id/anomalies/review`); a recalculation clears the review so
+the fresh anomalies must be checked again.
+
 ## Bank payout
 
 `GET /payroll/runs/:id/bank-payout.csv` exports an approved (or completed) run

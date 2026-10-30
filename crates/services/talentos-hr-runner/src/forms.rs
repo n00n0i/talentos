@@ -15,6 +15,7 @@ pub const FORM_TYPE_50TAWI: &str = "50tawi";
 pub const FORM_TYPE_SSO1_10: &str = "sso1_10";
 pub const FORM_TYPE_PND1: &str = "pnd1";
 pub const FORM_TYPE_PND1A: &str = "pnd1a";
+pub const FORM_TYPE_BANK_PAYOUT: &str = "bank_payout";
 
 /// Data keys a template field/column may pull from. Anything else is rejected.
 pub const ALLOWED_SOURCES: &[&str] = &[
@@ -38,6 +39,9 @@ pub const ALLOWED_SOURCES: &[&str] = &[
     "income_type",
     "cert_no",
     "year",
+    "bank_name",
+    "bank_account",
+    "net",
 ];
 
 /// Sources whose values are summed in the CSV totals row.
@@ -113,7 +117,11 @@ pub enum FormError {
 fn is_form_type(form_type: &str) -> bool {
     matches!(
         form_type,
-        FORM_TYPE_50TAWI | FORM_TYPE_SSO1_10 | FORM_TYPE_PND1 | FORM_TYPE_PND1A
+        FORM_TYPE_50TAWI
+            | FORM_TYPE_SSO1_10
+            | FORM_TYPE_PND1
+            | FORM_TYPE_PND1A
+            | FORM_TYPE_BANK_PAYOUT
     )
 }
 
@@ -145,7 +153,7 @@ pub fn validate(form_type: &str, config: &FormConfig) -> Result<(), FormError> {
                 }
             }
         }
-        FORM_TYPE_SSO1_10 | FORM_TYPE_PND1 | FORM_TYPE_PND1A => {
+        FORM_TYPE_SSO1_10 | FORM_TYPE_PND1 | FORM_TYPE_PND1A | FORM_TYPE_BANK_PAYOUT => {
             if config.columns.is_empty() || config.columns.len() > MAX_ROWS {
                 return Err(FormError::Invalid(format!(
                     "columns must have 1..{MAX_ROWS} rows"
@@ -671,6 +679,117 @@ pub async fn export_pnd1a_csv(
     });
 
     Ok((filename, body))
+}
+
+/// GET /api/v1/payroll/runs/:id/bank-payout.csv — bank transfer file from the
+/// active `bank_payout` template. Approved runs only. Column header + one row
+/// per payslip (no totals/metadata, so banks parse it directly). Missing bank
+/// account becomes an empty cell. Returns `(filename, body)`.
+pub async fn export_bank_payout_csv(
+    conn: &mut PgConnection,
+    run_id: Uuid,
+    pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
+) -> Result<(String, String), FormError> {
+    let template = load_active_template(conn, FORM_TYPE_BANK_PAYOUT).await?;
+
+    let run = sqlx::query(
+        "SELECT status, period_start, period_end FROM payroll_runs \
+         WHERE id = $1 AND tenant_id = current_tenant_id()",
+    )
+    .bind(run_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+
+    let (period_start, period_end) = match run {
+        Some(row) => {
+            if row.get::<String, _>("status") != "approved" {
+                return Err(FormError::NotFound);
+            }
+            (
+                row.get::<chrono::NaiveDate, _>("period_start"),
+                row.get::<chrono::NaiveDate, _>("period_end"),
+            )
+        }
+        None => return Err(FormError::NotFound),
+    };
+
+    let rows = sqlx::query(
+        "SELECT e.employee_code, e.first_name_th, e.last_name_th, \
+                e.bank_name, e.bank_account_number, p.net_pay \
+         FROM payslips p \
+         JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id \
+         WHERE p.payroll_run_id = $1 AND p.tenant_id = current_tenant_id() \
+         ORDER BY e.employee_code",
+    )
+    .bind(run_id)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    let mut body = String::from("\u{feff}");
+    body.push_str(
+        &template
+            .config
+            .columns
+            .iter()
+            .map(|c| csv_field(&c.label))
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+    body.push_str("\r\n");
+    for row in &rows {
+        let values: Vec<String> = template
+            .config
+            .columns
+            .iter()
+            .map(|c| resolve_bank_value(&c.source, row, pii))
+            .collect();
+        body.push_str(
+            &values
+                .iter()
+                .map(|v| csv_field(v))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        body.push_str("\r\n");
+    }
+
+    let filename = format!("bank-payout-{run_id}-{period_start}-{period_end}.csv");
+    Ok((filename, body))
+}
+
+fn resolve_bank_value(
+    source: &str,
+    row: &sqlx::postgres::PgRow,
+    pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
+) -> String {
+    match source {
+        "employee_code" => row
+            .try_get::<String, _>("employee_code")
+            .unwrap_or_default(),
+        "employee_name" => format!(
+            "{} {}",
+            row.try_get::<String, _>("first_name_th")
+                .unwrap_or_default(),
+            row.try_get::<String, _>("last_name_th").unwrap_or_default()
+        ),
+        "bank_name" => row
+            .try_get::<Option<String>, _>("bank_name")
+            .ok()
+            .flatten()
+            .unwrap_or_default(),
+        "bank_account" => decrypt(
+            pii,
+            row.try_get::<Option<String>, _>("bank_account_number")
+                .ok()
+                .flatten(),
+        )
+        .unwrap_or_default(),
+        "net" => row
+            .try_get::<rust_decimal::Decimal, _>("net_pay")
+            .map(format_money)
+            .unwrap_or_default(),
+        _ => String::new(),
+    }
 }
 
 fn resolve_column_value(

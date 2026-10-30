@@ -30,9 +30,12 @@ const ALLOWED_SOURCES = [
   "income_type",
   "cert_no",
   "year",
+  "bank_name",
+  "bank_account",
+  "net",
 ];
 
-type FormType = "50tawi" | "sso1_10" | "pnd1" | "pnd1a";
+type FormType = "50tawi" | "sso1_10" | "pnd1" | "pnd1a" | "bank_payout";
 
 function newKey(prefix: string, used: string[]) {
   let i = used.length + 1;
@@ -175,9 +178,9 @@ export default function FormsPage() {
       ? `/api/gw/api/v1/payroll/payslips/${encodeURIComponent(payslipId.trim())}/50tawi`
       : "";
   const runPreview =
-    runId.trim() && (formType === "sso1_10" || formType === "pnd1")
+    runId.trim() && (formType === "sso1_10" || formType === "pnd1" || formType === "bank_payout")
       ? `/api/gw/api/v1/payroll/runs/${encodeURIComponent(runId.trim())}/${
-          formType === "sso1_10" ? "sso1-10" : "pnd1"
+          formType === "sso1_10" ? "sso1-10" : formType === "pnd1" ? "pnd1" : "bank-payout"
         }.csv`
       : "";
   const yearPreview =
@@ -211,6 +214,7 @@ export default function FormsPage() {
               <option value="sso1_10">สปส.1-10 (รายการส่งเงินสมทบ)</option>
               <option value="pnd1">ภ.ง.ด.1 (ภาษีหัก ณ ที่จ่ายรายเดือน)</option>
               <option value="pnd1a">ภ.ง.ด.1ก (ภาษีหัก ณ ที่จ่ายรายปี)</option>
+              <option value="bank_payout">ไฟล์โอนเงิน (Bank Payout)</option>
             </select>
           </div>
           <div className="field">
@@ -454,7 +458,7 @@ export default function FormsPage() {
                 rel="noreferrer"
                 aria-disabled={!runPreview}
               >
-                ดาวน์โหลด {formType === "pnd1" ? "ภ.ง.ด.1" : "สปส.1-10"}
+                ดาวน์โหลด {formType === "pnd1" ? "ภ.ง.ด.1" : formType === "bank_payout" ? "ไฟล์โอนเงิน" : "สปส.1-10"}
               </a>
             </div>
           </div>

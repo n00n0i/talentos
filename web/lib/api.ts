@@ -59,6 +59,7 @@ export const RUN_STATUS: Record<string, { label: string; tone: string }> = {
   pending_approval: { label: "รออนุมัติ", tone: "warning" },
   approved: { label: "อนุมัติแล้ว", tone: "success" },
   paid: { label: "จ่ายแล้ว", tone: "success" },
+  completed: { label: "จ่ายแล้ว", tone: "success" },
   failed: { label: "ล้มเหลว", tone: "danger" },
 };
 
@@ -88,6 +89,8 @@ export type PayrollRun = {
   totalTax: string;
   totalSso: string;
   totalPf: string;
+  paidAt?: string | null;
+  paymentReference?: string | null;
 };
 
 export type Payslip = {

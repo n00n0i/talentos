@@ -21,7 +21,7 @@ function monthDefaults() {
 }
 
 const RUNS_QUERY =
-  "{ payrollRuns(limit: 24) { id periodStart periodEnd paymentDate status totalEmployees totalGross totalNet totalTax totalSso totalPf } }";
+  "{ payrollRuns(limit: 24) { id periodStart periodEnd paymentDate status totalEmployees totalGross totalNet totalTax totalSso totalPf paidAt paymentReference } }";
 
 export default function PayrollPage() {
   const defaults = useRef(monthDefaults());
@@ -129,6 +129,26 @@ export default function PayrollPage() {
     }
   }
 
+  async function markPaid(run: PayrollRun) {
+    const raw = window.prompt("อ้างอิงการจ่าย (ไม่บังคับ)");
+    if (raw === null) return;
+    const reference = raw.trim();
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/payroll/runs/${run.id}/mark-paid`, {
+        method: "POST",
+        body: JSON.stringify({ reference: reference || null }),
+      });
+      setNotice("ทำเครื่องหมายจ่ายแล้ว");
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="page-head">
@@ -213,6 +233,7 @@ export default function PayrollPage() {
                     onToggle={() => toggle(run)}
                     onApprove={() => approve(run)}
                     onSendPf={() => sendPf(run)}
+                    onMarkPaid={() => markPaid(run)}
                   />
                 );
               })}
@@ -234,6 +255,7 @@ function RunRow({
   onToggle,
   onApprove,
   onSendPf,
+  onMarkPaid,
 }: {
   run: PayrollRun;
   status: { label: string; tone: string };
@@ -244,6 +266,7 @@ function RunRow({
   onToggle: () => void;
   onApprove: () => void;
   onSendPf: () => void;
+  onMarkPaid: () => void;
 }) {
   return (
     <>
@@ -273,6 +296,23 @@ function RunRow({
           </a>
           {run.status === "approved" && (
             <>
+              <a
+                className="badge accent"
+                data-testid="bank-payout"
+                href={`/api/gw/api/v1/payroll/runs/${run.id}/bank-payout.csv`}
+                style={{ marginRight: 6 }}
+              >
+                ดาวน์โหลดไฟล์โอน
+              </a>
+              <button
+                className="btn btn-sm btn-primary"
+                data-testid="mark-paid"
+                disabled={busy}
+                onClick={onMarkPaid}
+                style={{ marginRight: 6 }}
+              >
+                ทำเครื่องหมายจ่ายแล้ว
+              </button>
               <a
                 className="badge accent"
                 href={`/api/gw/api/v1/payroll/runs/${run.id}/export.gl.csv`}
@@ -309,6 +349,13 @@ function RunRow({
                 </span>
               )}
             </>
+          )}
+          {run.status === "completed" && (
+            <span className="badge" data-testid="paid-info" style={{ marginLeft: 6 }}>
+              จ่ายแล้ว
+              {run.paidAt ? ` · ${thDate(run.paidAt.slice(0, 10))}` : ""}
+              {run.paymentReference ? ` · ${run.paymentReference}` : ""}
+            </span>
           )}
           {run.status === "pending_approval" && (
             <button className="btn btn-sm btn-primary" data-testid="approve-run" disabled={busy} onClick={onApprove}>

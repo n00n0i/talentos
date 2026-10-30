@@ -312,6 +312,16 @@ employee). If any exist, approval is blocked until HR reviews them
 (`POST /payroll/runs/:id/anomalies/review`); a recalculation clears the review so
 the fresh anomalies must be checked again.
 
+## Privacy (PDPA)
+
+Every user has `/privacy`: accept the current privacy-notice version (recorded
+with a timestamp in `privacy_consents`) and download a JSON copy of their own
+data — account, roles, consent history, notifications, every linked employee
+profile (decrypted PII), punch events, attendance days, leave, OT, claims,
+loans, and payslips. Exports are tenant-scoped
+and audited as `privacy.export`. Automatic deletion/anonymisation is not
+implemented; the notice states the statutory retention position.
+
 ## Bank payout
 
 `GET /payroll/runs/:id/bank-payout.csv` exports an approved (or completed) run
@@ -720,7 +730,9 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 ### Trust & ops
 
 - [ ] SSO (Google/Microsoft/Azure AD), WebAuthn/passkeys, IP allowlist.
-- [ ] PDPA consent/DSAR/retention tooling; data-export and deletion workflows.
+- [x] PDPA privacy-notice acknowledgement and personal-data export (DSAR).
+- [ ] PDPA deletion/anonymisation and retention purge scheduler (needs a policy
+      decision; statutory payroll/tax records must be kept).
 - [ ] Prometheus metrics/tracing/alerting, backup-restore drill, soak/load test
       beyond 500 employees, secrets rotation runbook.
 - [ ] English UI and TH/EN toggle.

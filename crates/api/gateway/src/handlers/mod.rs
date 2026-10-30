@@ -19,6 +19,7 @@ pub mod ot;
 pub mod payroll;
 pub mod pf;
 pub mod plugins;
+pub mod privacy;
 pub mod reports;
 pub mod settings;
 pub mod settlement;

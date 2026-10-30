@@ -8,8 +8,8 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, attendance, audit, auth, calendar, claims, delegations, employees, forms, graphql, health,
-    leave, loans, mcp, me, memory, notifications, ot, payroll, pf, plugins, reports, settings,
-    settlement, setup, users,
+    leave, loans, mcp, me, memory, notifications, ot, payroll, pf, plugins, privacy, reports,
+    settings, settlement, setup, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -48,6 +48,9 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/me/payslips/:id/pdf", get(me::pdf))
         .route("/api/v1/me/attendance", get(me::my_attendance))
         .route("/api/v1/me/attendance/punch", post(me::punch))
+        .route("/api/v1/me/privacy", get(privacy::status))
+        .route("/api/v1/me/privacy/consent", post(privacy::accept))
+        .route("/api/v1/me/data-export", get(privacy::export))
         .route("/api/v1/auth/change-password", post(users::change_password))
         .route(
             "/api/v1/employees",

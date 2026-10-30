@@ -18,6 +18,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/payroll", label: "รอบเงินเดือน", icon: "wallet" },
   { href: "/payslip", label: "แบบฟอร์มสลิป", icon: "file" },
   { href: "/me/payslips", label: "สลิปของฉัน", icon: "file" },
+  { href: "/privacy", label: "ความเป็นส่วนตัว", icon: "file" },
 ];
 
 const ADMIN_NAV: { href: string; label: string; icon: IconName }[] = [
@@ -112,7 +113,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         { href: "/reports", label: "รายงาน", icon: "file" as IconName },
       ]
     : NAV;
-  const employeeNav = ["/clock", "/leave", "/ot", "/claims", "/me/payslips"];
+  const employeeNav = ["/clock", "/leave", "/ot", "/claims", "/me/payslips", "/privacy"];
   const items = !me
     ? baseNav
     : canHr

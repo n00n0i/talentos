@@ -360,6 +360,7 @@ pub struct PunchBody {
     pub lat: f64,
     pub lng: f64,
     pub accuracy_m: Option<f64>,
+    pub client_id: Option<String>,
 }
 
 /// Response for a mobile punch.
@@ -407,6 +408,7 @@ pub async fn punch(
         lat: body.lat,
         lng: body.lng,
         accuracy_m: body.accuracy_m,
+        client_id: body.client_id,
     };
 
     match talentos_hr_runner::attendance::punch(&state.pool, ctx.tenant_id, ctx.user_id.0, input)

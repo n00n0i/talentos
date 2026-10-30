@@ -65,6 +65,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  // Register the offline service worker (network-first, cache fallback for
+  // navigations). Best-effort: failures must never affect the app.
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
   async function logout() {
     await fetch("/api/session/logout", { method: "POST" });
     router.replace("/login");

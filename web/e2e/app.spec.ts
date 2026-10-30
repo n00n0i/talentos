@@ -313,6 +313,27 @@ test("employee punches in and out from the clock page", async ({ page, context }
   await expect(page.getByTestId("day-row").first()).toBeVisible();
 });
 
+test("offline punch is queued locally and syncs when back online", async ({ page, context }) => {
+  await login(page);
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill(invitedEmail);
+  await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 13.7563, longitude: 100.5018 });
+  await page.goto("/clock");
+
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "เข้างาน" }).click();
+  await expect(page.getByTestId("queue-status")).toContainText("บันทึกในเครื่องแล้ว");
+
+  await context.setOffline(false);
+  await expect(page.getByTestId("sync-status")).toContainText("ซิงก์แล้ว");
+});
+
 test("HR creates a shift, corrects and approves a derived day", async ({ page }) => {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
   await login(page);

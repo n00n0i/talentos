@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, gw, handleApiError, thDate } from "@/lib/api";
 
 type Day = {
@@ -14,6 +14,27 @@ type Day = {
 };
 
 type Fix = { lat: number; lng: number; accuracy: number };
+
+type QueuedPunch = { client_id: string; kind: "in" | "out"; lat: number; lng: number; accuracy: number };
+
+const QUEUE_KEY = "talentos_clock_queue";
+
+function readQueue(): QueuedPunch[] {
+  try {
+    const raw = localStorage.getItem(QUEUE_KEY);
+    return raw ? (JSON.parse(raw) as QueuedPunch[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeQueue(items: QueuedPunch[]) {
+  try {
+    localStorage.setItem(QUEUE_KEY, JSON.stringify(items));
+  } catch {
+    // storage full/unavailable: drops the queue rather than breaking the punch
+  }
+}
 
 const STATUS: Record<string, { label: string; tone: string }> = {
   pending: { label: "รออนุมัติ", tone: "warning" },
@@ -58,6 +79,8 @@ export default function ClockPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [syncMsg, setSyncMsg] = useState("");
+  const flushing = useRef(false);
 
   const loadDays = useCallback(async () => {
     try {
@@ -72,6 +95,46 @@ export default function ClockPage() {
     }
   }, [today]);
 
+  const flushQueue = useCallback(async () => {
+    const queue = readQueue();
+    if (queue.length === 0) return;
+    let synced = 0;
+    let skipped = 0;
+    let stoppedAt = queue.length;
+    for (let i = 0; i < queue.length; i++) {
+      const item = queue[i];
+      try {
+        await gw("api/v1/me/attendance/punch", {
+          method: "POST",
+          body: JSON.stringify({
+            client_id: item.client_id,
+            kind: item.kind,
+            lat: item.lat,
+            lng: item.lng,
+            accuracy_m: item.accuracy,
+          }),
+        });
+        synced += 1;
+      } catch (e) {
+        if (e instanceof ApiError) {
+          // Business rejection (e.g. outside geofence): retrying won't change it.
+          skipped += 1;
+        } else {
+          stoppedAt = i; // still offline: keep this and the rest for later
+          break;
+        }
+      }
+    }
+    writeQueue(queue.slice(stoppedAt));
+    if (synced > 0 || skipped > 0) {
+      const parts = [];
+      if (synced > 0) parts.push(`ซิงก์แล้ว ${synced} รายการ`);
+      if (skipped > 0) parts.push(`ข้าม ${skipped} รายการ`);
+      setSyncMsg(parts.join(" · "));
+      await loadDays();
+    }
+  }, [loadDays]);
+
   const refreshLocation = useCallback(() => {
     setGeoError("");
     locate().then(setFix, (e: Error) => setGeoError(e.message));
@@ -82,17 +145,41 @@ export default function ClockPage() {
     refreshLocation();
   }, [loadDays, refreshLocation]);
 
+  // Flush any queued offline punches on mount and whenever the network returns.
+  useEffect(() => {
+    const run = () => {
+      if (flushing.current) return;
+      flushing.current = true;
+      flushQueue().finally(() => {
+        flushing.current = false;
+      });
+    };
+    run();
+    window.addEventListener("online", run);
+    return () => window.removeEventListener("online", run);
+  }, [flushQueue]);
+
   async function punch(kind: "in" | "out") {
     setBusy(true);
     setError("");
     setNotice("");
+    setSyncMsg("");
     setDistance(null);
+    const client_id = crypto.randomUUID();
+    let here: Fix;
     try {
-      const here = await locate();
+      here = await locate();
       setFix(here);
+    } catch (e) {
+      handleApiError(e, setError);
+      setBusy(false);
+      return;
+    }
+    try {
       await gw("api/v1/me/attendance/punch", {
         method: "POST",
         body: JSON.stringify({
+          client_id,
           kind,
           lat: here.lat,
           lng: here.lng,
@@ -102,9 +189,17 @@ export default function ClockPage() {
       setNotice(kind === "in" ? "บันทึกเวลาแล้ว: เข้างาน" : "บันทึกเวลาแล้ว: ออกงาน");
       await loadDays();
     } catch (e) {
-      const m = e instanceof Error ? /outside geofence: ([\d.]+)m > ([\d.]+)m/.exec(e.message) : null;
-      if (m) setDistance({ away: Math.round(Number(m[1])).toString(), allowed: m[2] });
-      else handleApiError(e, setError);
+      if (e instanceof ApiError) {
+        const m = /outside geofence: ([\d.]+)m > ([\d.]+)m/.exec(e.message);
+        if (m) setDistance({ away: Math.round(Number(m[1])).toString(), allowed: m[2] });
+        else handleApiError(e, setError);
+      } else {
+        // Network failure: queue the punch and replay it idempotently later.
+        const queue = readQueue();
+        queue.push({ client_id, kind, lat: here.lat, lng: here.lng, accuracy: here.accuracy });
+        writeQueue(queue);
+        setNotice("บันทึกในเครื่องแล้ว จะซิงก์เมื่อออนไลน์");
+      }
     } finally {
       setBusy(false);
     }
@@ -165,7 +260,16 @@ export default function ClockPage() {
                 {error}
               </p>
             )}
-            {notice && <p className="badge success">{notice}</p>}
+            {notice && (
+              <p className="badge success" data-testid="queue-status">
+                {notice}
+              </p>
+            )}
+            {syncMsg && (
+              <p className="badge success" data-testid="sync-status">
+                {syncMsg}
+              </p>
+            )}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <button

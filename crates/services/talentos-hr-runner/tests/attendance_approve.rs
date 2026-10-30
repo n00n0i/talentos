@@ -225,12 +225,14 @@ async fn pending_day_is_not_paid() {
     .await;
 
     let input_in = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
     let input_out = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::Out,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -302,12 +304,14 @@ async fn approve_writes_payroll_row_with_hours_and_ot_kind() {
     .await;
 
     let input_in = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
     let input_out = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::Out,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -396,12 +400,14 @@ async fn correction_resets_approved_day_and_withdraws_payroll_row_until_reapprov
     .await;
 
     let input_in = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
     let input_out = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::Out,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -540,6 +546,7 @@ async fn incomplete_day_cannot_be_approved() {
         TenantId(tenant_id),
         user_id,
         PunchInput {
+            client_id: None,
             kind: talentos_attendance::PunchKind::In,
             lat: OFFICE_LAT,
             lng: OFFICE_LNG,
@@ -600,6 +607,7 @@ async fn tenant_b_cannot_approve_tenant_a_day() {
     .await;
 
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -665,6 +673,7 @@ async fn list_days_filters_by_date_range_employee_and_status() {
     .await;
 
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,

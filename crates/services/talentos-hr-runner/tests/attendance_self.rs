@@ -83,6 +83,7 @@ async fn linked_user_sees_only_own_days() {
         // Employee 0 punches on the 27th, employee 1 on the 26th.
         let day = 27 - i as u32;
         let input = PunchInput {
+            client_id: None,
             kind: talentos_attendance::PunchKind::In,
             lat: LAT,
             lng: LNG,

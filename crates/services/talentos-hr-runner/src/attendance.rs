@@ -35,12 +35,14 @@ pub struct ShiftView {
 }
 
 /// Input for a mobile punch.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct PunchInput {
     pub kind: PunchKind,
     pub lat: f64,
     pub lng: f64,
     pub accuracy_m: Option<f64>,
+    /// Client-generated UUID; replays with the same id are idempotent.
+    pub client_id: Option<String>,
 }
 
 /// One row of a device import batch.
@@ -341,8 +343,10 @@ pub async fn punch_at(
 
     let event_id = sqlx::query_scalar::<_, Uuid>(
         r#"INSERT INTO attendance_events
-             (tenant_id, employee_id, kind, source, occurred_at, work_date, distance_m, accuracy_m)
-           VALUES ($1,$2,$3,'mobile',$4,$5,$6,$7)
+             (tenant_id, employee_id, kind, source, occurred_at, work_date, distance_m, accuracy_m, client_id)
+           VALUES ($1,$2,$3,'mobile',$4,$5,$6,$7,$8)
+           ON CONFLICT (tenant_id, employee_id, client_id) WHERE client_id IS NOT NULL
+           DO UPDATE SET client_id = EXCLUDED.client_id
            RETURNING id"#,
     )
     .bind(tenant_id.0)
@@ -352,6 +356,7 @@ pub async fn punch_at(
     .bind(work_date)
     .bind(distance)
     .bind(input.accuracy_m)
+    .bind(&input.client_id)
     .fetch_one(&mut *tx)
     .await?;
 

@@ -168,6 +168,7 @@ async fn punch_inside_geofence_is_accepted() {
     .await;
 
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -220,6 +221,7 @@ async fn punch_outside_geofence_is_rejected() {
     .await;
 
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT + 0.01,
         lng: OFFICE_LNG + 0.01,
@@ -278,6 +280,7 @@ async fn punch_within_accuracy_tolerance_is_accepted() {
     // Approximate offset: 1 degree lat ~ 111 km; 130 m ~ 0.00117 degrees.
     let delta = distance_m / 111_000.0;
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT + delta,
         lng: OFFICE_LNG,
@@ -320,6 +323,7 @@ async fn punch_without_geofence_is_rejected() {
     .await;
 
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -374,6 +378,7 @@ async fn unlinked_user_is_rejected() {
 
     let unlinked_user = Uuid::new_v4();
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -429,6 +434,7 @@ async fn overnight_punch_lands_on_previous_work_date() {
 
     // 01:00 Bangkok on 2026-10-28 falls inside the 27th's 22:00-06:00 shift.
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -456,6 +462,7 @@ async fn punch_pair(
     out_at: DateTime<Utc>,
 ) -> talentos_hr_runner::attendance::DayView {
     let mk = |kind| PunchInput {
+        client_id: None,
         kind,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -616,6 +623,7 @@ async fn holiday_punch_marks_day_holiday() {
     seed_holiday(&raw, tenant_id, bkk_date(2026, 10, 27)).await;
 
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -670,12 +678,14 @@ async fn two_punches_same_second_stay_consistent() {
 
     let same_time = bkk_at(2026, 10, 27, 9, 0);
     let input_in = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
     let input_out = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::Out,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -734,6 +744,7 @@ async fn negative_accuracy_is_rejected() {
     .await;
 
     let input = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -788,12 +799,14 @@ async fn new_punch_resets_approved_day_to_pending() {
     .await;
 
     let input_in = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
         accuracy_m: Some(10.0),
     };
     let input_out = PunchInput {
+        client_id: None,
         kind: talentos_attendance::PunchKind::Out,
         lat: OFFICE_LAT,
         lng: OFFICE_LNG,
@@ -813,7 +826,7 @@ async fn new_punch_resets_approved_day_to_pending() {
         &pool,
         TenantId(tenant_id),
         user_id,
-        input_out,
+        input_out.clone(),
         bkk_at(2026, 10, 27, 18, 0),
     )
     .await
@@ -889,4 +902,89 @@ async fn user_id_of(pool: &PgPool, tenant_id: Uuid, employee_id: Uuid) -> Uuid {
         .expect("fetch user_id");
     let _ = tx.rollback().await;
     row.get::<Uuid, _>("user_id")
+}
+
+#[tokio::test]
+async fn client_id_replay_is_idempotent() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(9, 0),
+        bkk_time(18, 0),
+    )
+    .await;
+
+    let client = Uuid::new_v4().to_string();
+    let punch_in = |client_id: Option<String>| PunchInput {
+        client_id,
+        kind: talentos_attendance::PunchKind::In,
+        lat: OFFICE_LAT,
+        lng: OFFICE_LNG,
+        accuracy_m: Some(10.0),
+    };
+
+    // A replayed punch with the same client id lands on the existing event.
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        punch_in(Some(client.clone())),
+        bkk_at(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("first punch");
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        punch_in(Some(client)),
+        bkk_at(2026, 10, 27, 9, 0),
+    )
+    .await
+    .expect("replayed punch");
+    assert_eq!(
+        event_count(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await,
+        1,
+        "same client id must not duplicate the event"
+    );
+
+    // A distinct client id creates a new event.
+    punch_at(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        punch_in(Some(Uuid::new_v4().to_string())),
+        bkk_at(2026, 10, 27, 9, 5),
+    )
+    .await
+    .expect("distinct punch");
+    assert_eq!(
+        event_count(&raw, tenant_id, employee_id, bkk_date(2026, 10, 27)).await,
+        2,
+        "a distinct client id must create a second event"
+    );
+
+    cleanup(&raw, tenant_id).await;
 }

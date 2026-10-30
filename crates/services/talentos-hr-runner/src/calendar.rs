@@ -136,7 +136,7 @@ pub async fn calendar(
     }
 
     for row in leave {
-        let start: NaiveDate = row.try_get("start_date")?;
+        let start: NaiveDate = std::cmp::max(row.try_get::<NaiveDate, _>("start_date")?, from);
         let entry = buckets.entry(start).or_default();
         entry.1.push(CalendarLeave {
             employee_code: row.try_get("employee_code")?,

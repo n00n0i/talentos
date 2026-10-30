@@ -305,6 +305,12 @@ An approved payroll run exports `GET /api/v1/payroll/runs/:id/pf-remittance.csv`
 with per-employee and employer amounts plus totals, deterministic and
 CSV-injection safe. `/payroll` links it next to the GL export.
 
+## Team calendar
+
+`/calendar` (HR/payroll/manager) shows a month of holidays, pending/approved
+leave, and OT per day. Leave is bucketed under its start date (clamped to the
+selected month when it started earlier); empty days are omitted.
+
 ## Reports and GL
 
 `/reports` (HR/payroll) shows headcount by department, payroll cost by

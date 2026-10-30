@@ -125,6 +125,14 @@ pub fn build(state: AppState) -> Router {
             post(payroll::approve_payroll_run),
         )
         .route(
+            "/api/v1/payroll/runs/:id/anomalies",
+            get(payroll::get_payroll_anomalies),
+        )
+        .route(
+            "/api/v1/payroll/runs/:id/anomalies/review",
+            post(payroll::review_payroll_anomalies),
+        )
+        .route(
             "/api/v1/payroll/runs/:id/mark-paid",
             post(payroll::mark_paid),
         )

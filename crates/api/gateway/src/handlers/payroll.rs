@@ -207,14 +207,14 @@ pub async fn approve_payroll_run(
     };
 
     let run = sqlx::query(
-        "SELECT period_start, period_end, status FROM payroll_runs WHERE id = $1 AND tenant_id = $2",
+        "SELECT period_start, period_end, status, anomaly_reviewed_at FROM payroll_runs WHERE id = $1 AND tenant_id = $2",
     )
     .bind(id)
     .bind(ctx.tenant_id.0)
     .fetch_optional(&mut *tx)
     .await;
 
-    let (period_start, period_end) = match run {
+    let (period_start, period_end, anomaly_reviewed_at) = match run {
         Ok(Some(row)) => {
             let status: String = row.get("status");
             if status == "approved" {
@@ -236,7 +236,8 @@ pub async fn approve_payroll_run(
             }
             let s: NaiveDate = row.get("period_start");
             let e: NaiveDate = row.get("period_end");
-            (s, e)
+            let reviewed: Option<chrono::DateTime<chrono::Utc>> = row.get("anomaly_reviewed_at");
+            (s, e, reviewed)
         }
         Ok(None) => {
             let _ = tx.rollback().await;
@@ -247,6 +248,37 @@ pub async fn approve_payroll_run(
             return internal_err(e);
         }
     };
+
+    // A run with anomalies must be reviewed before approval.
+    let anomaly_count: i64 = match sqlx::query_scalar(
+        "SELECT count(*) FROM payslips p WHERE p.payroll_run_id = $1 AND p.tenant_id = $2 \
+         AND jsonb_array_length(p.anomalies) > 0",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(n) => n,
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(e);
+        }
+    };
+    if anomaly_count > 0 && anomaly_reviewed_at.is_none() {
+        let _ = tx.rollback().await;
+        return (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                error: "anomalies_not_reviewed".into(),
+                message: "Payroll anomalies must be reviewed before approval".into(),
+                details: vec![],
+                request_id: Uuid::new_v4().to_string(),
+                retry_after_seconds: None,
+            }),
+        )
+            .into_response();
+    }
 
     let updated = sqlx::query(
         "UPDATE payroll_runs SET status = 'approved', updated_at = now() WHERE id = $1 AND tenant_id = $2 AND status = 'pending_approval'",
@@ -289,6 +321,193 @@ pub async fn approve_payroll_run(
         })),
     )
         .into_response()
+}
+
+/// GET /api/v1/payroll/runs/:id/anomalies — flatten payslip anomalies into rows.
+pub async fn get_payroll_anomalies(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "approve") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
+
+    let run = sqlx::query(
+        "SELECT anomaly_reviewed_at, anomaly_reviewed_by FROM payroll_runs WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await;
+
+    let (reviewed_at, reviewed_by) = match run {
+        Ok(Some(row)) => (
+            row.try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("anomaly_reviewed_at")
+                .unwrap_or(None),
+            row.try_get::<Option<Uuid>, _>("anomaly_reviewed_by")
+                .unwrap_or(None),
+        ),
+        Ok(None) => {
+            let _ = tx.rollback().await;
+            return not_found();
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(e);
+        }
+    };
+
+    let rows = sqlx::query(
+        r#"SELECT e.employee_code, e.first_name_th, e.last_name_th, p.anomalies
+             FROM payslips p
+             JOIN employees e ON e.id = p.employee_id AND e.tenant_id = p.tenant_id
+            WHERE p.payroll_run_id = $1 AND p.tenant_id = $2
+            ORDER BY e.employee_code"#,
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .fetch_all(&mut *tx)
+    .await;
+    let _ = tx.rollback().await;
+
+    let rows = match rows {
+        Ok(rows) => rows,
+        Err(e) => return internal_err(e),
+    };
+
+    let mut anomalies: Vec<PayrollAnomalyRow> = Vec::new();
+    for row in &rows {
+        let code: String = row.try_get("employee_code").unwrap_or_default();
+        let first: String = row.try_get("first_name_th").unwrap_or_default();
+        let last: String = row.try_get("last_name_th").unwrap_or_default();
+        let name = format!("{first} {last}");
+        let raw: serde_json::Value = row.try_get("anomalies").unwrap_or(serde_json::Value::Null);
+        for (a_code, severity, message) in parse_anomaly_array(&raw) {
+            anomalies.push(PayrollAnomalyRow {
+                employee_code: code.clone(),
+                employee_name: name.clone(),
+                code: a_code,
+                severity,
+                message,
+            });
+        }
+    }
+
+    let error = anomalies.iter().filter(|a| a.severity == "error").count();
+    let warning = anomalies.iter().filter(|a| a.severity == "warning").count();
+
+    (
+        StatusCode::OK,
+        Json(PayrollAnomaliesResponse {
+            run_id: id.to_string(),
+            reviewed_at: reviewed_at.map(|t| t.to_rfc3339()),
+            reviewed_by: reviewed_by.map(|u| u.to_string()),
+            counts: AnomalyCounts { error, warning },
+            anomalies,
+        }),
+    )
+        .into_response()
+}
+
+/// POST /api/v1/payroll/runs/:id/anomalies/review — record reviewer for a run's anomalies.
+pub async fn review_payroll_anomalies(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payroll_run", "approve") {
+        return forbidden;
+    }
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(e),
+    };
+
+    let run = sqlx::query(
+        "SELECT status, anomaly_reviewed_at, anomaly_reviewed_by FROM payroll_runs WHERE id = $1 AND tenant_id = $2",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await;
+
+    match run {
+        Ok(Some(row)) => {
+            let status: String = row.get("status");
+            if status != "pending_approval" {
+                let _ = tx.rollback().await;
+                return conflict("payroll anomalies can only be reviewed while pending approval");
+            }
+            // Idempotent: already reviewed, return existing info.
+            if let Some(ts) = row
+                .try_get::<Option<chrono::DateTime<chrono::Utc>>, _>("anomaly_reviewed_at")
+                .unwrap_or(None)
+            {
+                let reviewed_by = row
+                    .try_get::<Option<Uuid>, _>("anomaly_reviewed_by")
+                    .unwrap_or(None);
+                let _ = tx.rollback().await;
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "run_id": id.to_string(),
+                        "reviewed_at": ts.to_rfc3339(),
+                        "reviewed_by": reviewed_by.map(|u| u.to_string()),
+                    })),
+                )
+                    .into_response();
+            }
+        }
+        Ok(None) => {
+            let _ = tx.rollback().await;
+            return not_found();
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            return internal_err(e);
+        }
+    }
+
+    let updated = sqlx::query(
+        "UPDATE payroll_runs SET anomaly_reviewed_at = now(), anomaly_reviewed_by = $3, updated_at = now() \
+         WHERE id = $1 AND tenant_id = $2 AND status = 'pending_approval' RETURNING anomaly_reviewed_at",
+    )
+    .bind(id)
+    .bind(ctx.tenant_id.0)
+    .bind(ctx.user_id.0)
+    .fetch_optional(&mut *tx)
+    .await;
+
+    match updated {
+        Ok(Some(row)) => {
+            let ts: chrono::DateTime<chrono::Utc> = row.get("anomaly_reviewed_at");
+            if let Err(e) = tx.commit().await {
+                return internal_err(e);
+            }
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "run_id": id.to_string(),
+                    "reviewed_at": ts.to_rfc3339(),
+                    "reviewed_by": ctx.user_id.to_string(),
+                })),
+            )
+                .into_response()
+        }
+        Ok(None) => {
+            let _ = tx.rollback().await;
+            conflict("payroll anomalies can only be reviewed while pending approval")
+        }
+        Err(e) => {
+            let _ = tx.rollback().await;
+            internal_err(e)
+        }
+    }
 }
 
 /// POST /api/v1/payroll/runs/:id/mark-paid — record the payment date/reference.
@@ -829,6 +1048,30 @@ pub struct ListPayslipsResponse {
 }
 
 #[derive(Serialize)]
+pub struct PayrollAnomalyRow {
+    pub employee_code: String,
+    pub employee_name: String,
+    pub code: String,
+    pub severity: String,
+    pub message: String,
+}
+
+#[derive(Serialize)]
+pub struct AnomalyCounts {
+    pub error: usize,
+    pub warning: usize,
+}
+
+#[derive(Serialize)]
+pub struct PayrollAnomaliesResponse {
+    pub run_id: String,
+    pub reviewed_at: Option<String>,
+    pub reviewed_by: Option<String>,
+    pub counts: AnomalyCounts,
+    pub anomalies: Vec<PayrollAnomalyRow>,
+}
+
+#[derive(Serialize)]
 pub struct PayslipSummary {
     pub payslip_id: String,
     pub employee_id: String,
@@ -843,6 +1086,25 @@ pub struct PayslipSummary {
     pub status: String,
     pub anomalies: serde_json::Value,
     pub acknowledged_at: Option<String>,
+}
+
+/// Parse a `payslips.anomalies` JSONB array into (code, severity, message) tuples.
+fn parse_anomaly_array(raw: &serde_json::Value) -> Vec<(String, String, String)> {
+    let Some(arr) = raw.as_array() else {
+        return Vec::new();
+    };
+    arr.iter()
+        .filter_map(|a| {
+            let code = a.get("code")?.as_str()?.to_string();
+            let message = a.get("message")?.as_str()?.to_string();
+            let severity = a
+                .get("severity")
+                .and_then(|v| v.as_str())
+                .unwrap_or("warning")
+                .to_string();
+            Some((code, severity, message))
+        })
+        .collect()
 }
 
 fn conflict(message: &str) -> Response {
@@ -935,5 +1197,43 @@ mod csv_tests {
     fn csv_neutralizes_formula_injection() {
         assert_eq!(csv_field("=HYPERLINK(\"x\")"), "\"'=HYPERLINK(\"\"x\"\")\"");
         assert_eq!(csv_field("normal"), "\"normal\"");
+    }
+}
+
+#[cfg(test)]
+mod anomaly_tests {
+    use super::*;
+
+    #[test]
+    fn parse_anomaly_array_flattens_and_defaults_severity() {
+        let raw = serde_json::json!([
+            { "code": "sso_cap", "severity": "warning", "message": "SSO cap hit" },
+            { "code": "low_net_pay", "severity": "error", "message": "net < 1000" },
+            { "code": "missing_severity", "message": "defaults to warning" },
+        ]);
+        let out = parse_anomaly_array(&raw);
+        assert_eq!(out.len(), 3);
+        assert_eq!(
+            out[0],
+            ("sso_cap".into(), "warning".into(), "SSO cap hit".into())
+        );
+        assert_eq!(
+            out[1],
+            ("low_net_pay".into(), "error".into(), "net < 1000".into())
+        );
+        assert_eq!(
+            out[2],
+            (
+                "missing_severity".into(),
+                "warning".into(),
+                "defaults to warning".into()
+            )
+        );
+    }
+
+    #[test]
+    fn parse_anomaly_array_handles_null_and_empty() {
+        assert!(parse_anomaly_array(&serde_json::Value::Null).is_empty());
+        assert!(parse_anomaly_array(&serde_json::json!([])).is_empty());
     }
 }

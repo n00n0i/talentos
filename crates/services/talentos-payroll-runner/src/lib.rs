@@ -393,7 +393,8 @@ pub async fn execute_run(
     sqlx::query(
         r#"UPDATE payroll_runs
            SET status = 'pending_approval', total_employees = $2, total_gross = $3,
-               total_net = $4, total_tax = $5, total_sso = $6, total_pf = $7, updated_at = now()
+               total_net = $4, total_tax = $5, total_sso = $6, total_pf = $7, updated_at = now(),
+               anomaly_reviewed_at = NULL, anomaly_reviewed_by = NULL
            WHERE id = $1"#,
     )
     .bind(run_id)

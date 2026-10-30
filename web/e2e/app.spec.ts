@@ -332,6 +332,7 @@ test("offline punch is queued locally and syncs when back online", async ({ page
 
   await context.setOffline(false);
   await expect(page.getByTestId("sync-status")).toContainText("ซิงก์แล้ว");
+  await expect(page.getByTestId("day-row").first()).toBeVisible();
 });
 
 test("HR creates a shift, corrects and approves a derived day", async ({ page }) => {

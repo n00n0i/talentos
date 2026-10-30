@@ -15,7 +15,14 @@ type Day = {
 
 type Fix = { lat: number; lng: number; accuracy: number };
 
-type QueuedPunch = { client_id: string; kind: "in" | "out"; lat: number; lng: number; accuracy: number };
+type QueuedPunch = {
+  client_id: string;
+  kind: "in" | "out";
+  lat: number;
+  lng: number;
+  accuracy: number;
+  at: string;
+};
 
 const QUEUE_KEY = "talentos_clock_queue";
 
@@ -100,7 +107,7 @@ export default function ClockPage() {
     if (queue.length === 0) return;
     let synced = 0;
     let skipped = 0;
-    let stoppedAt = queue.length;
+    const handled = new Set<string>();
     for (let i = 0; i < queue.length; i++) {
       const item = queue[i];
       try {
@@ -112,20 +119,23 @@ export default function ClockPage() {
             lat: item.lat,
             lng: item.lng,
             accuracy_m: item.accuracy,
+            client_time: item.at,
           }),
         });
+        handled.add(item.client_id);
         synced += 1;
       } catch (e) {
         if (e instanceof ApiError) {
           // Business rejection (e.g. outside geofence): retrying won't change it.
+          handled.add(item.client_id);
           skipped += 1;
         } else {
-          stoppedAt = i; // still offline: keep this and the rest for later
-          break;
+          break; // still offline: keep this and the rest for later
         }
       }
     }
-    writeQueue(queue.slice(stoppedAt));
+    // Re-read: punches queued while this flush was running must survive.
+    writeQueue(readQueue().filter((q) => !handled.has(q.client_id)));
     if (synced > 0 || skipped > 0) {
       const parts = [];
       if (synced > 0) parts.push(`ซิงก์แล้ว ${synced} รายการ`);
@@ -166,6 +176,7 @@ export default function ClockPage() {
     setSyncMsg("");
     setDistance(null);
     const client_id = crypto.randomUUID();
+    const at = new Date().toISOString();
     let here: Fix;
     try {
       here = await locate();
@@ -196,7 +207,7 @@ export default function ClockPage() {
       } else {
         // Network failure: queue the punch and replay it idempotently later.
         const queue = readQueue();
-        queue.push({ client_id, kind, lat: here.lat, lng: here.lng, accuracy: here.accuracy });
+        queue.push({ client_id, kind, lat: here.lat, lng: here.lng, accuracy: here.accuracy, at });
         writeQueue(queue);
         setNotice("บันทึกในเครื่องแล้ว จะซิงก์เมื่อออนไลน์");
       }

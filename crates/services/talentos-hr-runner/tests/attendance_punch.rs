@@ -6,7 +6,8 @@ use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, TimeZone, Utc};
 use sqlx::{PgPool, Row};
 use talentos_db::TenantPool;
 use talentos_hr_runner::attendance::{
-    assign_shift, create_shift, punch_at, set_geofence, AttendanceError, PunchInput, ShiftInput,
+    assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError, PunchInput,
+    ShiftInput,
 };
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -168,6 +169,7 @@ async fn punch_inside_geofence_is_accepted() {
     .await;
 
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -221,6 +223,7 @@ async fn punch_outside_geofence_is_rejected() {
     .await;
 
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT + 0.01,
@@ -280,6 +283,7 @@ async fn punch_within_accuracy_tolerance_is_accepted() {
     // Approximate offset: 1 degree lat ~ 111 km; 130 m ~ 0.00117 degrees.
     let delta = distance_m / 111_000.0;
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT + delta,
@@ -323,6 +327,7 @@ async fn punch_without_geofence_is_rejected() {
     .await;
 
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -378,6 +383,7 @@ async fn unlinked_user_is_rejected() {
 
     let unlinked_user = Uuid::new_v4();
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -434,6 +440,7 @@ async fn overnight_punch_lands_on_previous_work_date() {
 
     // 01:00 Bangkok on 2026-10-28 falls inside the 27th's 22:00-06:00 shift.
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -462,6 +469,7 @@ async fn punch_pair(
     out_at: DateTime<Utc>,
 ) -> talentos_hr_runner::attendance::DayView {
     let mk = |kind| PunchInput {
+        client_time: None,
         client_id: None,
         kind,
         lat: OFFICE_LAT,
@@ -623,6 +631,7 @@ async fn holiday_punch_marks_day_holiday() {
     seed_holiday(&raw, tenant_id, bkk_date(2026, 10, 27)).await;
 
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -678,6 +687,7 @@ async fn two_punches_same_second_stay_consistent() {
 
     let same_time = bkk_at(2026, 10, 27, 9, 0);
     let input_in = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -685,6 +695,7 @@ async fn two_punches_same_second_stay_consistent() {
         accuracy_m: Some(10.0),
     };
     let input_out = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::Out,
         lat: OFFICE_LAT,
@@ -744,6 +755,7 @@ async fn negative_accuracy_is_rejected() {
     .await;
 
     let input = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -799,6 +811,7 @@ async fn new_punch_resets_approved_day_to_pending() {
     .await;
 
     let input_in = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -806,6 +819,7 @@ async fn new_punch_resets_approved_day_to_pending() {
         accuracy_m: Some(10.0),
     };
     let input_out = PunchInput {
+        client_time: None,
         client_id: None,
         kind: talentos_attendance::PunchKind::Out,
         lat: OFFICE_LAT,
@@ -938,6 +952,7 @@ async fn client_id_replay_is_idempotent() {
 
     let client = Uuid::new_v4().to_string();
     let punch_in = |client_id: Option<String>| PunchInput {
+        client_time: None,
         client_id,
         kind: talentos_attendance::PunchKind::In,
         lat: OFFICE_LAT,
@@ -985,6 +1000,91 @@ async fn client_id_replay_is_idempotent() {
         2,
         "a distinct client id must create a second event"
     );
+
+    cleanup(&raw, tenant_id).await;
+}
+
+/// A punch queued offline must keep its original instant, not the flush time.
+#[tokio::test]
+async fn client_time_preserves_offline_punch_instant() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+
+    set_geofence(
+        &pool,
+        TenantId(tenant_id),
+        entity_id,
+        OFFICE_LAT,
+        OFFICE_LNG,
+        100,
+    )
+    .await
+    .expect("set geofence");
+    seed_shift(
+        &pool,
+        tenant_id,
+        entity_id,
+        employee_id,
+        bkk_time(9, 0),
+        bkk_time(18, 0),
+    )
+    .await;
+
+    let client_id = Uuid::new_v4().to_string();
+    let occurred_at = Utc::now() - chrono::Duration::hours(2);
+    let input = |client_time: Option<DateTime<Utc>>| PunchInput {
+        client_time,
+        client_id: Some(client_id.clone()),
+        kind: talentos_attendance::PunchKind::In,
+        lat: OFFICE_LAT,
+        lng: OFFICE_LNG,
+        accuracy_m: Some(5.0),
+    };
+
+    punch(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input(Some(occurred_at)),
+    )
+    .await
+    .expect("offline punch");
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let stored: DateTime<Utc> =
+        sqlx::query_scalar("SELECT occurred_at FROM attendance_events WHERE client_id = $1")
+            .bind(&client_id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("occurred_at");
+    let _ = tx.rollback().await;
+    assert_eq!(
+        stored.timestamp_micros(),
+        occurred_at.timestamp_micros(),
+        "queued punch must keep its original time"
+    );
+
+    let too_old = punch(
+        &pool,
+        TenantId(tenant_id),
+        user_id,
+        input(Some(Utc::now() - chrono::Duration::days(8))),
+    )
+    .await
+    .expect_err("8-day-old client_time must be rejected");
+    assert!(matches!(too_old, AttendanceError::InvalidClientTime));
 
     cleanup(&raw, tenant_id).await;
 }

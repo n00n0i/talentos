@@ -605,6 +605,7 @@ pub async fn set_geofence(
 pub(crate) fn map_attendance_error(e: AttendanceError) -> Response {
     match e {
         AttendanceError::InvalidImport
+        | AttendanceError::InvalidClientTime
         | AttendanceError::OutOfRange
         | AttendanceError::IncompleteDay
         | AttendanceError::InvalidCorrection(_) => unprocessable(&e.to_string()),

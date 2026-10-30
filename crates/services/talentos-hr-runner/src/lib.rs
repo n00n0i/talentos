@@ -5,6 +5,7 @@
 
 pub mod approval_rules;
 pub mod attendance;
+pub mod calendar;
 pub mod claims;
 pub mod delegations;
 pub mod escalation;
@@ -23,6 +24,9 @@ pub use approval_rules::{
 pub use attendance::{
     active_shift, assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError,
     DayView, PunchInput, ShiftInput, ShiftView,
+};
+pub use calendar::{
+    calendar, CalendarDay, CalendarError, CalendarHoliday, CalendarLeave, CalendarOt,
 };
 pub use claims::{
     cancel_claim, create_claim, decide_claim, download_receipt,

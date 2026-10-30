@@ -2,6 +2,7 @@ pub mod ai;
 pub mod attendance;
 pub mod audit;
 pub mod auth;
+pub mod calendar;
 pub mod claims;
 pub mod delegations;
 pub mod employees;

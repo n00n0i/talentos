@@ -123,6 +123,7 @@ test("employee is limited to self-service areas", async ({ page }) => {
   for (const path of [
     "/employees",
     "/attendance",
+    "/calendar",
     "/payroll",
     "/reports",
     "/settings",
@@ -135,4 +136,17 @@ test("employee is limited to self-service areas", async ({ page }) => {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
   }
+});
+
+test("employee cannot open calendar; manager can", async ({ page }) => {
+  await login(page, EMPLOYEE);
+  await expect(page.getByRole("link", { name: "ปฏิทินทีม" })).toHaveCount(0);
+  await page.goto("/calendar");
+  await expect(page).toHaveURL(/\/clock$/);
+
+  await page.getByLabel("ออกจากระบบ").click();
+  await login(page, MANAGER);
+  await expect(page.getByRole("link", { name: "ปฏิทินทีม" })).toBeVisible();
+  await page.goto("/calendar");
+  await expect(page).toHaveURL(/\/calendar$/);
 });

@@ -16,7 +16,7 @@ role-access matrix. Coverage:
 | Payroll | run, approve, self payslip, PDF, acknowledgement, GL/PF/PND exports, claims reimbursement, loans (create/payoff/reversal/interest) |
 | Claims | submit with receipt, HR approve, receipt access, paid status |
 | Loans | create, payroll installment, payoff, reversal |
-| Finance | reports (headcount/cost/OT), GL accounts, final settlement draft + invalid date |
+| Finance | reports (headcount/cost/OT), GL accounts, team calendar, final settlement draft + invalid date |
 | Admin | settings persist, notification summary/retry, form templates (50 ทวิ/1-10/PND1/1ก), audit log, LINE id |
 
 Not covered by browser E2E (covered by DB/unit tests): tenant isolation, concurrency,

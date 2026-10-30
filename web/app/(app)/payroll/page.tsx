@@ -294,16 +294,18 @@ function RunRow({
           >
             CSV
           </a>
+          {(run.status === "approved" || run.status === "completed") && (
+            <a
+              className="badge accent"
+              data-testid="bank-payout"
+              href={`/api/gw/api/v1/payroll/runs/${run.id}/bank-payout.csv`}
+              style={{ marginRight: 6 }}
+            >
+              ดาวน์โหลดไฟล์โอน
+            </a>
+          )}
           {run.status === "approved" && (
             <>
-              <a
-                className="badge accent"
-                data-testid="bank-payout"
-                href={`/api/gw/api/v1/payroll/runs/${run.id}/bank-payout.csv`}
-                style={{ marginRight: 6 }}
-              >
-                ดาวน์โหลดไฟล์โอน
-              </a>
               <button
                 className="btn btn-sm btn-primary"
                 data-testid="mark-paid"

@@ -702,7 +702,8 @@ pub async fn export_bank_payout_csv(
 
     let (period_start, period_end) = match run {
         Some(row) => {
-            if row.get::<String, _>("status") != "approved" {
+            let status: String = row.get("status");
+            if status != "approved" && status != "completed" {
                 return Err(FormError::NotFound);
             }
             (

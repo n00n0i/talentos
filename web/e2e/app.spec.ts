@@ -1035,3 +1035,18 @@ test("manager approves step one, HR approves step two", async ({ page }) => {
   await page.getByTestId("save-policy").click();
   await expect(page.getByText("บันทึกสูตรเงินเดือนแล้ว")).toBeVisible();
 });
+
+test("HR creates a holiday and sees it on the team calendar", async ({ page }) => {
+  await login(page);
+  await page.goto("/attendance");
+  await page.getByTestId("holiday-date").fill("2026-11-25");
+  await page.getByTestId("holiday-name").fill("วันลอยกระทง");
+  await page.getByTestId("add-holiday").click();
+  await expect(page.getByText("วันลอยกระทง")).toBeVisible();
+
+  await page.goto("/calendar");
+  await page.getByTestId("calendar-month").fill("2026-11");
+  const day = page.getByTestId("calendar-day").filter({ hasText: "วันลอยกระทง" });
+  await expect(day).toBeVisible();
+  await expect(day).toContainText("25 พ.ย. 2569");
+});

@@ -7,9 +7,9 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, claims, delegations, employees, forms, graphql, health, leave,
-    loans, mcp, me, memory, notifications, ot, payroll, pf, plugins, reports, settings, settlement,
-    setup, users,
+    ai, attendance, audit, auth, calendar, claims, delegations, employees, forms, graphql, health,
+    leave, loans, mcp, me, memory, notifications, ot, payroll, pf, plugins, reports, settings,
+    settlement, setup, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -185,6 +185,7 @@ pub fn build(state: AppState) -> Router {
             axum::routing::delete(attendance::delete),
         )
         .route("/api/v1/attendance/import", post(attendance::import))
+        .route("/api/v1/calendar", get(calendar::list))
         .route("/api/v1/attendance/days", get(attendance::list_days))
         .route(
             "/api/v1/attendance/days/:id/approve",

@@ -10,6 +10,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "ภาพรวม", icon: "overview" },
   { href: "/employees", label: "พนักงาน", icon: "users" },
   { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
+  { href: "/calendar", label: "ปฏิทินทีม", icon: "clock" },
   { href: "/clock", label: "ลงเวลา", icon: "clock" },
   { href: "/leave", label: "การลา", icon: "clock" },
   { href: "/ot", label: "OT", icon: "clock" },
@@ -80,7 +81,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     const adminOnly = ["/users", "/settings", "/forms", "/audit", "/loans", "/final-settlement", "/payslip"];
     const payrollOnly = ["/payroll", "/reports"];
     const hrOnly = ["/employees"];
-    const attendanceOnly = ["/attendance"];
+    const attendanceOnly = ["/attendance", "/calendar"];
     const denied =
       (adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
       (payrollOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canReports) ||
@@ -111,7 +112,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       : baseNav.filter(
           (i) =>
             employeeNav.includes(i.href) ||
-            (i.href === "/attendance" && me.permissions.includes("attendance.read")),
+            ((i.href === "/attendance" || i.href === "/calendar") &&
+              me.permissions.includes("attendance.read")),
         );
 
   return (

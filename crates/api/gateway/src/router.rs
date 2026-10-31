@@ -9,7 +9,7 @@ use tower_http::trace::TraceLayer;
 use crate::handlers::{
     ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms,
     graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll, pf,
-    plugins, privacy, reports, settings, settlement, setup, users,
+    plugins, privacy, recruitment, reports, settings, settlement, setup, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -81,6 +81,22 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/v1/onboarding/:id",
             patch(onboarding::update).delete(onboarding::remove),
+        )
+        .route(
+            "/api/v1/jobs",
+            get(recruitment::list_jobs).post(recruitment::create_job),
+        )
+        .route(
+            "/api/v1/jobs/:id",
+            patch(recruitment::update_job).delete(recruitment::remove_job),
+        )
+        .route(
+            "/api/v1/jobs/:id/candidates",
+            get(recruitment::list_candidates).post(recruitment::create_candidate),
+        )
+        .route(
+            "/api/v1/candidates/:id",
+            patch(recruitment::update_candidate).delete(recruitment::remove_candidate),
         )
         .route("/api/v1/me/onboarding", get(onboarding::me_list))
         .route("/api/v1/me/onboarding/:id", patch(onboarding::me_update))

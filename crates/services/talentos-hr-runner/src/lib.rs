@@ -18,6 +18,7 @@ pub mod onboarding;
 pub mod ot;
 pub mod pf;
 pub mod privacy;
+pub mod recruitment;
 pub mod reports;
 pub mod settlement;
 

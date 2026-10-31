@@ -187,7 +187,7 @@ pub async fn expiring_training(
         r#"SELECT t.id, t.employee_id, t.title, t.provider, t.completed_on, t.expires_on,
                   t.created_at, e.employee_code, e.first_name_th, e.last_name_th
              FROM employee_training_records t
-             JOIN employees e ON e.id = t.employee_id
+             JOIN employees e ON e.id = t.employee_id AND e.tenant_id = t.tenant_id
             WHERE t.tenant_id = $1 AND t.expires_on IS NOT NULL
               AND t.expires_on BETWEEN $2 AND $3
               AND e.status <> 'terminated'
@@ -227,7 +227,7 @@ pub async fn list_my_training(
         r#"SELECT t.id, t.employee_id, t.title, t.provider, t.completed_on, t.expires_on,
                   t.created_at
              FROM employee_training_records t
-             JOIN employees e ON e.id = t.employee_id
+             JOIN employees e ON e.id = t.employee_id AND e.tenant_id = t.tenant_id
             WHERE t.tenant_id = $1 AND e.user_id = $2
             ORDER BY t.completed_on DESC NULLS LAST, t.created_at DESC"#,
     )

@@ -129,7 +129,7 @@ export default function TrainingPage() {
 
       <div className="card card-pad" style={{ marginBottom: 12 }}>
         <div className="card-head">
-          <h2 style={{ fontSize: 16 }}>ใบรับรองใกล้หมดอายุ / หมดอายุแล้ว (90 วัน)</h2>
+          <h2 style={{ fontSize: 16 }}>ใบรับรองภายใน 90 วัน / หมดอายุไม่เกิน 1 ปี</h2>
         </div>
         {expiring.length === 0 ? (
           <div className="empty">ไม่มีใบรับรองที่ใกล้หมดอายุ</div>

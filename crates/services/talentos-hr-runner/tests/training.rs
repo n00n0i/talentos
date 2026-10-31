@@ -78,6 +78,10 @@ async fn create_list_and_expiry_alerts() {
     assert_eq!(expiring[0].training.title, "ปฐมพยาบาล");
     assert_eq!(expiring[0].employee_code, "EMP000");
     assert_eq!(expiring[1].training.title, "ความปลอดภัยในการทำงาน");
+    assert!(
+        expiring.iter().all(|t| t.training.title != "อบรมอีก 400 วัน"),
+        "far-future certificates are outside the window"
+    );
 
     let err = create_training(&pool, tenant, user_id, employee_id, &input("   ", None))
         .await
@@ -109,6 +113,24 @@ async fn create_list_and_expiry_alerts() {
     .await
     .expect_err("cross-tenant employee");
     assert!(matches!(err, TrainingError::EmployeeNotFound));
+
+    // Terminated employees are not surfaced in the expiry alert panel.
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("UPDATE employees SET status = 'terminated' WHERE id = $1")
+        .bind(employee_id)
+        .execute(&mut *tx)
+        .await
+        .expect("terminate");
+    tx.commit().await.expect("commit");
+    assert!(expiring_training(&pool, tenant, 30)
+        .await
+        .expect("expiring after termination")
+        .is_empty());
 
     cleanup(&raw, tenant_id).await;
     cleanup(&raw, other_tenant).await;

@@ -116,6 +116,16 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
         .expect("leave");
     }
     sqlx::query(
+        r#"INSERT INTO employee_training_records
+             (tenant_id, employee_id, title, provider, completed_on)
+           VALUES ($1, $2, 'ปฐมพยาบาล', 'Academy', '2026-11-01')"#,
+    )
+    .bind(tenant_id)
+    .bind(employee_a)
+    .execute(&mut *tx)
+    .await
+    .expect("training");
+    sqlx::query(
         r#"INSERT INTO attendance_events
              (tenant_id, employee_id, kind, source, occurred_at, work_date, distance_m, accuracy_m)
            VALUES ($1, $2, 'in', 'mobile', '2026-11-02T02:00:00Z', '2026-11-02', 5, 10)"#,
@@ -176,6 +186,7 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
     let events = first["attendance_events"].as_array().expect("events");
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["source"], "mobile");
+    assert_eq!(first["training"][0]["title"], "ปฐมพยาบาล");
 
     let text = data.to_string();
     assert!(

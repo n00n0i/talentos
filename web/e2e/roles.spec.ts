@@ -94,6 +94,9 @@ test("payroll manager is limited to payroll, reports, people", async ({ page }) 
   await page.goto("/recruitment");
   await expect(page.getByTestId("create-job")).toHaveCount(0);
   await expect(page.getByTestId("toggle-job")).toHaveCount(0);
+  await page.goto("/training");
+  await expect(page.getByTestId("save-training")).toHaveCount(0);
+  await expect(page.getByTestId("delete-training")).toHaveCount(0);
   for (const path of ["/settings", "/users", "/forms", "/audit", "/loans", "/final-settlement"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);

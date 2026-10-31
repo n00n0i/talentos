@@ -7,6 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -15,7 +16,7 @@ use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 use talentos_hr_runner::recruitment::{
-    self, CandidateFile, CandidateInput, JobInput, RecruitmentError,
+    self, CandidateFile, CandidateInput, InterviewInput, JobInput, RecruitmentError,
 };
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +41,20 @@ pub struct CreateCandidateBody {
     pub phone: Option<String>,
     pub source: Option<String>,
     pub note: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ScheduleInterviewBody {
+    pub scheduled_at: DateTime<Utc>,
+    pub mode: String,
+    pub location: Option<String>,
+    pub interviewer_user_id: Option<Uuid>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InterviewStatusBody {
+    pub status: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,6 +197,79 @@ pub async fn update_candidate(
     }
 }
 
+/// GET /api/v1/candidates/:id/interviews
+pub async fn list_interviews(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+    match recruitment::list_interviews(&state.pool, ctx.tenant_id, id).await {
+        Ok(interviews) => Json(json!({ "interviews": interviews })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// POST /api/v1/candidates/:id/interviews
+pub async fn schedule_interview(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ScheduleInterviewBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    let input = InterviewInput {
+        scheduled_at: body.scheduled_at,
+        mode: body.mode,
+        location: body.location,
+        interviewer_user_id: body.interviewer_user_id,
+        notes: body.notes,
+    };
+    match recruitment::schedule_interview(&state.pool, ctx.tenant_id, ctx.user_id.0, id, &input)
+        .await
+    {
+        Ok(interview) => {
+            (StatusCode::CREATED, Json(json!({ "interview": interview }))).into_response()
+        }
+        Err(e) => map_error(e),
+    }
+}
+
+/// PATCH /api/v1/interviews/:id
+pub async fn update_interview(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<InterviewStatusBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    match recruitment::set_interview_status(&state.pool, ctx.tenant_id, id, &body.status).await {
+        Ok(interview) => Json(json!({ "interview": interview })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// DELETE /api/v1/interviews/:id
+pub async fn remove_interview(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    match recruitment::delete_interview(&state.pool, ctx.tenant_id, id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
 /// GET /api/v1/candidates/:id/history
 pub async fn history(
     State(state): State<AppState>,
@@ -274,7 +362,7 @@ fn cv_response(file: CandidateFile) -> Response {
 fn map_error(e: RecruitmentError) -> Response {
     use RecruitmentError::*;
     match e {
-        JobNotFound | CandidateNotFound | NoCv => (
+        JobNotFound | CandidateNotFound | NoCv | InterviewNotFound => (
             StatusCode::NOT_FOUND,
             Json(envelope("not_found", &e.to_string())),
         )
@@ -291,7 +379,11 @@ fn map_error(e: RecruitmentError) -> Response {
         | InvalidNote
         | InvalidStage
         | CvTooLarge
-        | InvalidCvType => (
+        | InvalidCvType
+        | InvalidMode
+        | InvalidInterviewStatus
+        | InvalidLocation
+        | InvalidNotes => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(envelope("invalid_request", &e.to_string())),
         )

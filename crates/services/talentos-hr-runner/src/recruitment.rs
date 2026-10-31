@@ -10,6 +10,9 @@ use talentos_db::TenantPool;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
 
+const INTERVIEW_MODES: &[&str] = &["onsite", "online", "phone"];
+const INTERVIEW_STATUSES: &[&str] = &["scheduled", "completed", "cancelled"];
+
 const MAX_CV_BYTES: usize = 5 * 1024 * 1024;
 const ALLOWED_CV_TYPES: &[&str] = &["application/pdf", "image/jpeg", "image/png"];
 
@@ -57,6 +60,16 @@ pub enum RecruitmentError {
     InvalidNote,
     #[error("unsupported candidate stage")]
     InvalidStage,
+    #[error("unsupported interview mode")]
+    InvalidMode,
+    #[error("unsupported interview status")]
+    InvalidInterviewStatus,
+    #[error("interview not found")]
+    InterviewNotFound,
+    #[error("location must be at most 500 characters")]
+    InvalidLocation,
+    #[error("notes must be at most 1000 characters")]
+    InvalidNotes,
     #[error("CV is too large; maximum size is 5 MB")]
     CvTooLarge,
     #[error("unsupported CV type; use PDF, JPEG, or PNG")]
@@ -100,6 +113,28 @@ pub struct CandidateInput {
     pub phone: Option<String>,
     pub source: Option<String>,
     pub note: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InterviewInput {
+    pub scheduled_at: DateTime<Utc>,
+    pub mode: String,
+    pub location: Option<String>,
+    pub interviewer_user_id: Option<Uuid>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InterviewView {
+    pub id: Uuid,
+    pub candidate_id: Uuid,
+    pub scheduled_at: DateTime<Utc>,
+    pub mode: String,
+    pub location: Option<String>,
+    pub interviewer_user_id: Option<Uuid>,
+    pub status: String,
+    pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Serialize)]
@@ -634,4 +669,157 @@ pub async fn get_cv(
         content_type: content_type.unwrap_or_else(|| "application/octet-stream".into()),
         bytes,
     })
+}
+
+fn map_interview(row: &sqlx::postgres::PgRow) -> Result<InterviewView, sqlx::Error> {
+    Ok(InterviewView {
+        id: row.try_get("id")?,
+        candidate_id: row.try_get("candidate_id")?,
+        scheduled_at: row.try_get("scheduled_at")?,
+        mode: row.try_get("mode")?,
+        location: row.try_get("location")?,
+        interviewer_user_id: row.try_get("interviewer_user_id")?,
+        status: row.try_get("status")?,
+        notes: row.try_get("notes")?,
+        created_at: row.try_get("created_at")?,
+    })
+}
+
+const INTERVIEW_SELECT: &str = r#"SELECT id, candidate_id, scheduled_at, mode, location,
+              interviewer_user_id, status, notes, created_at
+         FROM candidate_interviews
+        WHERE tenant_id = $1"#;
+
+pub async fn schedule_interview(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    candidate_id: Uuid,
+    input: &InterviewInput,
+) -> Result<InterviewView, RecruitmentError> {
+    if !INTERVIEW_MODES.contains(&input.mode.as_str()) {
+        return Err(RecruitmentError::InvalidMode);
+    }
+    let location = input
+        .location
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    if location.is_some_and(|v| v.chars().count() > 500) {
+        return Err(RecruitmentError::InvalidLocation);
+    }
+    let notes = input
+        .notes
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    if notes.is_some_and(|v| v.chars().count() > 1000) {
+        return Err(RecruitmentError::InvalidNotes);
+    }
+
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM candidates WHERE tenant_id = $1 AND id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        return Err(RecruitmentError::CandidateNotFound);
+    }
+    let row = sqlx::query(
+        r#"INSERT INTO candidate_interviews
+             (tenant_id, candidate_id, scheduled_at, mode, location, interviewer_user_id,
+              notes, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+           RETURNING id, candidate_id, scheduled_at, mode, location, interviewer_user_id,
+                     status, notes, created_at"#,
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .bind(input.scheduled_at)
+    .bind(&input.mode)
+    .bind(location)
+    .bind(input.interviewer_user_id)
+    .bind(notes)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let view = map_interview(&row)?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+pub async fn list_interviews(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    candidate_id: Uuid,
+) -> Result<Vec<InterviewView>, RecruitmentError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM candidates WHERE tenant_id = $1 AND id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        return Err(RecruitmentError::CandidateNotFound);
+    }
+    let sql = format!("{INTERVIEW_SELECT} AND candidate_id = $2 ORDER BY scheduled_at DESC");
+    let rows = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(candidate_id)
+        .fetch_all(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| map_interview(row).map_err(RecruitmentError::from))
+        .collect()
+}
+
+pub async fn set_interview_status(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    interview_id: Uuid,
+    status: &str,
+) -> Result<InterviewView, RecruitmentError> {
+    if !INTERVIEW_STATUSES.contains(&status) {
+        return Err(RecruitmentError::InvalidInterviewStatus);
+    }
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let row = sqlx::query(
+        r#"UPDATE candidate_interviews SET status = $3, updated_at = now()
+            WHERE tenant_id = $1 AND id = $2
+            RETURNING id, candidate_id, scheduled_at, mode, location, interviewer_user_id,
+                      status, notes, created_at"#,
+    )
+    .bind(tenant_id.0)
+    .bind(interview_id)
+    .bind(status)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(RecruitmentError::InterviewNotFound)?;
+    let view = map_interview(&row)?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+pub async fn delete_interview(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    interview_id: Uuid,
+) -> Result<(), RecruitmentError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let deleted = sqlx::query("DELETE FROM candidate_interviews WHERE tenant_id = $1 AND id = $2")
+        .bind(tenant_id.0)
+        .bind(interview_id)
+        .execute(&mut *tx)
+        .await?;
+    if deleted.rows_affected() == 0 {
+        return Err(RecruitmentError::InterviewNotFound);
+    }
+    tx.commit().await?;
+    Ok(())
 }

@@ -1217,6 +1217,18 @@ test("HR opens a job and moves a candidate through the pipeline", async ({ page 
   const history = page.getByTestId("candidate-history");
   await expect(history).toContainText("รับใบสมัคร");
   await expect(history).toContainText("สัมภาษณ์");
+
+  await candidate.getByTestId("candidate-interview-button").click();
+  await page.getByTestId("interview-when").fill("2026-12-01T10:00");
+  await page.getByTestId("interview-mode").selectOption("online");
+  await page.getByTestId("interview-location").fill("https://meet.example.com/e2e");
+  await page.getByTestId("schedule-interview").click();
+  await expect(page.getByText("นัดสัมภาษณ์แล้ว")).toBeVisible();
+
+  const interview = page.getByTestId("interview-row").first();
+  await expect(interview).toContainText("ออนไลน์");
+  await interview.getByTestId("interview-status").selectOption("completed");
+  await expect(interview.getByTestId("interview-status")).toHaveValue("completed");
 });
 
 test("HR records an expiring training certificate", async ({ page }) => {

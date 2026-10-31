@@ -140,6 +140,14 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/candidates/:id",
             patch(recruitment::update_candidate).delete(recruitment::remove_candidate),
         )
+        .route(
+            "/api/v1/candidates/:id/interviews",
+            get(recruitment::list_interviews).post(recruitment::schedule_interview),
+        )
+        .route(
+            "/api/v1/interviews/:id",
+            patch(recruitment::update_interview).delete(recruitment::remove_interview),
+        )
         .route("/api/v1/candidates/:id/history", get(recruitment::history))
         .route(
             "/api/v1/candidates/:id/cv",

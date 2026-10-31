@@ -41,3 +41,5 @@ certs/
 
 # Local git worktrees
 .worktrees/
+.superpowers/
+.superpowers/sdd/

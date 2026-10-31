@@ -344,7 +344,8 @@ applied → screening → interview → offer → hired/rejected. Candidate coun
 hired/headcount are shown per opening; closing/reopening and deletion are
 supported. Each candidate can have one CV (PDF/JPEG/PNG ≤5 MB, stored under
 `CANDIDATE_CV_DIR`) with download/replace; deleting a candidate or opening
-removes the files. No interview scheduling, stage history, offer letters, or
+removes the files. Stage changes keep an immutable history (`from → to`, who,
+when) shown per candidate. No interview scheduling, stage history, offer letters, or
 automatic employee creation yet.
 
 ## Onboarding

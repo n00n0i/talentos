@@ -1212,6 +1212,11 @@ test("HR opens a job and moves a candidate through the pipeline", async ({ page 
   await candidate.getByTestId("candidate-stage").selectOption("interview");
   await expect(candidate.getByTestId("candidate-stage")).toHaveValue("interview");
   await expect(jobRow).toContainText("1 คน");
+
+  await candidate.getByTestId("candidate-history-button").click();
+  const history = page.getByTestId("candidate-history");
+  await expect(history).toContainText("รับใบสมัคร");
+  await expect(history).toContainText("สัมภาษณ์");
 });
 
 test("HR records an expiring training certificate", async ({ page }) => {

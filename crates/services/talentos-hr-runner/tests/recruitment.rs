@@ -142,6 +142,12 @@ async fn validation_and_tenant_isolation() {
         create_job(&pool, tenant, user_id, &bad).await,
         Err(RecruitmentError::InvalidHeadcount)
     ));
+    let mut bad = job("ok");
+    bad.department = Some("d".repeat(101));
+    assert!(matches!(
+        create_job(&pool, tenant, user_id, &bad).await,
+        Err(RecruitmentError::InvalidDepartment)
+    ));
 
     let opened = create_job(&pool, tenant, user_id, &job("Dev"))
         .await

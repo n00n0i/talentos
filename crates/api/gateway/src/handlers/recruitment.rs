@@ -197,6 +197,7 @@ fn map_error(e: RecruitmentError) -> Response {
         InvalidTitle
         | InvalidEmploymentType
         | InvalidHeadcount
+        | InvalidDepartment
         | InvalidDescription
         | InvalidName
         | InvalidEmail

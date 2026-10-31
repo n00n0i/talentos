@@ -30,6 +30,8 @@ pub enum RecruitmentError {
     InvalidEmploymentType,
     #[error("headcount must be between 1 and 100")]
     InvalidHeadcount,
+    #[error("department must be at most 100 characters")]
+    InvalidDepartment,
     #[error("description must be at most 2000 characters")]
     InvalidDescription,
     #[error("first and last name must be 1-100 characters")]
@@ -173,11 +175,12 @@ pub async fn create_job(
     if !(1..=100).contains(&input.headcount) {
         return Err(RecruitmentError::InvalidHeadcount);
     }
-    if input
-        .description
-        .as_deref()
-        .is_some_and(|d| d.chars().count() > 2000)
-    {
+    let department = trimmed(input.department.as_deref());
+    if department.is_some_and(|d| d.chars().count() > 100) {
+        return Err(RecruitmentError::InvalidDepartment);
+    }
+    let description = trimmed(input.description.as_deref());
+    if description.is_some_and(|d| d.chars().count() > 2000) {
         return Err(RecruitmentError::InvalidDescription);
     }
 
@@ -191,10 +194,10 @@ pub async fn create_job(
     )
     .bind(tenant_id.0)
     .bind(title)
-    .bind(trimmed(input.department.as_deref()))
+    .bind(department)
     .bind(&input.employment_type)
     .bind(input.headcount)
-    .bind(trimmed(input.description.as_deref()))
+    .bind(description)
     .bind(user_id)
     .fetch_one(&mut *tx)
     .await?;
@@ -297,32 +300,20 @@ pub async fn create_candidate(
     {
         return Err(RecruitmentError::InvalidName);
     }
-    if input
-        .email
-        .as_deref()
-        .is_some_and(|v| v.chars().count() > 200)
-    {
+    let email = trimmed(input.email.as_deref());
+    let phone = trimmed(input.phone.as_deref());
+    let source = trimmed(input.source.as_deref());
+    let note = trimmed(input.note.as_deref());
+    if email.is_some_and(|v| v.chars().count() > 200) {
         return Err(RecruitmentError::InvalidEmail);
     }
-    if input
-        .phone
-        .as_deref()
-        .is_some_and(|v| v.chars().count() > 30)
-    {
+    if phone.is_some_and(|v| v.chars().count() > 30) {
         return Err(RecruitmentError::InvalidPhone);
     }
-    if input
-        .source
-        .as_deref()
-        .is_some_and(|v| v.chars().count() > 100)
-    {
+    if source.is_some_and(|v| v.chars().count() > 100) {
         return Err(RecruitmentError::InvalidSource);
     }
-    if input
-        .note
-        .as_deref()
-        .is_some_and(|v| v.chars().count() > 2000)
-    {
+    if note.is_some_and(|v| v.chars().count() > 2000) {
         return Err(RecruitmentError::InvalidNote);
     }
 
@@ -348,10 +339,10 @@ pub async fn create_candidate(
     .bind(job_id)
     .bind(first)
     .bind(last)
-    .bind(trimmed(input.email.as_deref()))
-    .bind(trimmed(input.phone.as_deref()))
-    .bind(trimmed(input.source.as_deref()))
-    .bind(trimmed(input.note.as_deref()))
+    .bind(email)
+    .bind(phone)
+    .bind(source)
+    .bind(note)
     .bind(user_id)
     .fetch_one(&mut *tx)
     .await?;

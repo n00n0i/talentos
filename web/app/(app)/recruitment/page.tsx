@@ -320,6 +320,9 @@ export default function RecruitmentPage() {
                     >
                       {job.title}
                     </button>
+                    {job.description && (
+                      <div style={{ color: "var(--muted)", fontSize: 13 }}>{job.description}</div>
+                    )}
                   </td>
                   <td>{job.department ?? "—"}</td>
                   <td>{TYPES[job.employment_type] ?? job.employment_type}</td>

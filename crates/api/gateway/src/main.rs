@@ -226,6 +226,7 @@ async fn main() {
         });
     }
 
+    metrics::init();
     let app = router::build(state);
 
     let listener = tokio::net::TcpListener::bind(bind_addr)

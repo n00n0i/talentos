@@ -3,7 +3,10 @@
 The gateway exposes Prometheus text metrics at `GET /metrics`.
 
 ```
-talentos_http_requests_total{status="2xx|4xx|5xx"}
+talentos_http_requests_total{status="2xx"}
+talentos_http_requests_total{status="4xx"}
+talentos_http_requests_total{status="5xx"}
+talentos_http_requests_total{status="other"}   # 1xx/3xx
 talentos_http_request_duration_seconds_sum
 talentos_http_request_duration_seconds_count
 talentos_uptime_seconds
@@ -12,6 +15,13 @@ talentos_uptime_seconds
 The endpoint is public by default so a local Prometheus can scrape it. Set
 `METRICS_TOKEN` to require `Authorization: Bearer <token>`, and keep the gateway
 on a private network either way.
+
+```sh
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://127.0.0.1:8080/metrics
+```
+
+`talentos_http_request_duration_seconds` measures time until the response
+headers (not full body streaming).
 
 ## Prometheus scrape
 

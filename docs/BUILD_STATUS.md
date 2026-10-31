@@ -1,6 +1,6 @@
 # Build status — verified locally
 
-Last verified: 2026-10-28 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, PostgreSQL 16 + pgvector.
+Last verified: 2026-10-31 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, PostgreSQL 16 + pgvector.
 
 ## Gate results
 
@@ -16,7 +16,7 @@ overnight, holiday/weekend OT, timezone), compliance 6, payroll 25, rag 7,
 agent 7, hr-runner 10 (leave day maths, attendance break/grace validation, notification rendering), db 5
 (PII cipher round-trip, wrong key, tamper, legacy plaintext, masking), graphql 3
 (schema shape, money-as-string, RBAC gate), mcp 5 (version negotiation, tool list,
-destructive guard, notifications), memory 3 (layers, expiry), gateway 54 (RBAC
+destructive guard, notifications), memory 3 (layers, expiry), gateway 55 (RBAC
 gate, tenant provisioning CLI, CSV escaping/totals, holiday classification, shift
 management, attendance import/punch/correction/approval, bulk employee import dry-run/duplicate/parse rules).
 

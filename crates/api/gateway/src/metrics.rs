@@ -16,12 +16,18 @@ use axum::{
 
 pub static METRICS: LazyLock<Metrics> = LazyLock::new(Metrics::new);
 
+/// Start the uptime clock at process start rather than at the first scrape.
+pub fn init() {
+    LazyLock::force(&METRICS);
+}
+
 pub struct Metrics {
     started: Instant,
     total: AtomicU64,
     success: AtomicU64,
     client_error: AtomicU64,
     server_error: AtomicU64,
+    other: AtomicU64,
     duration_micros: AtomicU64,
 }
 
@@ -33,6 +39,7 @@ impl Metrics {
             success: AtomicU64::new(0),
             client_error: AtomicU64::new(0),
             server_error: AtomicU64::new(0),
+            other: AtomicU64::new(0),
             duration_micros: AtomicU64::new(0),
         }
     }
@@ -43,7 +50,7 @@ impl Metrics {
             200..=299 => self.success.fetch_add(1, Ordering::Relaxed),
             400..=499 => self.client_error.fetch_add(1, Ordering::Relaxed),
             500..=599 => self.server_error.fetch_add(1, Ordering::Relaxed),
-            _ => 0,
+            _ => self.other.fetch_add(1, Ordering::Relaxed),
         };
         self.duration_micros
             .fetch_add(elapsed.as_micros() as u64, Ordering::Relaxed);
@@ -59,6 +66,7 @@ impl Metrics {
              talentos_http_requests_total{{status=\"2xx\"}} {}\n\
              talentos_http_requests_total{{status=\"4xx\"}} {}\n\
              talentos_http_requests_total{{status=\"5xx\"}} {}\n\
+             talentos_http_requests_total{{status=\"other\"}} {}\n\
              # HELP talentos_http_request_duration_seconds HTTP request duration.\n\
              # TYPE talentos_http_request_duration_seconds summary\n\
              talentos_http_request_duration_seconds_sum {sum:.6}\n\
@@ -69,6 +77,7 @@ impl Metrics {
             self.success.load(Ordering::Relaxed),
             self.client_error.load(Ordering::Relaxed),
             self.server_error.load(Ordering::Relaxed),
+            self.other.load(Ordering::Relaxed),
         )
     }
 }
@@ -92,14 +101,24 @@ pub async fn track(req: Request, next: Next) -> Response {
 /// Public when `METRICS_TOKEN` is unset (bind behind the private network or
 /// proxy). When set, require `Authorization: Bearer <token>`.
 pub async fn endpoint(headers: HeaderMap) -> Response {
-    if let Ok(expected) = std::env::var("METRICS_TOKEN") {
+    let expected = std::env::var("METRICS_TOKEN")
+        .ok()
+        .filter(|token| !token.trim().is_empty());
+    if let Some(expected) = expected {
         let authorized = headers
             .get(header::AUTHORIZATION)
             .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-            .is_some_and(|token| token == expected);
+            .and_then(|value| value.split_once(' '))
+            .is_some_and(|(scheme, token)| {
+                scheme.eq_ignore_ascii_case("bearer") && token == expected
+            });
         if !authorized {
-            return (StatusCode::UNAUTHORIZED, "unauthorized\n").into_response();
+            return (
+                StatusCode::UNAUTHORIZED,
+                [(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"))],
+                "unauthorized\n",
+            )
+                .into_response();
         }
     }
     (
@@ -123,13 +142,15 @@ mod tests {
         metrics.observe(StatusCode::CREATED, Duration::from_millis(20));
         metrics.observe(StatusCode::UNAUTHORIZED, Duration::from_millis(30));
         metrics.observe(StatusCode::INTERNAL_SERVER_ERROR, Duration::from_millis(40));
+        metrics.observe(StatusCode::MOVED_PERMANENTLY, Duration::from_millis(0));
 
         let text = metrics.render();
         assert!(text.contains("talentos_http_requests_total{status=\"2xx\"} 2"));
         assert!(text.contains("talentos_http_requests_total{status=\"4xx\"} 1"));
         assert!(text.contains("talentos_http_requests_total{status=\"5xx\"} 1"));
+        assert!(text.contains("talentos_http_requests_total{status=\"other\"} 1"));
         assert!(text.contains("talentos_http_request_duration_seconds_sum 0.100000"));
-        assert!(text.contains("talentos_http_request_duration_seconds_count 4"));
+        assert!(text.contains("talentos_http_request_duration_seconds_count 5"));
         assert!(text.contains("talentos_uptime_seconds"));
     }
 }

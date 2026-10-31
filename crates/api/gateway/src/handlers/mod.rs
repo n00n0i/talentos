@@ -16,6 +16,7 @@ pub mod mcp;
 pub mod me;
 pub mod memory;
 pub mod notifications;
+pub mod onboarding;
 pub mod ot;
 pub mod payroll;
 pub mod pf;

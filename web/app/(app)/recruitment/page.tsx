@@ -40,6 +40,18 @@ type Interview = {
   notes: string | null;
 };
 
+type Offer = {
+  id: string;
+  candidate_id: string;
+  candidate_name: string;
+  position_title: string;
+  salary: string;
+  start_date: string;
+  notes: string | null;
+  status: string;
+  created_at: string;
+};
+
 type StageEvent = {
   id: number;
   from_stage: string | null;
@@ -92,6 +104,14 @@ export default function RecruitmentPage() {
   const [history, setHistory] = useState<StageEvent[]>([]);
   const [interviewFor, setInterviewFor] = useState<Candidate | null>(null);
   const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [offerFor, setOfferFor] = useState<Candidate | null>(null);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offerForm, setOfferForm] = useState({
+    position_title: "",
+    salary: "",
+    start_date: "",
+    notes: "",
+  });
   const [interviewForm, setInterviewForm] = useState({
     scheduled_at: "",
     mode: "onsite",
@@ -263,6 +283,72 @@ export default function RecruitmentPage() {
       setHistoryFor(candidate);
     } catch (e) {
       handleApiError(e, setError);
+    }
+  }
+
+  async function showOffers(candidate: Candidate) {
+    setError("");
+    try {
+      const res = await gw<{ offers: Offer[] }>(`api/v1/candidates/${candidate.id}/offers`);
+      setOffers(res.offers);
+      setOfferFor(candidate);
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function createOffer(event: React.FormEvent) {
+    event.preventDefault();
+    if (!offerFor) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/candidates/${offerFor.id}/offers`, {
+        method: "POST",
+        body: JSON.stringify({
+          position_title: offerForm.position_title,
+          salary: offerForm.salary,
+          start_date: offerForm.start_date,
+          notes: offerForm.notes.trim() || null,
+        }),
+      });
+      setOfferForm({ position_title: "", salary: "", start_date: "", notes: "" });
+      await showOffers(offerFor);
+      setNotice("สร้างข้อเสนอแล้ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setOfferStatus(id: string, status: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/offers/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      if (offerFor) await showOffers(offerFor);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeOffer(id: string) {
+    if (!confirm("ลบข้อเสนอนี้หรือไม่?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/offers/${id}`, { method: "DELETE" });
+      if (offerFor) await showOffers(offerFor);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -625,6 +711,13 @@ export default function RecruitmentPage() {
                         onClick={() => showInterviews(candidate)}
                       >
                         สัมภาษณ์
+                      </button>{" "}
+                      <button
+                        className="badge"
+                        data-testid="candidate-offer-button"
+                        onClick={() => showOffers(candidate)}
+                      >
+                        ข้อเสนอ
                       </button>
                       {candidate.note && (
                         <div style={{ color: "var(--muted)", fontSize: 13 }}>{candidate.note}</div>
@@ -695,6 +788,110 @@ export default function RecruitmentPage() {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {offerFor && (
+            <div className="card card-pad" data-testid="candidate-offers" style={{ marginTop: 12 }}>
+              <h3 style={{ fontSize: 15 }}>
+                ข้อเสนองาน: {offerFor.first_name} {offerFor.last_name}
+              </h3>
+              {canWrite && (
+                <form onSubmit={createOffer} style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+                  <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
+                    <label>
+                      ตำแหน่ง
+                      <input
+                        data-testid="offer-position"
+                        value={offerForm.position_title}
+                        onChange={(e) =>
+                          setOfferForm({ ...offerForm, position_title: e.target.value })
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      เงินเดือน (บาท)
+                      <input
+                        data-testid="offer-salary"
+                        type="number"
+                        min={1}
+                        step="0.01"
+                        value={offerForm.salary}
+                        onChange={(e) => setOfferForm({ ...offerForm, salary: e.target.value })}
+                        required
+                      />
+                    </label>
+                    <label>
+                      วันที่เริ่มงาน
+                      <input
+                        data-testid="offer-start"
+                        type="date"
+                        value={offerForm.start_date}
+                        onChange={(e) => setOfferForm({ ...offerForm, start_date: e.target.value })}
+                        required
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    หมายเหตุ
+                    <input
+                      data-testid="offer-notes"
+                      value={offerForm.notes}
+                      onChange={(e) => setOfferForm({ ...offerForm, notes: e.target.value })}
+                    />
+                  </label>
+                  <button className="btn" data-testid="create-offer" type="submit" disabled={busy}>
+                    สร้างข้อเสนอ
+                  </button>
+                </form>
+              )}
+
+              {offers.length === 0 ? (
+                <div className="empty">ยังไม่มีข้อเสนอ</div>
+              ) : (
+                <ul className="list">
+                  {offers.map((offer) => (
+                    <li key={offer.id} data-testid="offer-row">
+                      {offer.position_title} · {Number(offer.salary).toLocaleString("th-TH")} บาท ·
+                      เริ่ม {offer.start_date}
+                      <a
+                        className="badge accent"
+                        data-testid="offer-pdf"
+                        href={`/api/gw/api/v1/offers/${offer.id}/pdf`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ marginLeft: 8 }}
+                      >
+                        PDF
+                      </a>
+                      <select
+                        data-testid="offer-status"
+                        value={offer.status}
+                        disabled={busy || !canWrite}
+                        onChange={(e) => setOfferStatus(offer.id, e.target.value)}
+                        style={{ marginLeft: 8 }}
+                      >
+                        <option value="draft">ร่าง</option>
+                        <option value="sent">ส่งแล้ว</option>
+                        <option value="accepted">ตอบรับ</option>
+                        <option value="declined">ปฏิเสธ</option>
+                      </select>
+                      {canWrite && (
+                        <button
+                          className="btn btn-sm"
+                          data-testid="delete-offer"
+                          disabled={busy}
+                          onClick={() => removeOffer(offer.id)}
+                          style={{ marginLeft: 6 }}
+                        >
+                          ลบ
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           {interviewFor && (

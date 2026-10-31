@@ -7,7 +7,8 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
@@ -16,7 +17,7 @@ use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
 use talentos_hr_runner::recruitment::{
-    self, CandidateFile, CandidateInput, InterviewInput, JobInput, RecruitmentError,
+    self, CandidateFile, CandidateInput, InterviewInput, JobInput, OfferInput, RecruitmentError,
 };
 
 #[derive(Debug, Deserialize)]
@@ -50,6 +51,19 @@ pub struct ScheduleInterviewBody {
     pub location: Option<String>,
     pub interviewer_user_id: Option<Uuid>,
     pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateOfferBody {
+    pub position_title: String,
+    pub salary: Decimal,
+    pub start_date: NaiveDate,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OfferStatusBody {
+    pub status: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -195,6 +209,165 @@ pub async fn update_candidate(
         Ok(candidate) => Json(json!({ "candidate": candidate })).into_response(),
         Err(e) => map_error(e),
     }
+}
+
+/// GET /api/v1/candidates/:id/offers
+pub async fn list_offers(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+    match recruitment::list_offers(&state.pool, ctx.tenant_id, id).await {
+        Ok(offers) => Json(json!({ "offers": offers })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// POST /api/v1/candidates/:id/offers
+pub async fn create_offer(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<CreateOfferBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    let input = OfferInput {
+        position_title: body.position_title,
+        salary: body.salary,
+        start_date: body.start_date,
+        notes: body.notes,
+    };
+    match recruitment::create_offer(&state.pool, ctx.tenant_id, ctx.user_id.0, id, &input).await {
+        Ok(offer) => (StatusCode::CREATED, Json(json!({ "offer": offer }))).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// PATCH /api/v1/offers/:id
+pub async fn update_offer(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<OfferStatusBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    match recruitment::set_offer_status(&state.pool, ctx.tenant_id, id, &body.status).await {
+        Ok(offer) => Json(json!({ "offer": offer })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// DELETE /api/v1/offers/:id
+pub async fn remove_offer(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    match recruitment::delete_offer(&state.pool, ctx.tenant_id, id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// GET /api/v1/offers/:id/pdf
+pub async fn offer_pdf(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+    let letter = match recruitment::offer_letter(&state.pool, ctx.tenant_id, id).await {
+        Ok(letter) => letter,
+        Err(e) => return map_error(e),
+    };
+    let html = offer_html(&letter);
+    let cfg = talentos_payroll_runner::pdf::PdfConfig::default();
+    match talentos_payroll_runner::pdf::render_pdf(&cfg, &html).await {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, "application/pdf"),
+                (
+                    header::CONTENT_DISPOSITION,
+                    "inline; filename=\"offer.pdf\"",
+                ),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "offer PDF render failed");
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(envelope("pdf_unavailable", "ไม่สามารถสร้างไฟล์ PDF ได้")),
+            )
+                .into_response()
+        }
+    }
+}
+
+fn escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+fn offer_html(letter: &recruitment::OfferLetter) -> String {
+    let notes = letter
+        .notes
+        .as_deref()
+        .map(|n| format!("<p><strong>หมายเหตุ:</strong> {}</p>", escape(n)))
+        .unwrap_or_default();
+    format!(
+        r#"<!doctype html><html lang="th"><head><meta charset="utf-8">
+<style>
+body {{ font-family: "Noto Sans Thai", sans-serif; color: #1a1a1a; padding: 48px; line-height: 1.7; }}
+h1 {{ font-size: 22px; margin-bottom: 4px; }}
+.muted {{ color: #666; }}
+table {{ border-collapse: collapse; margin: 20px 0; }}
+td {{ padding: 6px 16px 6px 0; vertical-align: top; }}
+.sign {{ margin-top: 64px; display: flex; gap: 80px; }}
+.line {{ border-top: 1px solid #333; padding-top: 6px; min-width: 220px; text-align: center; }}
+</style></head><body>
+<h1>{tenant}</h1>
+<p class="muted">หนังสือเสนอการจ้างงาน</p>
+<p>เรียน {candidate}</p>
+<p>บริษัทขอเสนอตำแหน่ง <strong>{position}</strong> โดยมีรายละเอียดดังนี้</p>
+<table>
+<tr><td>ตำแหน่ง</td><td>{position}</td></tr>
+<tr><td>อัตราค่าจ้าง</td><td>{salary} บาท / เดือน</td></tr>
+<tr><td>วันที่เริ่มงาน</td><td>{start_date}</td></tr>
+</table>
+{notes}
+<p>หนังสือฉบับนี้มีผลเมื่อผู้สมัครตอบรับข้อเสนอ</p>
+<div class="sign">
+  <div class="line">ผู้มีอำนาจลงนาม<br>{tenant}</div>
+  <div class="line">ผู้สมัคร<br>{candidate}</div>
+</div>
+</body></html>"#,
+        tenant = escape(&letter.tenant_name),
+        candidate = escape(&letter.candidate_name),
+        position = escape(&letter.position_title),
+        salary = escape(&letter.salary),
+        start_date = letter.start_date,
+        notes = notes,
+    )
 }
 
 /// GET /api/v1/candidates/:id/interviews
@@ -362,7 +535,7 @@ fn cv_response(file: CandidateFile) -> Response {
 fn map_error(e: RecruitmentError) -> Response {
     use RecruitmentError::*;
     match e {
-        JobNotFound | CandidateNotFound | NoCv | InterviewNotFound => (
+        JobNotFound | CandidateNotFound | NoCv | InterviewNotFound | OfferNotFound => (
             StatusCode::NOT_FOUND,
             Json(envelope("not_found", &e.to_string())),
         )
@@ -383,7 +556,11 @@ fn map_error(e: RecruitmentError) -> Response {
         | InvalidMode
         | InvalidInterviewStatus
         | InvalidLocation
-        | InvalidNotes => (
+        | InvalidNotes
+        | InvalidOfferStatus
+        | InvalidOfferTitle
+        | InvalidSalary
+        | InvalidOfferNotes => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(envelope("invalid_request", &e.to_string())),
         )

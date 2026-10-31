@@ -1229,6 +1229,24 @@ test("HR opens a job and moves a candidate through the pipeline", async ({ page 
   await expect(interview).toContainText("ออนไลน์");
   await interview.getByTestId("interview-status").selectOption("completed");
   await expect(interview.getByTestId("interview-status")).toHaveValue("completed");
+
+  await candidate.getByTestId("candidate-offer-button").click();
+  await page.getByTestId("offer-position").fill("Senior Developer E2E");
+  await page.getByTestId("offer-salary").fill("45000");
+  await page.getByTestId("offer-start").fill("2026-12-01");
+  await page.getByTestId("offer-notes").fill("Hybrid");
+  await page.getByTestId("create-offer").click();
+  await expect(page.getByText("สร้างข้อเสนอแล้ว")).toBeVisible();
+
+  const offer = page.getByTestId("offer-row").first();
+  await expect(offer).toContainText("45,000");
+  const pdfHref = await offer.getByTestId("offer-pdf").getAttribute("href");
+  expect(pdfHref).toContain("/offers/");
+  expect(pdfHref).toContain("/pdf");
+  await offer.getByTestId("offer-status").selectOption("sent");
+  await expect(offer.getByTestId("offer-status")).toHaveValue("sent");
+  await offer.getByTestId("offer-status").selectOption("accepted");
+  await expect(offer.getByTestId("offer-status")).toHaveValue("accepted");
 });
 
 test("HR records an expiring training certificate", async ({ page }) => {

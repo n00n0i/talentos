@@ -11,6 +11,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/employees", label: "พนักงาน", icon: "users" },
   { href: "/documents", label: "เอกสาร", icon: "file" },
   { href: "/onboarding", label: "เริ่มงาน", icon: "users" },
+  { href: "/recruitment", label: "สรรหาบุคลากร", icon: "users" },
   { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
   { href: "/calendar", label: "ปฏิทินทีม", icon: "clock" },
   { href: "/clock", label: "ลงเวลา", icon: "clock" },
@@ -91,7 +92,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     if (!me) return;
     const adminOnly = ["/users", "/settings", "/forms", "/audit", "/loans", "/final-settlement", "/payslip"];
     const payrollOnly = ["/payroll", "/reports"];
-    const hrOnly = ["/employees", "/documents", "/onboarding"];
+    const hrOnly = ["/employees", "/documents", "/onboarding", "/recruitment"];
     const attendanceOnly = ["/attendance", "/calendar"];
     const denied =
       (adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||

@@ -1175,3 +1175,32 @@ test("HR runs the standard onboarding checklist", async ({ page }) => {
   await expect(page.getByTestId("onboarding-progress")).toContainText("เสร็จ 1/6");
   await expect(page.getByTestId("onboarding-task").last()).toContainText("เสร็จแล้ว");
 });
+
+test("HR opens a job and moves a candidate through the pipeline", async ({ page }) => {
+  await login(page);
+  await page.goto("/recruitment");
+
+  await page.getByTestId("job-title").fill("นักพัฒนาระบบ E2E");
+  await page.getByTestId("job-department").fill("Engineering");
+  await page.getByTestId("job-headcount").fill("2");
+  await page.getByTestId("create-job").click();
+  await expect(page.getByText("เปิดรับสมัครแล้ว")).toBeVisible();
+
+  const jobRow = page.getByTestId("job-row").filter({ hasText: "นักพัฒนาระบบ E2E" });
+  await expect(jobRow).toBeVisible();
+  await jobRow.getByTestId("select-job").click();
+
+  await page.getByTestId("cand-first").fill("สมหญิง");
+  await page.getByTestId("cand-last").fill("ทดสอบ");
+  await page.getByTestId("cand-email").fill("candidate@example.com");
+  await page.getByTestId("cand-phone").fill("0800000000");
+  await page.getByTestId("cand-source").fill("referral");
+  await page.getByTestId("add-candidate").click();
+  await expect(page.getByText("เพิ่มผู้สมัครแล้ว")).toBeVisible();
+
+  const candidate = page.getByTestId("candidate-row").filter({ hasText: "สมหญิง" });
+  await expect(candidate).toBeVisible();
+  await candidate.getByTestId("candidate-stage").selectOption("interview");
+  await expect(candidate.getByTestId("candidate-stage")).toHaveValue("interview");
+  await expect(jobRow).toContainText("1 คน");
+});

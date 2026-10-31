@@ -312,6 +312,15 @@ employee). If any exist, approval is blocked until HR reviews them
 (`POST /payroll/runs/:id/anomalies/review`); a recalculation clears the review so
 the fresh anomalies must be checked again.
 
+## Recruitment
+
+`/recruitment` (HR writes; payroll read-only) manages job openings (title,
+department, employment type, headcount) and candidates through
+applied → screening → interview → offer → hired/rejected. Candidate counts and
+hired/headcount are shown per opening; closing/reopening and deletion are
+supported. No CV files, interview scheduling, stage history, offer letters, or
+automatic employee creation yet.
+
 ## Onboarding
 
 `/onboarding` (HR writes; payroll read-only) runs a six-task standard checklist
@@ -764,7 +773,8 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 ### Phase 5 (partially started)
 
 - [x] Onboarding checklist (standard tasks from hire date, completion tracking).
-- [ ] Recruitment pipeline, offer letters/e-signature.
+- [x] Recruitment pipeline (openings, candidates, applied→hired/rejected stages).
+- [ ] Offer letters/e-signature, CV attachments, interview scheduling.
 - [x] Employee documents with expiry alerts (contracts, work permits, visas) and one downloadable file per document.
 - [ ] Performance reviews/OKRs, training records.
 - [x] Mobile PWA shell and offline punch queue; native app if required.

@@ -1156,3 +1156,22 @@ test("HR adds an expiring document and downloads its file", async ({ page }) => 
   expect(res.status()).toBe(200);
   expect(await res.text()).toContain("%PDF-1.4 e2e permit");
 });
+
+test("HR runs the standard onboarding checklist", async ({ page }) => {
+  await login(page);
+  await page.goto("/onboarding");
+
+  const employeeId = await page
+    .getByTestId("onboarding-employee")
+    .locator("option", { hasText: "E2E001" })
+    .getAttribute("value");
+  await page.getByTestId("onboarding-employee").selectOption(employeeId!);
+  await page.getByTestId("standard-checklist").click();
+  await expect(page.getByText("สร้างรายการมาตรฐานแล้ว")).toBeVisible();
+
+  await expect(page.getByTestId("onboarding-task")).toHaveCount(6);
+  await expect(page.getByTestId("onboarding-progress")).toContainText("เสร็จ 0/6");
+  await page.getByTestId("task-done").first().click();
+  await expect(page.getByTestId("onboarding-progress")).toContainText("เสร็จ 1/6");
+  await expect(page.getByTestId("onboarding-task").last()).toContainText("เสร็จแล้ว");
+});

@@ -14,6 +14,7 @@ pub mod forms;
 pub mod leave;
 pub mod loans;
 pub mod notify;
+pub mod onboarding;
 pub mod ot;
 pub mod pf;
 pub mod privacy;

@@ -1,5 +1,5 @@
 use axum::http::{header, Method};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::Router;
 use std::time::Duration;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -8,8 +8,8 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms,
-    graphql, health, leave, loans, mcp, me, memory, notifications, ot, payroll, pf, plugins,
-    privacy, reports, settings, settlement, setup, users,
+    graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll, pf,
+    plugins, privacy, reports, settings, settlement, setup, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -70,6 +70,20 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/employees/:id/documents",
             get(documents::list).post(documents::create),
         )
+        .route(
+            "/api/v1/employees/:id/onboarding",
+            get(onboarding::list).post(onboarding::create),
+        )
+        .route(
+            "/api/v1/employees/:id/onboarding/standard",
+            post(onboarding::standard),
+        )
+        .route(
+            "/api/v1/onboarding/:id",
+            patch(onboarding::update).delete(onboarding::remove),
+        )
+        .route("/api/v1/me/onboarding", get(onboarding::me_list))
+        .route("/api/v1/me/onboarding/:id", patch(onboarding::me_update))
         .route("/api/v1/documents/expiring", get(documents::expiring))
         .route("/api/v1/documents/:id", delete(documents::remove))
         .route(
@@ -330,7 +344,14 @@ pub fn build(state: AppState) -> Router {
         .collect();
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([
             header::AUTHORIZATION,
             header::CONTENT_TYPE,

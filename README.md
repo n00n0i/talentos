@@ -312,6 +312,15 @@ employee). If any exist, approval is blocked until HR reviews them
 (`POST /payroll/runs/:id/anomalies/review`); a recalculation clears the review so
 the fresh anomalies must be checked again.
 
+## Onboarding
+
+`/onboarding` (HR writes; payroll read-only) runs a six-task standard checklist
+from the hire date (contract, ID copy, bank details, SSO documents, safety
+training, equipment) and lets HR add ad-hoc tasks, set due dates/notes, and tick
+them off. The standard run is idempotent by title. Employees can read and
+complete their own tasks via `/api/v1/me/onboarding` (self UI not built yet).
+No reminders are sent; overdue tasks are flagged on the page.
+
 ## Metrics
 
 `GET /metrics` exposes Prometheus counters for HTTP status classes, request
@@ -754,7 +763,8 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 
 ### Phase 5 (partially started)
 
-- [ ] Recruitment pipeline, offer letters/e-signature, onboarding checklist.
+- [x] Onboarding checklist (standard tasks from hire date, completion tracking).
+- [ ] Recruitment pipeline, offer letters/e-signature.
 - [x] Employee documents with expiry alerts (contracts, work permits, visas) and one downloadable file per document.
 - [ ] Performance reviews/OKRs, training records.
 - [x] Mobile PWA shell and offline punch queue; native app if required.

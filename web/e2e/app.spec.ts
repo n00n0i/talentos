@@ -70,6 +70,7 @@ test("switches to English via the lang-toggle and sees EN nav labels", async ({ 
   // Reload and confirm it persists
   await page.reload();
   await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
+  await context.clearCookies();
 });
 
 test("settings persist across reload", async ({ page }) => {

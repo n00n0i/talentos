@@ -6,7 +6,7 @@ export const th: Dict = {
   "nav.overview": "ภาพรวม",
   "nav.employees": "พนักงาน",
   "nav.documents": "เอกสาร",
-  "nav.onboarding": "รเริ่มงาน",
+  "nav.onboarding": "เริ่มงาน",
   "nav.recruitment": "สรรหาบุคลากร",
   "nav.training": "อบรม",
   "nav.performance": "ประเมินผล",

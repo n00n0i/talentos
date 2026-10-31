@@ -44,10 +44,10 @@ const ADMIN_NAV: { href: string; label: NavKey; icon: IconName }[] = [
 ];
 
 const ROLE_LABEL: Record<string, string> = {
-  hr_admin: "ผู้ดูล่เอ HR",
-  payroll_manager: "ผู้จ้ดการเงิ่เดือ่",
-  manager: "ห้ล้หน้่่งาน",
-  employee: "ผ้่นักงาน",
+  hr_admin: "ผู้ดูแล HR",
+  payroll_manager: "ผู้จัดการเงินเดือน",
+  manager: "หัวหน้างาน",
+  employee: "พนักงาน",
 };
 
 function initials(name: string) {

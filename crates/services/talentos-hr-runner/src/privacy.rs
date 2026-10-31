@@ -273,7 +273,8 @@ pub async fn export_personal_data(
             r#"SELECT json_agg(json_build_object(
                    'cycle', c.name, 'period_start', c.period_start, 'period_end', c.period_end,
                    'status', r.status, 'rating', r.rating, 'strengths', r.strengths,
-                   'improvements', r.improvements, 'submitted_at', r.submitted_at)
+                   'improvements', r.improvements, 'submitted_at', r.submitted_at,
+                   'acknowledged_at', r.acknowledged_at)
                  ORDER BY c.period_start)
                  FROM performance_reviews r
                  JOIN performance_cycles c ON c.id = r.cycle_id AND c.tenant_id = r.tenant_id

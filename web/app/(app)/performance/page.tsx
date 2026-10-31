@@ -19,7 +19,7 @@ type Review = {
   employee_id: string;
   employee_code: string;
   employee_name: string;
-  status: "pending" | "submitted";
+  status: "pending" | "submitted" | "acknowledged";
   rating: number | null;
   strengths: string | null;
   improvements: string | null;
@@ -344,8 +344,20 @@ export default function PerformancePage() {
                         {review.employee_name} ({review.employee_code})
                       </td>
                       <td>
-                        <span className={`badge ${review.status === "submitted" ? "success" : ""}`}>
-                          {review.status === "submitted" ? "ส่งแล้ว" : "รอประเมิน"}
+                        <span
+                          className={`badge ${
+                            review.status === "acknowledged"
+                              ? "success"
+                              : review.status === "submitted"
+                                ? "warning"
+                                : ""
+                          }`}
+                        >
+                          {review.status === "acknowledged"
+                            ? "รับทราบแล้ว"
+                            : review.status === "submitted"
+                              ? "ส่งแล้ว"
+                              : "รอประเมิน"}
                         </span>
                       </td>
                       <td>

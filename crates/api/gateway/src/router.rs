@@ -7,7 +7,7 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms,
+    ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms, goals,
     graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll,
     performance, pf, plugins, privacy, recruitment, reports, settings, settlement, setup, training,
     users,
@@ -115,6 +115,15 @@ pub fn build(state: AppState) -> Router {
             patch(performance::submit_review),
         )
         .route("/api/v1/me/reviews", get(performance::me_reviews))
+        .route(
+            "/api/v1/employees/:id/goals",
+            get(goals::list).post(goals::create),
+        )
+        .route(
+            "/api/v1/goals/:id",
+            patch(goals::update).delete(goals::remove),
+        )
+        .route("/api/v1/me/goals", get(goals::me_list))
         .route(
             "/api/v1/jobs",
             get(recruitment::list_jobs).post(recruitment::create_job),

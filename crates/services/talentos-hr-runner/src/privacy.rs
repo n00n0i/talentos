@@ -282,6 +282,19 @@ pub async fn export_personal_data(
             id,
         )
         .await?;
+        let goals = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'title', g.title, 'target', g.target, 'progress', g.progress,
+                   'status', g.status, 'cycle', c.name) ORDER BY g.created_at)
+                 FROM performance_goals g
+                 LEFT JOIN performance_cycles c
+                        ON c.id = g.cycle_id AND c.tenant_id = g.tenant_id
+                WHERE g.tenant_id = $1 AND g.employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
         let documents = scalar_json(
             &mut tx,
             r#"SELECT json_agg(json_build_object(
@@ -340,6 +353,7 @@ pub async fn export_personal_data(
             "onboarding_tasks": onboarding_tasks,
             "training": training,
             "reviews": reviews,
+            "goals": goals,
             "payslips": payslips,
         }));
     }

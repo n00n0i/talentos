@@ -136,6 +136,16 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
     .await
     .expect("performance review");
     sqlx::query(
+        r#"INSERT INTO performance_goals
+             (tenant_id, employee_id, title, target, progress, status)
+           VALUES ($1, $2, 'เป้าหมายทดสอบ', '100%', 40, 'active')"#,
+    )
+    .bind(tenant_id)
+    .bind(employee_a)
+    .execute(&mut *tx)
+    .await
+    .expect("performance goal");
+    sqlx::query(
         r#"INSERT INTO employee_training_records
              (tenant_id, employee_id, title, provider, completed_on)
            VALUES ($1, $2, 'ปฐมพยาบาล', 'Academy', '2026-11-01')"#,
@@ -209,6 +219,8 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
     assert_eq!(first["training"][0]["title"], "ปฐมพยาบาล");
     assert_eq!(first["reviews"][0]["cycle"], "รอบทดสอบ");
     assert_eq!(first["reviews"][0]["rating"], 4);
+    assert_eq!(first["goals"][0]["title"], "เป้าหมายทดสอบ");
+    assert_eq!(first["goals"][0]["progress"], 40);
 
     let text = data.to_string();
     assert!(

@@ -14,6 +14,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/recruitment", label: "สรรหาบุคลากร", icon: "users" },
   { href: "/training", label: "อบรม", icon: "file" },
   { href: "/performance", label: "ประเมินผล", icon: "file" },
+  { href: "/goals", label: "เป้าหมาย", icon: "file" },
   { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
   { href: "/calendar", label: "ปฏิทินทีม", icon: "clock" },
   { href: "/clock", label: "ลงเวลา", icon: "clock" },
@@ -101,6 +102,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       "/recruitment",
       "/training",
       "/performance",
+      "/goals",
     ];
     const attendanceOnly = ["/attendance", "/calendar"];
     const denied =

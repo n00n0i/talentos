@@ -11,6 +11,7 @@ pub mod delegations;
 pub mod documents;
 pub mod escalation;
 pub mod forms;
+pub mod goals;
 pub mod leave;
 pub mod loans;
 pub mod notify;

@@ -24,6 +24,20 @@ type Goal = {
   status: "active" | "achieved" | "cancelled";
 };
 
+type CheckIn = {
+  id: string;
+  goal_id: string;
+  employee_id: string;
+  note: string;
+  created_at: string;
+};
+
+type DirectReport = {
+  id: string;
+  employee_code: string;
+  employee_name: string;
+};
+
 const emptyForm = { title: "", cycle_id: "", target: "", description: "" };
 
 const STATUSES: Record<string, string> = {
@@ -41,6 +55,11 @@ export default function GoalsPage() {
   const [form, setForm] = useState(emptyForm);
   const [drafts, setDrafts] = useState<Record<string, { progress: string; status: string }>>({});
   const [canWrite, setCanWrite] = useState(false);
+  const [canDirect, setCanDirect] = useState(false);
+  const [directReports, setDirectReports] = useState<DirectReport[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
+  const [checkInGoal, setCheckInGoal] = useState("");
+  const [checkInNote, setCheckInNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -58,18 +77,67 @@ export default function GoalsPage() {
   useEffect(() => {
     gw<{ employees: Employee[] }>("api/v1/employees?status=all&limit=500")
       .then((res) => setEmployees(res.employees))
-      .catch((e) => handleApiError(e, setError));
+      .catch(() => undefined);
     gw<Me>("api/v1/auth/me")
-      .then((me) => setCanWrite(me.permissions.includes("employee.update")))
+      .then((me) => {
+        setCanWrite(me.permissions.includes("employee.update"));
+        setCanDirect(me.permissions.includes("performance.manage_direct"));
+      })
       .catch((e) => handleApiError(e, setError));
     gw<{ cycles: Cycle[] }>("api/v1/performance/cycles")
       .then((res) => setCycles(res.cycles))
-      .catch((e) => handleApiError(e, setError));
+      .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!canDirect) return;
+    gw<{ direct_reports: DirectReport[] }>("api/v1/me/direct-reports")
+      .then((res) => setDirectReports(res.direct_reports))
+      .catch((e) => handleApiError(e, setError));
+  }, [canDirect]);
+
+  useEffect(() => {
+    if (!canDirect || !checkInGoal) {
+      setCheckIns([]);
+      return;
+    }
+    gw<{ check_ins: CheckIn[] }>(`api/v1/goals/${checkInGoal}/check-ins`)
+      .then((res) => setCheckIns(res.check_ins))
+      .catch((e) => handleApiError(e, setError));
+  }, [canDirect, checkInGoal]);
+
+  async function addCheckIn(event: React.FormEvent) {
+    event.preventDefault();
+    if (!checkInGoal) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(`api/v1/goals/${checkInGoal}/check-ins`, {
+        method: "POST",
+        body: JSON.stringify({ note: checkInNote }),
+      });
+      setCheckInNote("");
+      const res = await gw<{ check_ins: CheckIn[] }>(`api/v1/goals/${checkInGoal}/check-ins`);
+      setCheckIns(res.check_ins);
+      setNotice("บันทึก check-in แล้ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     loadGoals(employeeId, cycleFilter).catch((e) => handleApiError(e, setError));
   }, [employeeId, cycleFilter, loadGoals]);
+
+  useEffect(() => {
+    if (!canDirect || directReports.length === 0) return;
+    gw<{ goals: Goal[] }>("api/v1/me/direct-goals")
+      .then((res) => setGoals(res.goals))
+      .catch((e) => handleApiError(e, setError));
+  }, [canDirect, directReports]);
 
   useEffect(() => {
     setDrafts(
@@ -336,6 +404,60 @@ export default function GoalsPage() {
               })}
             </tbody>
           </table>
+        )}
+        {canDirect && directReports.length > 0 && (
+          <div className="card card-pad" style={{ marginTop: 12, display: "grid", gap: 12 }}>
+            <h2 style={{ fontSize: 16 }}>Check-in เป้าหมายลูกข่าตรง</h2>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <select
+                data-testid="checkin-goal"
+                value={checkInGoal}
+                onChange={(e) => setCheckInGoal(e.target.value)}
+              >
+                <option value="">— เลือกเป้าหมายลูกข่า —</option>
+                {goals.map((g) => {
+                  const report = directReports.find((r) => r.id === g.employee_id);
+                  return (
+                    <option key={g.id} value={g.id}>
+                      {report ? `${report.employee_code} · ` : ""}{g.title}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            {checkInGoal && (
+              <div style={{ display: "grid", gap: 8 }}>
+                <form onSubmit={addCheckIn} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <input
+                    data-testid="checkin-note"
+                    value={checkInNote}
+                    onChange={(e) => setCheckInNote(e.target.value)}
+                    placeholder="ข้อมลความคืบหน่า (ไมบังคับ)"
+                    required
+                  />
+                  <button
+                    className="btn btn-primary"
+                    data-testid="add-checkin"
+                    type="submit"
+                    disabled={busy}
+                  >
+                    บันทก check-in
+                  </button>
+                </form>
+                {checkIns.length === 0 ? (
+                  <div className="empty">ยังไมมี check-in เป้าหมายน</div>
+                ) : (
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {checkIns.map((c) => (
+                      <li key={c.id} data-testid="checkin-row">
+                        {c.note}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
     </>

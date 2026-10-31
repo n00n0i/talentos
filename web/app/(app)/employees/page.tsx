@@ -25,6 +25,7 @@ type Employee = {
   national_id_masked: string | null;
   sso_number_masked: string | null;
   user_id: string | null;
+  manager_id: string | null;
 };
 
 type FormState = {
@@ -43,6 +44,7 @@ type FormState = {
   national_id: string;
   sso_number: string;
   user_id: string;
+  manager_id: string;
   pf_rate: string;
   pf_rate_from: string;
 };
@@ -63,6 +65,7 @@ const EMPTY: FormState = {
   national_id: "",
   sso_number: "",
   user_id: "",
+  manager_id: "",
   pf_rate: "",
   pf_rate_from: "",
 };
@@ -250,6 +253,7 @@ export default function EmployeesPage() {
       national_id: "",
       sso_number: "",
       user_id: editing.user_id ?? "",
+      manager_id: editing.manager_id ?? "",
       pf_rate: "",
       pf_rate_from: "",
     });
@@ -290,6 +294,7 @@ export default function EmployeesPage() {
         national_id: form.national_id.trim() || null,
         sso_number: form.sso_number.trim() || null,
         user_id: form.user_id || null,
+        manager_id: form.manager_id || null,
       };
       if (editing === "new") {
         await gw("api/v1/employees", { method: "POST", body: JSON.stringify(body) });
@@ -309,6 +314,11 @@ export default function EmployeesPage() {
             });
           }
         }
+        // Persist the reporting manager separately (manager-scoped endpoint).
+        await gw(`api/v1/employees/${editing.id}/manager`, {
+          method: "PUT",
+          body: JSON.stringify({ manager_id: form.manager_id || null }),
+        });
         setNotice("บันทึกการแก้ไขแล้ว");
       }
       setEditing(null);
@@ -392,6 +402,12 @@ export default function EmployeesPage() {
       .toLowerCase()
       .includes(q);
   });
+
+  function managerName(id: string | null) {
+    if (!id) return "—";
+    const m = (rows ?? []).find((r) => r.id === id);
+    return m ? `${m.employee_code} · ${m.first_name_th} ${m.last_name_th}` : "—";
+  }
 
   return (
     <>
@@ -529,6 +545,24 @@ export default function EmployeesPage() {
                 ))}
               </select>
               <span className="hint">ให้พนักงานดูสลิปของตัวเองได้</span>
+            </div>
+            <div className="field">
+              <label>ผู้ดูแล (Manager)</label>
+              <select
+                data-testid="employee-manager"
+                value={form.manager_id}
+                onChange={(e) => set("manager_id", e.target.value)}
+              >
+                <option value="">ไม่ได้เลือก</option>
+                {(rows ?? [])
+                  .filter((m) => editing !== "new" && m.id !== editing.id)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.employee_code} · {m.first_name_th} {m.last_name_th}
+                    </option>
+                  ))}
+              </select>
+              <span className="hint">ผู้ดูแลที่พนักงานรายงานตรง</span>
             </div>
           </div>
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
@@ -677,6 +711,7 @@ export default function EmployeesPage() {
                 <th>ชื่อ</th>
                 <th>ตำแหน่ง</th>
                 <th>แผนก</th>
+                <th>ผู้ดูแล</th>
                 <th className="num">เงินเดือน</th>
                 <th>สถานะ</th>
                 <th />
@@ -691,6 +726,7 @@ export default function EmployeesPage() {
                   </td>
                   <td>{e.position_title}</td>
                   <td>{e.department ?? "—"}</td>
+                  <td>{managerName(e.manager_id)}</td>
                   <td className="num">฿{thb(e.base_salary)}</td>
                   <td>
                     <span className={`badge ${e.status === "active" ? "success" : e.status === "terminated" ? "danger" : ""}`}>

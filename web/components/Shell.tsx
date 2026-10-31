@@ -88,6 +88,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const isAdmin = me?.roles.includes("hr_admin") ?? false;
   const canHr = me?.permissions.includes("employee.read_all") ?? true;
+  const canDirect = me?.permissions.includes("performance.manage_direct") ?? false;
   const canReports = me?.roles.some((r) => ["hr_admin", "payroll_manager"].includes(r)) ?? false;
 
   // Direct URLs must not render admin screens for roles that only see the
@@ -106,10 +107,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       "/goals",
     ];
     const attendanceOnly = ["/attendance", "/calendar"];
+    // /performance and /goals are reachable by managers with manage_direct.
+    const directOnly = ["/performance", "/goals"];
     const denied =
       (adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
       (payrollOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canReports) ||
-      (hrOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canHr) ||
+      (hrOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+        !canHr &&
+        !directOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`))) ||
       (attendanceOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
         !me.permissions.includes("attendance.read"));
     if (denied) router.replace("/clock");
@@ -137,6 +142,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     "/privacy",
     "/me/reviews",
   ];
+  const directPages = ["/performance", "/goals"];
   const items = !me
     ? baseNav
     : canHr
@@ -144,6 +150,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       : baseNav.filter(
           (i) =>
             employeeNav.includes(i.href) ||
+            (directPages.includes(i.href) && canDirect) ||
             ((i.href === "/attendance" || i.href === "/calendar") &&
               me.permissions.includes("attendance.read")),
         );

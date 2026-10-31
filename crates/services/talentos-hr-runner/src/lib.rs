@@ -52,6 +52,10 @@ pub use forms::{
     FormError, FormField, FormTemplate, HeaderField, ALLOWED_SOURCES, FORM_TYPE_50TAWI,
     FORM_TYPE_BANK_PAYOUT, FORM_TYPE_PND1, FORM_TYPE_PND1A, FORM_TYPE_SSO1_10,
 };
+pub use goals::{
+    add_goal_check_in, list_goal_check_ins, list_goals_for_manager, CheckInError, CheckInView,
+    GoalError, GoalInput, GoalView,
+};
 pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,
     list_balances, list_requests, pending_approvals, DecideOutcome, LeaveBalanceView, LeaveError,
@@ -66,6 +70,10 @@ pub use ot::{
     decide_request as decide_ot_request, list_requests as list_ot_requests,
     pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests,
     OtDecideOutcome, OtError, OtInput, OtRequestView, PendingOt,
+};
+pub use performance::{
+    list_calibrations, list_cycles_for_manager, list_direct_reports, set_employee_manager,
+    upsert_calibration, CalibrationView, DirectReportView,
 };
 pub use pf::{
     build_remittance_payload, list_rates, rate_for, upsert_rate, PfError, PfRate,

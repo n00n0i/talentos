@@ -111,6 +111,80 @@ pub async fn me_list(State(state): State<AppState>, Authed(ctx): Authed) -> Resp
     }
 }
 
+/// GET /api/v1/goals/:id/check-ins — check-in notes logged on a goal.
+pub async fn list_check_ins(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "performance", "manage_direct") {
+        return forbidden;
+    }
+    match goals::list_goal_check_ins(&state.pool, ctx.tenant_id, id).await {
+        Ok(check_ins) => Json(json!({ "check_ins": check_ins })).into_response(),
+        Err(e) => map_check_in_error(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CheckInBody {
+    pub note: String,
+}
+
+/// POST /api/v1/goals/:id/check-ins — log a check-in (goal owner's manager only).
+pub async fn add_check_in(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<CheckInBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "performance", "manage_direct") {
+        return forbidden;
+    }
+    match goals::add_goal_check_in(&state.pool, ctx.tenant_id, ctx.user_id.0, id, &body.note).await
+    {
+        Ok(check_in) => {
+            (StatusCode::CREATED, Json(json!({ "check_in": check_in }))).into_response()
+        }
+        Err(e) => map_check_in_error(e),
+    }
+}
+
+/// GET /api/v1/me/direct-goals — goals owned by the caller's direct reports.
+pub async fn me_direct_goals(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "performance", "manage_direct") {
+        return forbidden;
+    }
+    match goals::list_goals_for_manager(&state.pool, ctx.tenant_id, ctx.user_id.0).await {
+        Ok(goals) => Json(json!({ "goals": goals })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+fn map_check_in_error(e: goals::CheckInError) -> Response {
+    use goals::CheckInError::*;
+    match e {
+        GoalNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(envelope("not_found", &e.to_string())),
+        )
+            .into_response(),
+        NotManager | InvalidNote => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(envelope("invalid_request", &e.to_string())),
+        )
+            .into_response(),
+        Db(_) => {
+            tracing::error!(error = %e, "goal check-in endpoint failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(envelope("internal_error", "An unexpected error occurred")),
+            )
+                .into_response()
+        }
+    }
+}
+
 fn map_error(e: GoalError) -> Response {
     use GoalError::*;
     match e {

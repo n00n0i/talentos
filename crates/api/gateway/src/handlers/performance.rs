@@ -167,6 +167,81 @@ pub async fn me_reviews(State(state): State<AppState>, Authed(ctx): Authed) -> R
     }
 }
 
+/// GET /api/v1/me/performance/cycles — cycles that hold a review of one of
+/// the caller's direct reports.
+pub async fn me_direct_cycles(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "performance", "manage_direct") {
+        return forbidden;
+    }
+    match performance::list_cycles_for_manager(&state.pool, ctx.tenant_id, ctx.user_id.0).await {
+        Ok(cycles) => Json(json!({ "cycles": cycles })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// GET /api/v1/me/direct-reports — employees managed by the caller.
+pub async fn me_direct_reports(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "performance", "manage_direct") {
+        return forbidden;
+    }
+    match performance::list_direct_reports(&state.pool, ctx.tenant_id, ctx.user_id.0).await {
+        Ok(reports) => Json(json!({ "direct_reports": reports })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// GET /api/v1/performance/cycles/:id/calibrations
+pub async fn list_calibrations(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "performance", "manage_direct") {
+        return forbidden;
+    }
+    match performance::list_calibrations(&state.pool, ctx.tenant_id, ctx.user_id.0, id).await {
+        Ok(rows) => Json(json!({ "calibrations": rows })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpsertCalibrationBody {
+    pub employee_id: Uuid,
+    pub calibrated_rating: i32,
+    pub notes: Option<String>,
+}
+
+/// POST /api/v1/performance/cycles/:id/calibrations — insert or override.
+pub async fn upsert_calibration(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<UpsertCalibrationBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "performance", "manage_direct") {
+        return forbidden;
+    }
+    match performance::upsert_calibration(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        body.employee_id,
+        body.calibrated_rating,
+        body.notes.as_deref(),
+    )
+    .await
+    {
+        Ok(calibration) => (
+            StatusCode::CREATED,
+            Json(json!({ "calibration": calibration })),
+        )
+            .into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
 fn map_error(e: PerformanceError) -> Response {
     use PerformanceError::*;
     match e {
@@ -180,9 +255,16 @@ fn map_error(e: PerformanceError) -> Response {
             Json(envelope("conflict", &e.to_string())),
         )
             .into_response(),
-        InvalidName | InvalidPeriod | InvalidRating | InvalidText => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(envelope("invalid_request", &e.to_string())),
+        InvalidName | InvalidPeriod | InvalidRating | InvalidText | SelfAssignment | NotManager => {
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(envelope("invalid_request", &e.to_string())),
+            )
+                .into_response()
+        }
+        ManagerNotFound => (
+            StatusCode::NOT_FOUND,
+            Json(envelope("not_found", &e.to_string())),
         )
             .into_response(),
         Db(_) => {

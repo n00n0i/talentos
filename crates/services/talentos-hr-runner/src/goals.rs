@@ -252,3 +252,164 @@ pub async fn list_my_goals(
         .map(|row| map_goal(row).map_err(GoalError::from))
         .collect()
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum CheckInError {
+    #[error("goal not found")]
+    GoalNotFound,
+    #[error("caller is not the direct manager of the goal owner")]
+    NotManager,
+    #[error("check-in note must be 1-2000 characters")]
+    InvalidNote,
+    #[error("database error: {0}")]
+    Db(#[from] sqlx::Error),
+}
+
+#[derive(Debug, Serialize)]
+pub struct CheckInView {
+    pub id: Uuid,
+    pub goal_id: Uuid,
+    pub employee_id: Uuid,
+    pub manager_id: Option<Uuid>,
+    pub note: String,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Check-in notes logged on a goal (by the goal owner's manager).
+pub async fn list_goal_check_ins(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    goal_id: Uuid,
+) -> Result<Vec<CheckInView>, CheckInError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let goal: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM performance_goals WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.0)
+            .bind(goal_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if goal.is_none() {
+        return Err(CheckInError::GoalNotFound);
+    }
+    let rows = sqlx::query(
+        r#"SELECT id, goal_id, employee_id, manager_id, note, created_at
+             FROM performance_goal_check_ins
+            WHERE tenant_id = $1 AND goal_id = $2
+            ORDER BY created_at DESC, id DESC"#,
+    )
+    .bind(tenant_id.0)
+    .bind(goal_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| {
+            Ok(CheckInView {
+                id: row.try_get("id")?,
+                goal_id: row.try_get("goal_id")?,
+                employee_id: row.try_get("employee_id")?,
+                manager_id: row.try_get("manager_id")?,
+                note: row.try_get("note")?,
+                created_at: row.try_get("created_at")?,
+            })
+        })
+        .collect()
+}
+
+/// Log a check-in on a goal. Only the goal owner's direct manager may.
+pub async fn add_goal_check_in(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    goal_id: Uuid,
+    note: &str,
+) -> Result<CheckInView, CheckInError> {
+    let note = note.trim();
+    if note.is_empty() || note.chars().count() > 2000 {
+        return Err(CheckInError::InvalidNote);
+    }
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let owner: Option<Uuid> = sqlx::query_scalar(
+        "SELECT employee_id FROM performance_goals WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id.0)
+    .bind(goal_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(CheckInError::GoalNotFound)?;
+    let caller: Uuid =
+        sqlx::query_scalar("SELECT id FROM employees WHERE tenant_id = $1 AND user_id = $2")
+            .bind(tenant_id.0)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(CheckInError::NotManager)?;
+    let allowed: Option<Uuid> =
+        sqlx::query_scalar("SELECT manager_id FROM employees WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.0)
+            .bind(owner)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if allowed != Some(caller) {
+        return Err(CheckInError::NotManager);
+    }
+    let row = sqlx::query(
+        r#"INSERT INTO performance_goal_check_ins
+             (tenant_id, goal_id, employee_id, manager_id, note)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, goal_id, employee_id, manager_id, note, created_at"#,
+    )
+    .bind(tenant_id.0)
+    .bind(goal_id)
+    .bind(owner)
+    .bind(caller)
+    .bind(note)
+    .fetch_one(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'performance.check_in', 'performance_goal', $3, $4)"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id.to_string())
+    .bind(goal_id.to_string())
+    .bind(serde_json::json!({ "note": note, "manager_id": caller }))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(CheckInView {
+        id: row.try_get("id")?,
+        goal_id: row.try_get("goal_id")?,
+        employee_id: row.try_get("employee_id")?,
+        manager_id: row.try_get("manager_id")?,
+        note: row.try_get("note")?,
+        created_at: row.try_get("created_at")?,
+    })
+}
+
+/// Goals owned by the caller's direct reports.
+pub async fn list_goals_for_manager(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+) -> Result<Vec<GoalView>, GoalError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let sql = format!(
+        "{GOAL_SELECT}
+         AND g.employee_id IN (
+               SELECT e2.id FROM employees e1
+               JOIN employees e2 ON e2.manager_id = e1.id AND e2.tenant_id = e1.tenant_id
+              WHERE e1.tenant_id = $1 AND e1.user_id = $2)
+         ORDER BY (g.status = 'active') DESC, g.created_at DESC"
+    );
+    let rows = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| map_goal(row).map_err(GoalError::from))
+        .collect()
+}

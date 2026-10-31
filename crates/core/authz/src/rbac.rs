@@ -104,6 +104,10 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
             (("user_management", "assign_role"), &["hr_admin"][..]),
             (("user_management", "reset_2fa"), &["hr_admin"][..]),
             (("user_management", "update"), &["hr_admin"][..]),
+            (
+                ("performance", "manage_direct"),
+                &["hr_admin", "manager"][..],
+            ),
             (("audit_log", "read"), &["hr_admin"][..]),
             (
                 ("approval_delegation", "manage"),
@@ -212,6 +216,22 @@ mod tests {
         assert!(perms.contains(&"employee.create".to_string()));
         assert!(perms.contains(&"audit_log.read".to_string()));
         assert!(perms.len() >= 18); // hr_admin has nearly all permissions
+    }
+
+    #[test]
+    fn manager_can_manage_direct_performance_but_employee_cannot() {
+        for role in ["hr_admin", "manager"] {
+            assert!(
+                has_permission(&[role.into()], "performance", "manage_direct"),
+                "{role} should manage direct performance"
+            );
+        }
+        for role in ["payroll_manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "performance", "manage_direct"),
+                "{role} should not manage direct performance"
+            );
+        }
     }
 
     #[test]

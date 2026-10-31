@@ -278,3 +278,219 @@ async fn validation_and_tenant_isolation() {
     cleanup(&raw, tenant_id).await;
     cleanup(&raw, other_tenant).await;
 }
+
+use talentos_hr_runner::performance::{
+    list_calibrations, list_cycles_for_manager, list_direct_reports, set_employee_manager,
+    upsert_calibration,
+};
+use uuid::Uuid;
+
+/// Two employees (report + manager-candidate) and a user linked to the report's would-be manager.
+async fn seed_manager_link(pool: &PgPool, tenant_id: Uuid, report_id: Uuid, manager_id: Uuid) {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("UPDATE employees SET manager_id = $3 WHERE id = $1 AND tenant_id = $2")
+        .bind(report_id)
+        .bind(tenant_id)
+        .bind(manager_id)
+        .execute(&mut *tx)
+        .await
+        .expect("set manager");
+    tx.commit().await.expect("commit");
+}
+
+#[tokio::test]
+async fn set_employee_manager_assigns_and_audits() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let report = entities[0].1;
+    let manager = entities[1].1;
+    let actor = user_id_of(&raw, tenant_id, report).await;
+    let tenant = TenantId(tenant_id);
+
+    set_employee_manager(&pool, tenant, actor, report, Some(manager))
+        .await
+        .expect("assign manager");
+    let stored: Option<Uuid> = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let v =
+            sqlx::query_scalar("SELECT manager_id FROM employees WHERE id = $1 AND tenant_id = $2")
+                .bind(report)
+                .bind(tenant_id)
+                .fetch_one(&mut *tx)
+                .await
+                .expect("manager_id");
+        let _ = tx.rollback().await;
+        v
+    };
+    assert_eq!(stored, Some(manager));
+
+    let audits: i64 = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let n = sqlx::query_scalar(
+            "SELECT count(*) FROM audit_log WHERE tenant_id = $1 AND action = 'employee.manager_set'",
+        )
+        .bind(tenant_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("audit count");
+        let _ = tx.rollback().await;
+        n
+    };
+    assert_eq!(audits, 1, "manager assignment is audit-logged");
+
+    // Self-assignment is rejected.
+    assert!(matches!(
+        set_employee_manager(&pool, tenant, actor, report, Some(report)).await,
+        Err(PerformanceError::SelfAssignment)
+    ));
+    // Cross-tenant manager is rejected.
+    let other_id = Uuid::new_v4();
+    assert!(matches!(
+        set_employee_manager(&pool, tenant, actor, report, Some(other_id)).await,
+        Err(PerformanceError::ManagerNotFound)
+    ));
+    // Clearing the manager is allowed.
+    set_employee_manager(&pool, tenant, actor, report, None)
+        .await
+        .expect("clear manager");
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn manager_scoped_cycles_and_calibrations() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let report = entities[0].1;
+    let manager = entities[1].1;
+    let actor = user_id_of(&raw, tenant_id, manager).await;
+    let tenant = TenantId(tenant_id);
+
+    // The manager (a user linked to employee `manager`) reports `report`.
+    seed_manager_link(&raw, tenant_id, report, manager).await;
+
+    let mut input = cycle();
+    input.name = "รอบจัดการ 2026".into();
+    let created = create_cycle(&pool, tenant, actor, &input)
+        .await
+        .expect("cycle");
+    start_cycle(&pool, tenant, created.id).await.expect("start");
+
+    // Direct reports now include `report`.
+    let reports = list_direct_reports(&pool, tenant, actor)
+        .await
+        .expect("direct reports");
+    assert!(
+        reports.iter().any(|r| r.id == report),
+        "manager sees their direct report"
+    );
+
+    // The manager sees the cycle that holds a review of their direct report.
+    let cycles = list_cycles_for_manager(&pool, tenant, actor)
+        .await
+        .expect("manager cycles");
+    assert!(
+        cycles.iter().any(|c| c.id == created.id),
+        "manager sees cycle with a direct-report review"
+    );
+
+    // Upsert as the manager is allowed.
+    let calibration = upsert_calibration(
+        &pool,
+        tenant,
+        actor,
+        created.id,
+        report,
+        4,
+        Some("ระดับสอดคล้องทีม"),
+    )
+    .await
+    .expect("calibration");
+    assert_eq!(calibration.employee_id, report);
+    assert_eq!(calibration.calibrated_rating, 4);
+
+    // A second manager (unrelated user) cannot calibrate the same report.
+    let outsider = user_id_of(&raw, tenant_id, report).await;
+    assert!(matches!(
+        upsert_calibration(&pool, tenant, outsider, created.id, report, 5, None).await,
+        Err(PerformanceError::NotManager)
+    ));
+
+    // Listing is scoped to the manager's direct reports.
+    let calibrations = list_calibrations(&pool, tenant, actor, created.id)
+        .await
+        .expect("calibrations");
+    assert!(calibrations.iter().any(|c| c.id == calibration.id));
+
+    // Invalid ratings and long notes are rejected.
+    assert!(matches!(
+        upsert_calibration(&pool, tenant, actor, created.id, report, 6, None).await,
+        Err(PerformanceError::InvalidRating)
+    ));
+    let long = "x".repeat(2001);
+    assert!(matches!(
+        upsert_calibration(&pool, tenant, actor, created.id, report, 4, Some(&long)).await,
+        Err(PerformanceError::InvalidText)
+    ));
+
+    let audits: i64 = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let n = sqlx::query_scalar(
+            "SELECT count(*) FROM audit_log WHERE tenant_id = $1 AND action = 'performance.calibration'",
+        )
+        .bind(tenant_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("calibration audit count");
+        let _ = tx.rollback().await;
+        n
+    };
+    assert!(audits >= 1, "calibration is audit-logged");
+
+    // Tenant isolation: the manager of another tenant cannot calibrate the
+    // report (cross-tenant `manager_id` is never stored).
+    let (other_tenant, other_entities) = seed_tenant_entities(&raw, 1).await;
+    let other = TenantId(other_tenant);
+    let other_actor = user_id_of(&raw, other_tenant, other_entities[0].1).await;
+    assert!(matches!(
+        upsert_calibration(&pool, other, other_actor, created.id, report, 4, None).await,
+        Err(PerformanceError::NotManager)
+    ));
+    assert!(matches!(
+        list_calibrations(&pool, other, other_actor, created.id).await,
+        Err(PerformanceError::CycleNotFound)
+    ));
+
+    cleanup(&raw, tenant_id).await;
+    cleanup(&raw, other_tenant).await;
+}

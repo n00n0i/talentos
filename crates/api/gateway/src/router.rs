@@ -120,6 +120,22 @@ pub fn build(state: AppState) -> Router {
             post(performance::me_acknowledge),
         )
         .route(
+            "/api/v1/performance/cycles/:id/calibrations",
+            get(performance::list_calibrations).post(performance::upsert_calibration),
+        )
+        .route(
+            "/api/v1/me/performance/cycles",
+            get(performance::me_direct_cycles),
+        )
+        .route(
+            "/api/v1/me/direct-reports",
+            get(performance::me_direct_reports),
+        )
+        .route(
+            "/api/v1/employees/:id/manager",
+            axum::routing::put(employees::set_manager),
+        )
+        .route(
             "/api/v1/employees/:id/goals",
             get(goals::list).post(goals::create),
         )
@@ -127,6 +143,11 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/goals/:id",
             patch(goals::update).delete(goals::remove),
         )
+        .route(
+            "/api/v1/goals/:id/check-ins",
+            get(goals::list_check_ins).post(goals::add_check_in),
+        )
+        .route("/api/v1/me/direct-goals", get(goals::me_direct_goals))
         .route("/api/v1/me/goals", get(goals::me_list))
         .route(
             "/api/v1/jobs",

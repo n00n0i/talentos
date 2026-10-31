@@ -7,9 +7,9 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, calendar, claims, delegations, employees, forms, graphql, health,
-    leave, loans, mcp, me, memory, notifications, ot, payroll, pf, plugins, privacy, reports,
-    settings, settlement, setup, users,
+    ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms,
+    graphql, health, leave, loans, mcp, me, memory, notifications, ot, payroll, pf, plugins,
+    privacy, reports, settings, settlement, setup, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -66,6 +66,20 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/employees/:id/final-settlement",
             post(settlement::compute),
         )
+        .route(
+            "/api/v1/employees/:id/documents",
+            get(documents::list).post(documents::create),
+        )
+        .route("/api/v1/documents/expiring", get(documents::expiring))
+        .route("/api/v1/documents/:id", delete(documents::remove))
+        .route(
+            "/api/v1/documents/:id/file",
+            get(documents::download)
+                .post(documents::upload)
+                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+        )
+        .route("/api/v1/me/documents", get(documents::me_list))
+        .route("/api/v1/me/documents/:id/file", get(documents::me_download))
         .route(
             "/api/v1/employees/:id/pf-rates",
             get(employees::list_pf_rates).post(employees::upsert_pf_rate),

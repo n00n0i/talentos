@@ -258,6 +258,16 @@ pub async fn export_personal_data(
             id,
         )
         .await?;
+        let training = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'title', title, 'provider', provider, 'completed_on', completed_on,
+                   'expires_on', expires_on) ORDER BY completed_on DESC NULLS LAST)
+                 FROM employee_training_records WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
         let documents = scalar_json(
             &mut tx,
             r#"SELECT json_agg(json_build_object(
@@ -314,6 +324,7 @@ pub async fn export_personal_data(
             "loans": loans,
             "documents": documents,
             "onboarding_tasks": onboarding_tasks,
+            "training": training,
             "payslips": payslips,
         }));
     }

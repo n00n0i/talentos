@@ -140,6 +140,12 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/candidates/:id",
             patch(recruitment::update_candidate).delete(recruitment::remove_candidate),
         )
+        .route(
+            "/api/v1/candidates/:id/cv",
+            get(recruitment::download_cv)
+                .post(recruitment::upload_cv)
+                .layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)),
+        )
         .route("/api/v1/me/onboarding", get(onboarding::me_list))
         .route("/api/v1/me/onboarding/:id", patch(onboarding::me_update))
         .route("/api/v1/documents/expiring", get(documents::expiring))

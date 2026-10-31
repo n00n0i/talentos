@@ -26,6 +26,7 @@ type Candidate = {
   stage: string;
   source: string | null;
   note: string | null;
+  has_cv: boolean;
   created_at: string;
 };
 
@@ -68,6 +69,7 @@ export default function RecruitmentPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [jobForm, setJobForm] = useState(emptyJob);
   const [candForm, setCandForm] = useState(emptyCandidate);
+  const [cvFile, setCvFile] = useState<File | null>(null);
   const [canWrite, setCanWrite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -163,25 +165,64 @@ export default function RecruitmentPage() {
     setError("");
     setNotice("");
     try {
-      await gw(`api/v1/jobs/${selected.id}/candidates`, {
-        method: "POST",
-        body: JSON.stringify({
-          first_name: candForm.first_name,
-          last_name: candForm.last_name,
-          email: candForm.email.trim() || null,
-          phone: candForm.phone.trim() || null,
-          source: candForm.source.trim() || null,
-          note: candForm.note.trim() || null,
-        }),
-      });
+      const created = await gw<{ candidate: Candidate }>(
+        `api/v1/jobs/${selected.id}/candidates`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            first_name: candForm.first_name,
+            last_name: candForm.last_name,
+            email: candForm.email.trim() || null,
+            phone: candForm.phone.trim() || null,
+            source: candForm.source.trim() || null,
+            note: candForm.note.trim() || null,
+          }),
+        },
+      );
       setCandForm(emptyCandidate);
+      const uploaded = cvFile ? await uploadCv(created.candidate.id, cvFile) : true;
+      setCvFile(null);
       await Promise.all([loadCandidates(selected.id), loadJobs()]);
-      setNotice("เพิ่มผู้สมัครแล้ว");
+      setNotice(uploaded ? "เพิ่มผู้สมัครแล้ว" : "เพิ่มผู้สมัครแล้ว แต่ CV อัปโหลดไม่สำเร็จ");
     } catch (e) {
       handleApiError(e, setError);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function uploadCv(id: string, file: File | undefined) {
+    if (!file) return true;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("ไฟล์ CV ใหญ่เกิน 5 MB");
+      return false;
+    }
+    try {
+      const res = await fetch(`/api/gw/api/v1/candidates/${id}/cv`, {
+        method: "POST",
+        headers: { "content-type": file.type },
+        body: file,
+      });
+      if (!res.ok) {
+        setError(`อัปโหลด CV ไม่สำเร็จ (${res.status})`);
+        return false;
+      }
+      return true;
+    } catch {
+      setError("อัปโหลด CV ไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ");
+      return false;
+    }
+  }
+
+  async function attachCv(id: string, file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    if (await uploadCv(id, file)) {
+      await Promise.all([loadCandidates(selected!.id), loadJobs()]);
+      setNotice("อัปโหลด CV แล้ว");
+    }
+    setBusy(false);
   }
 
   async function moveStage(candidate: Candidate, stage: string) {
@@ -427,6 +468,15 @@ export default function RecruitmentPage() {
                   />
                 </label>
               </div>
+              <label>
+                CV (PDF, JPEG, PNG ≤ 5 MB)
+                <input
+                  data-testid="cand-cv"
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/png"
+                  onChange={(e) => setCvFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
               <button className="btn" data-testid="add-candidate" type="submit" disabled={busy}>
                 เพิ่มผู้สมัคร
               </button>
@@ -442,6 +492,7 @@ export default function RecruitmentPage() {
                   <th>ชื่อ</th>
                   <th>ติดต่อ</th>
                   <th>แหล่งที่มา</th>
+                  <th>CV</th>
                   <th>ขั้นตอน</th>
                   <th>สมัครเมื่อ</th>
                   {canWrite && <th />}
@@ -461,6 +512,35 @@ export default function RecruitmentPage() {
                       {candidate.phone && <div style={{ fontSize: 13 }}>{candidate.phone}</div>}
                     </td>
                     <td>{candidate.source ?? "—"}</td>
+                    <td>
+                      {candidate.has_cv ? (
+                        <a
+                          className="badge accent"
+                          data-testid="candidate-cv"
+                          href={`/api/gw/api/v1/candidates/${candidate.id}/cv`}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ marginRight: 6 }}
+                        >
+                          ดาวน์โหลด
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                      {canWrite && (
+                        <label className="badge" style={{ cursor: "pointer" }}>
+                          อัปโหลด
+                          <input
+                            data-testid="candidate-cv-upload"
+                            type="file"
+                            accept="application/pdf,image/jpeg,image/png"
+                            disabled={busy}
+                            style={{ display: "none" }}
+                            onChange={(e) => attachCv(candidate.id, e.target.files?.[0])}
+                          />
+                        </label>
+                      )}
+                    </td>
                     <td>
                       <select
                         data-testid="candidate-stage"

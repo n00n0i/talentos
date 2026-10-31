@@ -1195,11 +1195,20 @@ test("HR opens a job and moves a candidate through the pipeline", async ({ page 
   await page.getByTestId("cand-email").fill("candidate@example.com");
   await page.getByTestId("cand-phone").fill("0800000000");
   await page.getByTestId("cand-source").fill("referral");
+  await page.getByTestId("cand-cv").setInputFiles({
+    name: "cv.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 e2e cv"),
+  });
   await page.getByTestId("add-candidate").click();
   await expect(page.getByText("เพิ่มผู้สมัครแล้ว")).toBeVisible();
 
   const candidate = page.getByTestId("candidate-row").filter({ hasText: "สมหญิง" });
   await expect(candidate).toBeVisible();
+  const cvHref = await candidate.getByTestId("candidate-cv").getAttribute("href");
+  const cv = await page.request.get(cvHref!);
+  expect(cv.status()).toBe(200);
+  expect(await cv.text()).toContain("%PDF-1.4 e2e cv");
   await candidate.getByTestId("candidate-stage").selectOption("interview");
   await expect(candidate.getByTestId("candidate-stage")).toHaveValue("interview");
   await expect(jobRow).toContainText("1 คน");

@@ -30,6 +30,16 @@ type Candidate = {
   created_at: string;
 };
 
+type Interview = {
+  id: string;
+  candidate_id: string;
+  scheduled_at: string;
+  mode: string;
+  location: string | null;
+  status: string;
+  notes: string | null;
+};
+
 type StageEvent = {
   id: number;
   from_stage: string | null;
@@ -80,6 +90,14 @@ export default function RecruitmentPage() {
   const [cvFile, setCvFile] = useState<File | null>(null);
   const [historyFor, setHistoryFor] = useState<Candidate | null>(null);
   const [history, setHistory] = useState<StageEvent[]>([]);
+  const [interviewFor, setInterviewFor] = useState<Candidate | null>(null);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [interviewForm, setInterviewForm] = useState({
+    scheduled_at: "",
+    mode: "onsite",
+    location: "",
+    notes: "",
+  });
   const [canWrite, setCanWrite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -245,6 +263,74 @@ export default function RecruitmentPage() {
       setHistoryFor(candidate);
     } catch (e) {
       handleApiError(e, setError);
+    }
+  }
+
+  async function showInterviews(candidate: Candidate) {
+    setError("");
+    try {
+      const res = await gw<{ interviews: Interview[] }>(
+        `api/v1/candidates/${candidate.id}/interviews`,
+      );
+      setInterviews(res.interviews);
+      setInterviewFor(candidate);
+    } catch (e) {
+      handleApiError(e, setError);
+    }
+  }
+
+  async function scheduleInterview(event: React.FormEvent) {
+    event.preventDefault();
+    if (!interviewFor) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/candidates/${interviewFor.id}/interviews`, {
+        method: "POST",
+        body: JSON.stringify({
+          scheduled_at: new Date(interviewForm.scheduled_at).toISOString(),
+          mode: interviewForm.mode,
+          location: interviewForm.location.trim() || null,
+          notes: interviewForm.notes.trim() || null,
+        }),
+      });
+      setInterviewForm({ scheduled_at: "", mode: "onsite", location: "", notes: "" });
+      await showInterviews(interviewFor);
+      setNotice("นัดสัมภาษณ์แล้ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setInterviewStatus(id: string, status: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/interviews/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      if (interviewFor) await showInterviews(interviewFor);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeInterview(id: string) {
+    if (!confirm("ลบนัดสัมภาษณ์นี้หรือไม่?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/interviews/${id}`, { method: "DELETE" });
+      if (interviewFor) await showInterviews(interviewFor);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -532,6 +618,13 @@ export default function RecruitmentPage() {
                         onClick={() => showHistory(candidate)}
                       >
                         ประวัติ
+                      </button>{" "}
+                      <button
+                        className="badge"
+                        data-testid="candidate-interview-button"
+                        onClick={() => showInterviews(candidate)}
+                      >
+                        สัมภาษณ์
                       </button>
                       {candidate.note && (
                         <div style={{ color: "var(--muted)", fontSize: 13 }}>{candidate.note}</div>
@@ -602,6 +695,110 @@ export default function RecruitmentPage() {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {interviewFor && (
+            <div className="card card-pad" data-testid="candidate-interviews" style={{ marginTop: 12 }}>
+              <h3 style={{ fontSize: 15 }}>
+                นัดสัมภาษณ์: {interviewFor.first_name} {interviewFor.last_name}
+              </h3>
+              {canWrite && (
+                <form onSubmit={scheduleInterview} style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+                  <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr 2fr", gap: 12 }}>
+                    <label>
+                      วันเวลา
+                      <input
+                        data-testid="interview-when"
+                        type="datetime-local"
+                        value={interviewForm.scheduled_at}
+                        onChange={(e) =>
+                          setInterviewForm({ ...interviewForm, scheduled_at: e.target.value })
+                        }
+                        required
+                      />
+                    </label>
+                    <label>
+                      รูปแบบ
+                      <select
+                        data-testid="interview-mode"
+                        value={interviewForm.mode}
+                        onChange={(e) =>
+                          setInterviewForm({ ...interviewForm, mode: e.target.value })
+                        }
+                      >
+                        <option value="onsite">ที่สำนักงาน</option>
+                        <option value="online">ออนไลน์</option>
+                        <option value="phone">โทรศัพท์</option>
+                      </select>
+                    </label>
+                    <label>
+                      สถานที่ / ลิงก์
+                      <input
+                        data-testid="interview-location"
+                        value={interviewForm.location}
+                        onChange={(e) =>
+                          setInterviewForm({ ...interviewForm, location: e.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label>
+                    หมายเหตุ
+                    <input
+                      data-testid="interview-notes"
+                      value={interviewForm.notes}
+                      onChange={(e) =>
+                        setInterviewForm({ ...interviewForm, notes: e.target.value })
+                      }
+                    />
+                  </label>
+                  <button className="btn" data-testid="schedule-interview" type="submit" disabled={busy}>
+                    นัดสัมภาษณ์
+                  </button>
+                </form>
+              )}
+
+              {interviews.length === 0 ? (
+                <div className="empty">ยังไม่มีการนัดสัมภาษณ์</div>
+              ) : (
+                <ul className="list">
+                  {interviews.map((interview) => (
+                    <li key={interview.id} data-testid="interview-row">
+                      {new Date(interview.scheduled_at).toLocaleString("th-TH")} ·{" "}
+                      {interview.mode === "online"
+                        ? "ออนไลน์"
+                        : interview.mode === "phone"
+                          ? "โทรศัพท์"
+                          : "ที่สำนักงาน"}
+                      {interview.location ? ` · ${interview.location}` : ""}
+                      {interview.notes ? ` · ${interview.notes}` : ""}
+                      <select
+                        data-testid="interview-status"
+                        value={interview.status}
+                        disabled={busy || !canWrite}
+                        onChange={(e) => setInterviewStatus(interview.id, e.target.value)}
+                        style={{ marginLeft: 8 }}
+                      >
+                        <option value="scheduled">นัดไว้</option>
+                        <option value="completed">เสร็จสิ้น</option>
+                        <option value="cancelled">ยกเลิก</option>
+                      </select>
+                      {canWrite && (
+                        <button
+                          className="btn btn-sm"
+                          data-testid="delete-interview"
+                          disabled={busy}
+                          onClick={() => removeInterview(interview.id)}
+                          style={{ marginLeft: 6 }}
+                        >
+                          ลบ
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
 
           {historyFor && (

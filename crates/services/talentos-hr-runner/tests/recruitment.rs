@@ -357,3 +357,104 @@ async fn cv_lifecycle_and_cleanup() {
     cleanup(&raw, tenant_id).await;
     cleanup(&raw, other_tenant).await;
 }
+
+#[tokio::test]
+async fn interviews_schedule_status_and_scope() {
+    use chrono::{Duration, Utc};
+    use talentos_hr_runner::recruitment::{
+        delete_interview, list_interviews, schedule_interview, set_interview_status, InterviewInput,
+    };
+
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let tenant = TenantId(tenant_id);
+
+    let job = create_job(&pool, tenant, user_id, &job("Dev"))
+        .await
+        .expect("job");
+    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"))
+        .await
+        .expect("candidate");
+
+    let input = InterviewInput {
+        scheduled_at: Utc::now() + Duration::days(1),
+        mode: "online".into(),
+        location: Some("https://meet.example.com/abc".into()),
+        interviewer_user_id: Some(user_id),
+        notes: Some("Technical interview".into()),
+    };
+    let interview = schedule_interview(&pool, tenant, user_id, alice.id, &input)
+        .await
+        .expect("schedule");
+    assert_eq!(interview.status, "scheduled");
+    assert_eq!(interview.mode, "online");
+
+    assert_eq!(
+        list_interviews(&pool, tenant, alice.id)
+            .await
+            .expect("list")
+            .len(),
+        1
+    );
+
+    let mut bad = input.clone();
+    bad.mode = "video".into();
+    assert!(matches!(
+        schedule_interview(&pool, tenant, user_id, alice.id, &bad).await,
+        Err(RecruitmentError::InvalidMode)
+    ));
+    let mut bad = input.clone();
+    bad.location = Some("x".repeat(501));
+    assert!(matches!(
+        schedule_interview(&pool, tenant, user_id, alice.id, &bad).await,
+        Err(RecruitmentError::InvalidLocation)
+    ));
+    let mut bad = input.clone();
+    bad.notes = Some("n".repeat(1001));
+    assert!(matches!(
+        schedule_interview(&pool, tenant, user_id, alice.id, &bad).await,
+        Err(RecruitmentError::InvalidNotes)
+    ));
+
+    let completed = set_interview_status(&pool, tenant, interview.id, "completed")
+        .await
+        .expect("complete");
+    assert_eq!(completed.status, "completed");
+    assert!(matches!(
+        set_interview_status(&pool, tenant, interview.id, "done").await,
+        Err(RecruitmentError::InvalidInterviewStatus)
+    ));
+
+    let (other_tenant, _) = seed_tenant_entities(&raw, 1).await;
+    let other = TenantId(other_tenant);
+    assert!(matches!(
+        list_interviews(&pool, other, alice.id).await,
+        Err(RecruitmentError::CandidateNotFound)
+    ));
+    assert!(matches!(
+        set_interview_status(&pool, other, interview.id, "cancelled").await,
+        Err(RecruitmentError::InterviewNotFound)
+    ));
+    assert!(matches!(
+        delete_interview(&pool, other, interview.id).await,
+        Err(RecruitmentError::InterviewNotFound)
+    ));
+
+    // Deleting the candidate cascades interviews.
+    delete_candidate(&pool, tenant, alice.id)
+        .await
+        .expect("delete candidate");
+    assert!(matches!(
+        list_interviews(&pool, tenant, alice.id).await,
+        Err(RecruitmentError::CandidateNotFound)
+    ));
+
+    cleanup(&raw, tenant_id).await;
+    cleanup(&raw, other_tenant).await;
+}

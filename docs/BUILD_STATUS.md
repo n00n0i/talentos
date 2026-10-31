@@ -8,8 +8,8 @@ Last verified: 2026-10-31 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **449 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 59 files apply cleanly (including `20261206000001_candidate_stage_events.sql` for stage history) |
+| Tests | `cargo test --workspace` | **450 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 60 files apply cleanly (including `20261207000001_candidate_interviews.sql` for interviews) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 25, rag 7,
@@ -34,7 +34,7 @@ purge, stats), 2FA recovery/session units 5 (format/hash/normalize), approval ru
 tenant scoping), privacy 3 (consent idempotency/version, export scope/decrypt/audit,
 account-only), documents 4 (expiry/file lifecycle/tenant+self isolation), onboarding 3
 (standard/dates, completion/duplicates, self/RLS), recruitment 2 (pipeline, validation/isolation), training 2 (expiry/validation, self/RLS), performance 2 (start/submit/close, isolation), goals 2 (CRUD/filter, validation/isolation).
-Total: 449 passed, 1 ignored (`load.rs`).
+Total: 450 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -111,7 +111,7 @@ Browser E2E (`web/e2e`, Playwright) passes 52/52 locally and runs in CI: invite
 acceptance → login, settings + audit, employee → attendance → payroll → approval,
 holiday OT, user invite, password reset, self-service payslips, employee clock
 punch with GPS, HR shift creation and day correction/approval, and employee leave
-request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LINE id save, OT request → HR approval (plus approved history), a two-step manager→HR leave chain, opening leave-balance CSV import, the reports/GL page, a loan/advance with payroll installment, an expense claim with receipt approval, a final-settlement draft, a privacy-notice acceptance plus personal-data export, an expiring employee document with a downloadable file, a standard onboarding checklist, a recruitment job with a candidate moved to interview, an expiring training certificate, a performance cycle with a submitted review, a goal with updated progress, a candidate CV upload/download, and its stage history. Payroll load test: 500 employees in ~0.38 s locally
+request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LINE id save, OT request → HR approval (plus approved history), a two-step manager→HR leave chain, opening leave-balance CSV import, the reports/GL page, a loan/advance with payroll installment, an expense claim with receipt approval, a final-settlement draft, a privacy-notice acceptance plus personal-data export, an expiring employee document with a downloadable file, a standard onboarding checklist, a recruitment job with a candidate moved to interview, an expiring training certificate, a performance cycle with a submitted review, a goal with updated progress, a candidate CV upload/download, its stage history, and an interview. Payroll load test: 500 employees in ~0.38 s locally
 (~1,300/s).
 
 ## Known risks

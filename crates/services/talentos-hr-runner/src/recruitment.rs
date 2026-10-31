@@ -2,11 +2,13 @@
 //! Tenant isolation is `begin_tenant` + explicit `tenant_id` predicates.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::Serialize;
 use sqlx::Row;
+use talentos_db::pii::{is_encrypted, PiiCipher, PiiError};
 use talentos_db::TenantPool;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
@@ -92,6 +94,8 @@ pub enum RecruitmentError {
     Io(#[from] std::io::Error),
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
+    #[error("PII encryption error: {0}")]
+    Pii(#[from] PiiError),
 }
 
 #[derive(Debug, Clone)]
@@ -210,6 +214,33 @@ fn trimmed(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|v| !v.is_empty())
 }
 
+/// Encrypt candidate PII before storing; plaintext when no cipher is
+/// configured (dev without PII_ENCRYPTION_KEY), matching the employee flow.
+fn encrypt_candidate_field(
+    pii: &Option<Arc<PiiCipher>>,
+    value: Option<&str>,
+) -> Result<Option<String>, RecruitmentError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    match pii {
+        Some(cipher) => Ok(cipher.encrypt_deterministic(value).map(Some)?),
+        None => Ok(Some(value.to_string())),
+    }
+}
+
+/// Decrypt a stored candidate PII value for display; legacy plaintext
+/// (no v1: prefix) passes through. Encrypted values without a cipher
+/// never print.
+fn decrypt_candidate_field(pii: &Option<Arc<PiiCipher>>, stored: Option<String>) -> Option<String> {
+    let stored = stored?;
+    match pii {
+        Some(cipher) => cipher.decrypt(&stored).ok(),
+        None if is_encrypted(&stored) => None,
+        None => Some(stored),
+    }
+}
+
 fn map_job(row: &sqlx::postgres::PgRow) -> Result<JobView, sqlx::Error> {
     Ok(JobView {
         id: row.try_get("id")?,
@@ -225,14 +256,17 @@ fn map_job(row: &sqlx::postgres::PgRow) -> Result<JobView, sqlx::Error> {
     })
 }
 
-fn map_candidate(row: &sqlx::postgres::PgRow) -> Result<CandidateView, sqlx::Error> {
+fn map_candidate(
+    row: &sqlx::postgres::PgRow,
+    pii: &Option<Arc<PiiCipher>>,
+) -> Result<CandidateView, sqlx::Error> {
     Ok(CandidateView {
         id: row.try_get("id")?,
         job_opening_id: row.try_get("job_opening_id")?,
         first_name: row.try_get("first_name")?,
         last_name: row.try_get("last_name")?,
-        email: row.try_get("email")?,
-        phone: row.try_get("phone")?,
+        email: decrypt_candidate_field(pii, row.try_get("email")?),
+        phone: decrypt_candidate_field(pii, row.try_get("phone")?),
         stage: row.try_get("stage")?,
         source: row.try_get("source")?,
         note: row.try_get("note")?,
@@ -371,6 +405,7 @@ pub async fn list_candidates(
     pool: &TenantPool,
     tenant_id: TenantId,
     job_id: Uuid,
+    pii: &Option<Arc<PiiCipher>>,
 ) -> Result<Vec<CandidateView>, RecruitmentError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let exists: bool = sqlx::query_scalar(
@@ -400,7 +435,7 @@ pub async fn list_candidates(
     .await?;
     tx.commit().await?;
     rows.iter()
-        .map(|row| map_candidate(row).map_err(RecruitmentError::from))
+        .map(|row| map_candidate(row, pii).map_err(RecruitmentError::from))
         .collect()
 }
 
@@ -410,6 +445,7 @@ pub async fn create_candidate(
     user_id: Uuid,
     job_id: Uuid,
     input: &CandidateInput,
+    pii: &Option<Arc<PiiCipher>>,
 ) -> Result<CandidateView, RecruitmentError> {
     let first = input.first_name.trim();
     let last = input.last_name.trim();
@@ -420,11 +456,11 @@ pub async fn create_candidate(
     {
         return Err(RecruitmentError::InvalidName);
     }
-    let email = trimmed(input.email.as_deref());
+    let email = trimmed(input.email.as_deref()).map(|v| v.to_lowercase());
     let phone = trimmed(input.phone.as_deref());
     let source = trimmed(input.source.as_deref());
     let note = trimmed(input.note.as_deref());
-    if email.is_some_and(|v| v.chars().count() > 200) {
+    if email.as_ref().is_some_and(|v| v.chars().count() > 200) {
         return Err(RecruitmentError::InvalidEmail);
     }
     if phone.is_some_and(|v| v.chars().count() > 30) {
@@ -436,6 +472,8 @@ pub async fn create_candidate(
     if note.is_some_and(|v| v.chars().count() > 2000) {
         return Err(RecruitmentError::InvalidNote);
     }
+    let email_stored = encrypt_candidate_field(pii, email.as_deref())?;
+    let phone_stored = encrypt_candidate_field(pii, phone)?;
 
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let exists: bool = sqlx::query_scalar(
@@ -459,14 +497,14 @@ pub async fn create_candidate(
     .bind(job_id)
     .bind(first)
     .bind(last)
-    .bind(email)
-    .bind(phone)
+    .bind(email_stored.as_deref())
+    .bind(phone_stored.as_deref())
     .bind(source)
     .bind(note)
     .bind(user_id)
     .fetch_one(&mut *tx)
     .await?;
-    let view = map_candidate(&row)?;
+    let view = map_candidate(&row, pii)?;
     sqlx::query(
         "INSERT INTO candidate_stage_events
            (tenant_id, candidate_id, from_stage, to_stage, changed_by)
@@ -487,6 +525,7 @@ pub async fn set_candidate_stage(
     user_id: Uuid,
     candidate_id: Uuid,
     stage: &str,
+    pii: &Option<Arc<PiiCipher>>,
 ) -> Result<CandidateView, RecruitmentError> {
     if !CANDIDATE_STAGES.contains(&stage) {
         return Err(RecruitmentError::InvalidStage);
@@ -514,7 +553,7 @@ pub async fn set_candidate_stage(
     .fetch_optional(&mut *tx)
     .await?
     .ok_or(RecruitmentError::CandidateNotFound)?;
-    let view = map_candidate(&row)?;
+    let view = map_candidate(&row, pii)?;
     if old != stage {
         sqlx::query(
             "INSERT INTO candidate_stage_events
@@ -531,6 +570,71 @@ pub async fn set_candidate_stage(
     }
     tx.commit().await?;
     Ok(view)
+}
+
+/// Candidate email/phone are stored encrypted (PiiCipher, `v1:` prefix) when
+/// the cipher is configured; legacy plaintext values round-trip as-is.
+/// `pii` must match the cipher that will decrypt the stored rows.
+pub async fn find_candidate_by_email(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    email: &str,
+    pii: &Option<Arc<PiiCipher>>,
+) -> Result<Option<CandidateView>, RecruitmentError> {
+    let email_lower = email.trim().to_lowercase();
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let id: Option<Uuid> = match pii {
+        Some(cipher) => {
+            // Deterministic ciphertext: fixed nonce means the stored value of the
+            // lowercased email is reproducible and matchable in a WHERE clause.
+            let stored = cipher.encrypt_deterministic(&email_lower)?;
+            sqlx::query_scalar(
+                "SELECT id FROM candidates
+                  WHERE tenant_id = $1 AND (email = $2 OR email ILIKE $3) LIMIT 1",
+            )
+            .bind(tenant_id.0)
+            .bind(&stored)
+            .bind(&email_lower)
+            .fetch_optional(&mut *tx)
+            .await?
+        }
+        None => {
+            sqlx::query_scalar(
+                "SELECT id FROM candidates WHERE tenant_id = $1 AND email = $2 LIMIT 1",
+            )
+            .bind(tenant_id.0)
+            .bind(&email_lower)
+            .fetch_optional(&mut *tx)
+            .await?
+        }
+    };
+    let view = candidate_view_for(&mut tx, tenant_id.0, id, pii).await?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+async fn candidate_view_for(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    tenant_id: Uuid,
+    id: Option<Uuid>,
+    pii: &Option<Arc<PiiCipher>>,
+) -> Result<Option<CandidateView>, RecruitmentError> {
+    let Some(id) = id else {
+        return Ok(None);
+    };
+    let row = sqlx::query(
+        r#"SELECT id, job_opening_id, first_name, last_name, email, phone, stage,
+                  source, note, (cv_path IS NOT NULL) AS has_cv, created_at, updated_at
+             FROM candidates WHERE tenant_id = $1 AND id = $2"#,
+    )
+    .bind(tenant_id)
+    .bind(id)
+    .fetch_optional(&mut **tx)
+    .await?;
+    match row {
+        Some(row) => Ok(Some(map_candidate(&row, pii)?)),
+        None => Ok(None),
+    }
 }
 
 pub async fn list_stage_history(

@@ -19,7 +19,6 @@ use crate::state::AppState;
 use talentos_hr_runner::recruitment::{
     self, CandidateFile, CandidateInput, InterviewInput, JobInput, OfferInput, RecruitmentError,
 };
-
 #[derive(Debug, Deserialize)]
 pub struct CreateJobBody {
     pub title: String,
@@ -154,7 +153,7 @@ pub async fn list_candidates(
     if let Err(forbidden) = require(&ctx, "employee", "read_all") {
         return forbidden;
     }
-    match recruitment::list_candidates(&state.pool, ctx.tenant_id, id).await {
+    match recruitment::list_candidates(&state.pool, ctx.tenant_id, id, &state.pii).await {
         Ok(candidates) => Json(json!({ "candidates": candidates })).into_response(),
         Err(e) => map_error(e),
     }
@@ -178,7 +177,15 @@ pub async fn create_candidate(
         source: body.source,
         note: body.note,
     };
-    match recruitment::create_candidate(&state.pool, ctx.tenant_id, ctx.user_id.0, id, &input).await
+    match recruitment::create_candidate(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        &input,
+        &state.pii,
+    )
+    .await
     {
         Ok(candidate) => {
             (StatusCode::CREATED, Json(json!({ "candidate": candidate }))).into_response()
@@ -203,6 +210,7 @@ pub async fn update_candidate(
         ctx.user_id.0,
         id,
         &body.stage,
+        &state.pii,
     )
     .await
     {
@@ -565,7 +573,7 @@ fn map_error(e: RecruitmentError) -> Response {
             Json(envelope("invalid_request", &e.to_string())),
         )
             .into_response(),
-        Io(_) | Db(_) => {
+        Io(_) | Db(_) | Pii(_) => {
             tracing::error!(error = %e, "recruitment endpoint failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

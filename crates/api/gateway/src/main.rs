@@ -2,6 +2,7 @@ mod cli;
 mod dto;
 mod handlers;
 mod metrics;
+mod metrics_alert;
 mod middleware;
 mod notify_worker;
 mod ratelimit;
@@ -227,7 +228,15 @@ async fn main() {
     }
 
     metrics::init();
-    let app = router::build(state);
+    let app = router::build(state.clone());
+
+    // Business-metric alert sweep: POST to METRICS_ALERT_WEBHOOK when
+    // notification backlog or stuck-run age crosses the configured thresholds.
+    {
+        let alert_http = reqwest::Client::new();
+        let alert_cfg = metrics_alert::AlertConfig::from_env();
+        metrics_alert::spawn_worker(auth_pool.clone(), alert_http, alert_cfg);
+    }
 
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await

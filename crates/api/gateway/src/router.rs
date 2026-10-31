@@ -448,6 +448,7 @@ pub fn build(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .route("/metrics", get(crate::metrics::endpoint))
+        .route("/business-metrics", get(crate::metrics::business_endpoint))
         .merge(public)
         .merge(protected)
         .layer(cors)

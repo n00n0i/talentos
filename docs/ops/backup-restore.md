@@ -2,6 +2,34 @@
 
 ## Nightly backup
 
+Two equivalent methods:
+
+**Script** (recommended, used by cron):
+
+```sh
+# Runs pg_dump via the compose postgres container (or host psql when PG_HOST is set).
+# Rotation: keeps the newest $KEEP dumps, deletes older ones.
+BACKUP_DIR=/backups KEEP=14 bash scripts/backup.sh
+```
+
+Environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `BACKUP_DIR` | `./backups` | Where dumps are written |
+| `KEEP` | `14` | Number of dumps to retain |
+| `PG_HOST` | *(unset)* | When set, use host `psql` instead of `docker compose exec` |
+| `PG_USER` | `talentos` | Database user |
+| `PG_DATABASE` | `talentos` | Database name |
+
+**Cron** (one line, run nightly):
+
+```cron
+0 2 * * * /opt/talentos/BACKUP_DIR=/backups KEEP=14 /opt/talentos/scripts/backup.sh >> /var/log/talentos-backup.log 2>&1
+```
+
+**Manual one-shot** (pg_dump custom format for PITR-capable restore):
+
 ```sh
 pg_dump --format=custom --no-owner --no-privileges "$DATABASE_URL" \
   -f "/backups/talentos-$(date +%F).dump"

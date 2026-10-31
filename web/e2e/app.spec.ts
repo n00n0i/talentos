@@ -1342,7 +1342,14 @@ test("manager workflow: reporting line, calibration, goal check-in", async ({ pa
   await page.getByTestId("save-employee").click();
   await expect(page.getByText("เพิ่มพนักงานแล้ว")).toBeVisible();
 
-  // 2. Assign E2E002's reporting manager to E2E001 (the manager's linked employee).
+  // 2. Link the manager user to E2E001 (the employee who holds the review),
+  //    then assign E2E002's reporting manager to E2E001.
+  const linkRow = page.getByRole("row", { name: /E2E001/ });
+  await linkRow.getByRole("button", { name: "แก้ไข" }).click();
+  await page.getByTestId("employee-user").selectOption({ label: `${managerEmail} · ผู้จัดการ E2E` });
+  await page.getByTestId("save-employee").click();
+  await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
+
   const reportRow = page.getByRole("row", { name: /E2E002/ });
   await reportRow.getByRole("button", { name: "แก้ไข" }).click();
   const managerOption = page.getByTestId("employee-manager").locator("option").filter({ hasText: "E2E001" });

@@ -60,6 +60,25 @@ async fn cycle_populates_active_employees_and_submits_reviews() {
         .expect("cycle");
     assert_eq!(created.status, "draft");
 
+    // A review that already exists for the draft cycle must not be duplicated.
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        "INSERT INTO performance_reviews (tenant_id, cycle_id, employee_id)
+         VALUES ($1, $2, $3)",
+    )
+    .bind(tenant_id)
+    .bind(created.id)
+    .bind(employee_a)
+    .execute(&mut *tx)
+    .await
+    .expect("pre-existing review");
+    tx.commit().await.expect("commit");
+
     start_cycle(&pool, tenant, created.id).await.expect("start");
     let cycles = list_cycles(&pool, tenant).await.expect("cycles");
     assert_eq!(cycles[0].status, "active");
@@ -131,11 +150,29 @@ async fn cycle_populates_active_employees_and_submits_reviews() {
         "closed"
     );
 
-    delete_cycle(&pool, tenant, created.id)
+    assert!(
+        matches!(
+            delete_cycle(&pool, tenant, created.id).await,
+            Err(PerformanceError::CycleNotDraft)
+        ),
+        "active/closed review records are retained"
+    );
+    assert_eq!(
+        list_reviews(&pool, tenant, created.id)
+            .await
+            .expect("closed reviews")
+            .len(),
+        2
+    );
+
+    let draft = create_cycle(&pool, tenant, admin, &cycle())
         .await
-        .expect("delete");
+        .expect("draft cycle");
+    delete_cycle(&pool, tenant, draft.id)
+        .await
+        .expect("delete draft");
     assert!(matches!(
-        list_reviews(&pool, tenant, created.id).await,
+        list_reviews(&pool, tenant, draft.id).await,
         Err(PerformanceError::CycleNotFound)
     ));
 

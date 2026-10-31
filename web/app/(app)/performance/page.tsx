@@ -283,14 +283,16 @@ export default function PerformancePage() {
                             ปิดรอบ
                           </button>
                         )}
-                        <button
-                          className="btn btn-sm"
-                          data-testid="delete-cycle"
-                          disabled={busy}
-                          onClick={() => removeCycle(cycle)}
-                        >
-                          ลบ
-                        </button>
+                        {cycle.status === "draft" && (
+                          <button
+                            className="btn btn-sm"
+                            data-testid="delete-cycle"
+                            disabled={busy}
+                            onClick={() => removeCycle(cycle)}
+                          >
+                            ลบ
+                          </button>
+                        )}
                       </>
                     )}
                   </td>
@@ -306,9 +308,11 @@ export default function PerformancePage() {
           <div className="card-head">
             <h2 style={{ fontSize: 16 }}>
               ผลประเมิน: {selected.name}{" "}
-              {selected.status !== "active" && (
+              {selected.status === "closed" ? (
+                <span className="badge warning">ปิดรอบแล้ว — แก้ไขไม่ได้</span>
+              ) : selected.status === "draft" ? (
                 <span className="badge warning">ต้องเริ่มรอบก่อนจึงจะบันทึกได้</span>
-              )}
+              ) : null}
             </h2>
           </div>
 

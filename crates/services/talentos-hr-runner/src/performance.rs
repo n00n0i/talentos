@@ -247,13 +247,28 @@ pub async fn delete_cycle(
     cycle_id: Uuid,
 ) -> Result<(), PerformanceError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
-    let deleted = sqlx::query("DELETE FROM performance_cycles WHERE tenant_id = $1 AND id = $2")
+    // Only drafts are disposable: active/closed reviews are retained records.
+    let deleted = sqlx::query(
+        "DELETE FROM performance_cycles
+          WHERE tenant_id = $1 AND id = $2 AND status = 'draft'",
+    )
+    .bind(tenant_id.0)
+    .bind(cycle_id)
+    .execute(&mut *tx)
+    .await?;
+    if deleted.rows_affected() == 0 {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM performance_cycles WHERE tenant_id = $1 AND id = $2)",
+        )
         .bind(tenant_id.0)
         .bind(cycle_id)
-        .execute(&mut *tx)
+        .fetch_one(&mut *tx)
         .await?;
-    if deleted.rows_affected() == 0 {
-        return Err(PerformanceError::CycleNotFound);
+        return if exists {
+            Err(PerformanceError::CycleNotDraft)
+        } else {
+            Err(PerformanceError::CycleNotFound)
+        };
     }
     tx.commit().await?;
     Ok(())
@@ -310,7 +325,7 @@ pub async fn submit_review(
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let status: Option<String> = sqlx::query_scalar(
         r#"SELECT c.status FROM performance_reviews r
-             JOIN performance_cycles c ON c.id = r.cycle_id
+             JOIN performance_cycles c ON c.id = r.cycle_id AND c.tenant_id = r.tenant_id
             WHERE r.tenant_id = $1 AND r.id = $2 FOR UPDATE"#,
     )
     .bind(tenant_id.0)

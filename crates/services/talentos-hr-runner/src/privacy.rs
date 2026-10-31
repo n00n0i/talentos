@@ -276,7 +276,7 @@ pub async fn export_personal_data(
                    'improvements', r.improvements, 'submitted_at', r.submitted_at)
                  ORDER BY c.period_start)
                  FROM performance_reviews r
-                 JOIN performance_cycles c ON c.id = r.cycle_id
+                 JOIN performance_cycles c ON c.id = r.cycle_id AND c.tenant_id = r.tenant_id
                 WHERE r.tenant_id = $1 AND r.employee_id = $2"#,
             tenant_id.0,
             id,

@@ -116,6 +116,26 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
         .expect("leave");
     }
     sqlx::query(
+        r#"INSERT INTO performance_cycles
+             (tenant_id, name, period_start, period_end, status)
+           VALUES ($1, 'รอบทดสอบ', '2026-01-01', '2026-12-31', 'active')"#,
+    )
+    .bind(tenant_id)
+    .execute(&mut *tx)
+    .await
+    .expect("performance cycle");
+    sqlx::query(
+        r#"INSERT INTO performance_reviews
+             (tenant_id, cycle_id, employee_id, status, rating, strengths)
+           SELECT $1, c.id, $2, 'submitted', 4, 'ดี'
+             FROM performance_cycles c WHERE c.tenant_id = $1 AND c.name = 'รอบทดสอบ'"#,
+    )
+    .bind(tenant_id)
+    .bind(employee_a)
+    .execute(&mut *tx)
+    .await
+    .expect("performance review");
+    sqlx::query(
         r#"INSERT INTO employee_training_records
              (tenant_id, employee_id, title, provider, completed_on)
            VALUES ($1, $2, 'ปฐมพยาบาล', 'Academy', '2026-11-01')"#,
@@ -187,6 +207,8 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
     assert_eq!(events.len(), 1);
     assert_eq!(events[0]["source"], "mobile");
     assert_eq!(first["training"][0]["title"], "ปฐมพยาบาล");
+    assert_eq!(first["reviews"][0]["cycle"], "รอบทดสอบ");
+    assert_eq!(first["reviews"][0]["rating"], 4);
 
     let text = data.to_string();
     assert!(

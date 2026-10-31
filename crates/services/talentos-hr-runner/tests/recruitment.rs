@@ -5,7 +5,8 @@ use sqlx::PgPool;
 use talentos_db::TenantPool;
 use talentos_hr_runner::recruitment::{
     create_candidate, create_job, delete_candidate, delete_job, list_candidates, list_jobs,
-    set_candidate_stage, set_job_status, CandidateInput, JobInput, RecruitmentError,
+    list_stage_history, set_candidate_stage, set_job_status, CandidateInput, JobInput,
+    RecruitmentError,
 };
 use talentos_kernel::TenantId;
 
@@ -58,16 +59,39 @@ async fn job_and_candidate_pipeline() {
         .await
         .expect("candidate B");
     assert_eq!(alice.stage, "applied");
+    let created_history = list_stage_history(&pool, tenant, alice.id)
+        .await
+        .expect("created history");
+    assert_eq!(created_history.len(), 1);
+    assert_eq!(created_history[0].from_stage, None);
+    assert_eq!(created_history[0].to_stage, "applied");
 
     let listed = list_candidates(&pool, tenant, opened.id)
         .await
         .expect("list candidates");
     assert_eq!(listed.len(), 2);
 
-    let moved = set_candidate_stage(&pool, tenant, alice.id, "interview")
+    let moved = set_candidate_stage(&pool, tenant, user_id, alice.id, "interview")
         .await
         .expect("move stage");
     assert_eq!(moved.stage, "interview");
+    let history = list_stage_history(&pool, tenant, alice.id)
+        .await
+        .expect("history");
+    assert_eq!(history.len(), 2);
+    assert_eq!(history[0].from_stage.as_deref(), Some("applied"));
+    assert_eq!(history[0].to_stage, "interview");
+    // Re-selecting the same stage is a no-op for history.
+    set_candidate_stage(&pool, tenant, user_id, alice.id, "interview")
+        .await
+        .expect("same stage");
+    assert_eq!(
+        list_stage_history(&pool, tenant, alice.id)
+            .await
+            .expect("history after no-op")
+            .len(),
+        2
+    );
     let ordered = list_candidates(&pool, tenant, opened.id)
         .await
         .expect("ordered candidates");
@@ -79,7 +103,7 @@ async fn job_and_candidate_pipeline() {
         .iter()
         .any(|c| c.id == alice.id && c.stage == "interview"));
 
-    set_candidate_stage(&pool, tenant, alice.id, "hired")
+    set_candidate_stage(&pool, tenant, user_id, alice.id, "hired")
         .await
         .expect("hire");
     let jobs = list_jobs(&pool, tenant).await.expect("jobs");
@@ -101,6 +125,10 @@ async fn job_and_candidate_pipeline() {
     delete_candidate(&pool, tenant, bob.id)
         .await
         .expect("delete candidate");
+    assert!(matches!(
+        list_stage_history(&pool, tenant, bob.id).await,
+        Err(RecruitmentError::CandidateNotFound)
+    ));
     delete_job(&pool, tenant, opened.id)
         .await
         .expect("delete job");
@@ -165,7 +193,7 @@ async fn validation_and_tenant_isolation() {
         Err(RecruitmentError::InvalidEmail)
     ));
     assert!(matches!(
-        set_candidate_stage(&pool, tenant, opened.id, "manager").await,
+        set_candidate_stage(&pool, tenant, user_id, opened.id, "manager").await,
         Err(RecruitmentError::InvalidStage)
     ));
 
@@ -184,7 +212,11 @@ async fn validation_and_tenant_isolation() {
         Err(RecruitmentError::JobNotFound)
     ));
     assert!(matches!(
-        set_candidate_stage(&pool, other, candidate.id, "interview").await,
+        set_candidate_stage(&pool, other, user_id, candidate.id, "interview").await,
+        Err(RecruitmentError::CandidateNotFound)
+    ));
+    assert!(matches!(
+        list_stage_history(&pool, other, candidate.id).await,
         Err(RecruitmentError::CandidateNotFound)
     ));
     assert!(matches!(

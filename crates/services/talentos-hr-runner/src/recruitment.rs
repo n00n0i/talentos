@@ -103,6 +103,15 @@ pub struct CandidateInput {
 }
 
 #[derive(Debug, Serialize)]
+pub struct StageEventView {
+    pub id: i64,
+    pub from_stage: Option<String>,
+    pub to_stage: String,
+    pub changed_by: Option<Uuid>,
+    pub changed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct CandidateView {
     pub id: Uuid,
     pub job_opening_id: Uuid,
@@ -379,6 +388,16 @@ pub async fn create_candidate(
     .fetch_one(&mut *tx)
     .await?;
     let view = map_candidate(&row)?;
+    sqlx::query(
+        "INSERT INTO candidate_stage_events
+           (tenant_id, candidate_id, from_stage, to_stage, changed_by)
+         VALUES ($1, $2, NULL, 'applied', $3)",
+    )
+    .bind(tenant_id.0)
+    .bind(view.id)
+    .bind(user_id)
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(view)
 }
@@ -386,6 +405,7 @@ pub async fn create_candidate(
 pub async fn set_candidate_stage(
     pool: &TenantPool,
     tenant_id: TenantId,
+    user_id: Uuid,
     candidate_id: Uuid,
     stage: &str,
 ) -> Result<CandidateView, RecruitmentError> {
@@ -393,6 +413,16 @@ pub async fn set_candidate_stage(
         return Err(RecruitmentError::InvalidStage);
     }
     let mut tx = pool.begin_tenant(tenant_id).await?;
+    let old: Option<String> = sqlx::query_scalar(
+        "SELECT stage FROM candidates WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some(old) = old else {
+        return Err(RecruitmentError::CandidateNotFound);
+    };
     let row = sqlx::query(
         r#"UPDATE candidates SET stage = $3, updated_at = now()
             WHERE tenant_id = $1 AND id = $2
@@ -406,8 +436,63 @@ pub async fn set_candidate_stage(
     .await?
     .ok_or(RecruitmentError::CandidateNotFound)?;
     let view = map_candidate(&row)?;
+    if old != stage {
+        sqlx::query(
+            "INSERT INTO candidate_stage_events
+               (tenant_id, candidate_id, from_stage, to_stage, changed_by)
+             VALUES ($1, $2, $3, $4, $5)",
+        )
+        .bind(tenant_id.0)
+        .bind(candidate_id)
+        .bind(&old)
+        .bind(stage)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    }
     tx.commit().await?;
     Ok(view)
+}
+
+pub async fn list_stage_history(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    candidate_id: Uuid,
+) -> Result<Vec<StageEventView>, RecruitmentError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM candidates WHERE tenant_id = $1 AND id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        return Err(RecruitmentError::CandidateNotFound);
+    }
+    let rows = sqlx::query(
+        r#"SELECT id, from_stage, to_stage, changed_by, changed_at
+             FROM candidate_stage_events
+            WHERE tenant_id = $1 AND candidate_id = $2
+            ORDER BY changed_at DESC, id DESC"#,
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| {
+            Ok(StageEventView {
+                id: row.try_get("id")?,
+                from_stage: row.try_get("from_stage")?,
+                to_stage: row.try_get("to_stage")?,
+                changed_by: row.try_get("changed_by")?,
+                changed_at: row.try_get("changed_at")?,
+            })
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()
+        .map_err(RecruitmentError::from)
 }
 
 pub async fn delete_candidate(

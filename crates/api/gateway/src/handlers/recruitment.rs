@@ -168,8 +168,31 @@ pub async fn update_candidate(
     if let Err(forbidden) = require(&ctx, "employee", "update") {
         return forbidden;
     }
-    match recruitment::set_candidate_stage(&state.pool, ctx.tenant_id, id, &body.stage).await {
+    match recruitment::set_candidate_stage(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        &body.stage,
+    )
+    .await
+    {
         Ok(candidate) => Json(json!({ "candidate": candidate })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// GET /api/v1/candidates/:id/history
+pub async fn history(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+    match recruitment::list_stage_history(&state.pool, ctx.tenant_id, id).await {
+        Ok(events) => Json(json!({ "history": events })).into_response(),
         Err(e) => map_error(e),
     }
 }

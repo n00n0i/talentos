@@ -30,6 +30,14 @@ type Candidate = {
   created_at: string;
 };
 
+type StageEvent = {
+  id: number;
+  from_stage: string | null;
+  to_stage: string;
+  changed_by: string | null;
+  changed_at: string;
+};
+
 const TYPES: Record<string, string> = {
   full_time: "พนักงานประจำ",
   part_time: "พาร์ทไทม์",
@@ -70,6 +78,8 @@ export default function RecruitmentPage() {
   const [jobForm, setJobForm] = useState(emptyJob);
   const [candForm, setCandForm] = useState(emptyCandidate);
   const [cvFile, setCvFile] = useState<File | null>(null);
+  const [historyFor, setHistoryFor] = useState<Candidate | null>(null);
+  const [history, setHistory] = useState<StageEvent[]>([]);
   const [canWrite, setCanWrite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -223,6 +233,19 @@ export default function RecruitmentPage() {
       setNotice("อัปโหลด CV แล้ว");
     }
     setBusy(false);
+  }
+
+  async function showHistory(candidate: Candidate) {
+    setError("");
+    try {
+      const res = await gw<{ history: StageEvent[] }>(
+        `api/v1/candidates/${candidate.id}/history`,
+      );
+      setHistory(res.history);
+      setHistoryFor(candidate);
+    } catch (e) {
+      handleApiError(e, setError);
+    }
   }
 
   async function moveStage(candidate: Candidate, stage: string) {
@@ -502,7 +525,14 @@ export default function RecruitmentPage() {
                 {candidates.map((candidate) => (
                   <tr key={candidate.id} data-testid="candidate-row">
                     <td>
-                      {candidate.first_name} {candidate.last_name}
+                      {candidate.first_name} {candidate.last_name}{" "}
+                      <button
+                        className="badge"
+                        data-testid="candidate-history-button"
+                        onClick={() => showHistory(candidate)}
+                      >
+                        ประวัติ
+                      </button>
                       {candidate.note && (
                         <div style={{ color: "var(--muted)", fontSize: 13 }}>{candidate.note}</div>
                       )}
@@ -572,6 +602,25 @@ export default function RecruitmentPage() {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {historyFor && (
+            <div className="card card-pad" data-testid="candidate-history" style={{ marginTop: 12 }}>
+              <h3 style={{ fontSize: 15 }}>
+                ประวัติขั้นตอน: {historyFor.first_name} {historyFor.last_name}
+              </h3>
+              <ul className="list">
+                {history.map((event) => (
+                  <li key={event.id}>
+                    {event.from_stage ? STAGES[event.from_stage] ?? event.from_stage : "เริ่มต้น"} →{" "}
+                    {STAGES[event.to_stage] ?? event.to_stage}
+                    <span style={{ marginLeft: 8, color: "var(--muted)" }}>
+                      {new Date(event.changed_at).toLocaleString("th-TH")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}

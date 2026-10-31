@@ -208,3 +208,120 @@ async fn validation_and_tenant_isolation() {
     cleanup(&raw, tenant_id).await;
     cleanup(&raw, other_tenant).await;
 }
+
+async fn cv_path(raw: &PgPool, tenant_id: uuid::Uuid, candidate_id: uuid::Uuid) -> Option<String> {
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let path = sqlx::query_scalar("SELECT cv_path FROM candidates WHERE id = $1")
+        .bind(candidate_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("cv path");
+    let _ = tx.rollback().await;
+    path
+}
+
+#[tokio::test]
+async fn cv_lifecycle_and_cleanup() {
+    use talentos_hr_runner::recruitment::{cv_dir, get_cv, set_cv};
+
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let tenant = TenantId(tenant_id);
+    std::env::set_var(
+        "CANDIDATE_CV_DIR",
+        cv_dir().join(format!("test-{}", uuid::Uuid::new_v4())),
+    );
+
+    let job = create_job(&pool, tenant, user_id, &job("Dev"))
+        .await
+        .expect("job");
+    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"))
+        .await
+        .expect("candidate");
+    assert!(!alice.has_cv);
+    assert!(matches!(
+        get_cv(&pool, tenant, alice.id).await,
+        Err(RecruitmentError::NoCv)
+    ));
+
+    set_cv(
+        &pool,
+        tenant,
+        alice.id,
+        "application/pdf",
+        b"%PDF-1.4 first",
+    )
+    .await
+    .expect("upload");
+    let file = get_cv(&pool, tenant, alice.id).await.expect("read");
+    assert_eq!(file.content_type, "application/pdf");
+    assert_eq!(file.bytes, b"%PDF-1.4 first");
+    let first_path = cv_path(&raw, tenant_id, alice.id).await.expect("path");
+    let listed = list_candidates(&pool, tenant, job.id).await.expect("list");
+    assert!(listed[0].has_cv);
+
+    set_cv(&pool, tenant, alice.id, "image/png", b"PNG cv")
+        .await
+        .expect("replace");
+    assert!(
+        !std::path::Path::new(&first_path).exists(),
+        "old CV removed"
+    );
+    let second_path = cv_path(&raw, tenant_id, alice.id).await.expect("new path");
+
+    let err = set_cv(&pool, tenant, alice.id, "text/plain", b"x")
+        .await
+        .expect_err("bad type");
+    assert!(matches!(err, RecruitmentError::InvalidCvType));
+    let err = set_cv(
+        &pool,
+        tenant,
+        alice.id,
+        "application/pdf",
+        &vec![0u8; 5 * 1024 * 1024 + 1],
+    )
+    .await
+    .expect_err("too large");
+    assert!(matches!(err, RecruitmentError::CvTooLarge));
+
+    let (other_tenant, _) = seed_tenant_entities(&raw, 1).await;
+    let other = TenantId(other_tenant);
+    assert!(matches!(
+        get_cv(&pool, other, alice.id).await,
+        Err(RecruitmentError::CandidateNotFound)
+    ));
+
+    delete_candidate(&pool, tenant, alice.id)
+        .await
+        .expect("delete candidate");
+    assert!(
+        !std::path::Path::new(&second_path).exists(),
+        "CV removed with candidate"
+    );
+
+    let candidate2 = create_candidate(&pool, tenant, user_id, job.id, &candidate("Bob"))
+        .await
+        .expect("candidate 2");
+    set_cv(&pool, tenant, candidate2.id, "application/pdf", b"%PDF job")
+        .await
+        .expect("job CV");
+    let job_cv = cv_path(&raw, tenant_id, candidate2.id)
+        .await
+        .expect("job cv path");
+    delete_job(&pool, tenant, job.id).await.expect("delete job");
+    assert!(!std::path::Path::new(&job_cv).exists(), "job CV removed");
+
+    cleanup(&raw, tenant_id).await;
+    cleanup(&raw, other_tenant).await;
+}

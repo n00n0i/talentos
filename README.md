@@ -342,7 +342,9 @@ yet). No file upload, course catalog, or reminders.
 department, employment type, headcount) and candidates through
 applied → screening → interview → offer → hired/rejected. Candidate counts and
 hired/headcount are shown per opening; closing/reopening and deletion are
-supported. No CV files, interview scheduling, stage history, offer letters, or
+supported. Each candidate can have one CV (PDF/JPEG/PNG ≤5 MB, stored under
+`CANDIDATE_CV_DIR`) with download/replace; deleting a candidate or opening
+removes the files. No interview scheduling, stage history, offer letters, or
 automatic employee creation yet.
 
 ## Onboarding
@@ -798,7 +800,8 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 
 - [x] Onboarding checklist (standard tasks from hire date, completion tracking).
 - [x] Recruitment pipeline (openings, candidates, applied→hired/rejected stages).
-- [ ] Offer letters/e-signature, CV attachments, interview scheduling.
+- [x] Candidate CV attachments (one file per candidate).
+- [ ] Offer letters/e-signature, interview scheduling.
 - [x] Employee documents with expiry alerts (contracts, work permits, visas) and one downloadable file per document.
 - [x] Training records with certificate-expiry alerts.
 - [x] Performance review cycles with ratings and written feedback.

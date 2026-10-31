@@ -1,12 +1,23 @@
 //! Recruitment: job openings and candidates through a simple stage pipeline.
 //! Tenant isolation is `begin_tenant` + explicit `tenant_id` predicates.
 
+use std::path::PathBuf;
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::Row;
 use talentos_db::TenantPool;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
+
+const MAX_CV_BYTES: usize = 5 * 1024 * 1024;
+const ALLOWED_CV_TYPES: &[&str] = &["application/pdf", "image/jpeg", "image/png"];
+
+pub fn cv_dir() -> PathBuf {
+    std::env::var("CANDIDATE_CV_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/tmp/talentos-cvs"))
+}
 
 const EMPLOYMENT_TYPES: &[&str] = &["full_time", "part_time", "contract", "intern"];
 pub const CANDIDATE_STAGES: &[&str] = &[
@@ -46,6 +57,14 @@ pub enum RecruitmentError {
     InvalidNote,
     #[error("unsupported candidate stage")]
     InvalidStage,
+    #[error("CV is too large; maximum size is 5 MB")]
+    CvTooLarge,
+    #[error("unsupported CV type; use PDF, JPEG, or PNG")]
+    InvalidCvType,
+    #[error("candidate has no CV")]
+    NoCv,
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -94,6 +113,7 @@ pub struct CandidateView {
     pub stage: String,
     pub source: Option<String>,
     pub note: Option<String>,
+    pub has_cv: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -128,6 +148,7 @@ fn map_candidate(row: &sqlx::postgres::PgRow) -> Result<CandidateView, sqlx::Err
         stage: row.try_get("stage")?,
         source: row.try_get("source")?,
         note: row.try_get("note")?,
+        has_cv: row.try_get("has_cv")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })
@@ -235,6 +256,14 @@ pub async fn delete_job(
     job_id: Uuid,
 ) -> Result<(), RecruitmentError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
+    let cv_paths: Vec<String> = sqlx::query_scalar(
+        "SELECT cv_path FROM candidates
+          WHERE tenant_id = $1 AND job_opening_id = $2 AND cv_path IS NOT NULL",
+    )
+    .bind(tenant_id.0)
+    .bind(job_id)
+    .fetch_all(&mut *tx)
+    .await?;
     let deleted = sqlx::query("DELETE FROM job_openings WHERE tenant_id = $1 AND id = $2")
         .bind(tenant_id.0)
         .bind(job_id)
@@ -244,6 +273,9 @@ pub async fn delete_job(
         return Err(RecruitmentError::JobNotFound);
     }
     tx.commit().await?;
+    for path in cv_paths {
+        let _ = tokio::fs::remove_file(path).await;
+    }
     Ok(())
 }
 
@@ -265,7 +297,7 @@ pub async fn list_candidates(
     }
     let rows = sqlx::query(
         r#"SELECT id, job_opening_id, first_name, last_name, email, phone, stage,
-                  source, note, created_at, updated_at
+                  source, note, (cv_path IS NOT NULL) AS has_cv, created_at, updated_at
              FROM candidates
             WHERE tenant_id = $1 AND job_opening_id = $2
             ORDER BY CASE stage
@@ -333,7 +365,7 @@ pub async fn create_candidate(
              (tenant_id, job_opening_id, first_name, last_name, email, phone, source, note, created_by)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
            RETURNING id, job_opening_id, first_name, last_name, email, phone, stage,
-                     source, note, created_at, updated_at"#,
+                     source, note, (cv_path IS NOT NULL) AS has_cv, created_at, updated_at"#,
     )
     .bind(tenant_id.0)
     .bind(job_id)
@@ -365,7 +397,7 @@ pub async fn set_candidate_stage(
         r#"UPDATE candidates SET stage = $3, updated_at = now()
             WHERE tenant_id = $1 AND id = $2
             RETURNING id, job_opening_id, first_name, last_name, email, phone, stage,
-                      source, note, created_at, updated_at"#,
+                      source, note, (cv_path IS NOT NULL) AS has_cv, created_at, updated_at"#,
     )
     .bind(tenant_id.0)
     .bind(candidate_id)
@@ -384,14 +416,137 @@ pub async fn delete_candidate(
     candidate_id: Uuid,
 ) -> Result<(), RecruitmentError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
-    let deleted = sqlx::query("DELETE FROM candidates WHERE tenant_id = $1 AND id = $2")
-        .bind(tenant_id.0)
-        .bind(candidate_id)
-        .execute(&mut *tx)
-        .await?;
-    if deleted.rows_affected() == 0 {
+    let cv_path: Option<String> = sqlx::query_scalar(
+        "DELETE FROM candidates WHERE tenant_id = $1 AND id = $2 RETURNING cv_path",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(RecruitmentError::CandidateNotFound)?;
+    tx.commit().await?;
+    if let Some(path) = cv_path {
+        let _ = tokio::fs::remove_file(path).await;
+    }
+    Ok(())
+}
+
+pub struct CandidateFile {
+    pub content_type: String,
+    pub bytes: Vec<u8>,
+}
+
+async fn write_private(
+    dir: &std::path::Path,
+    path: &std::path::Path,
+    bytes: &[u8],
+) -> std::io::Result<()> {
+    tokio::fs::create_dir_all(dir).await?;
+    tokio::fs::write(path, bytes).await?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tokio::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).await?;
+        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
+    }
+    Ok(())
+}
+
+pub async fn set_cv(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    candidate_id: Uuid,
+    content_type: &str,
+    bytes: &[u8],
+) -> Result<(), RecruitmentError> {
+    if bytes.len() > MAX_CV_BYTES {
+        return Err(RecruitmentError::CvTooLarge);
+    }
+    if !ALLOWED_CV_TYPES.contains(&content_type) {
+        return Err(RecruitmentError::InvalidCvType);
+    }
+    let ext = match content_type {
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        _ => "pdf",
+    };
+
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let existing: Option<String> = sqlx::query_scalar(
+        "SELECT cv_path FROM candidates WHERE tenant_id = $1 AND id = $2 FOR UPDATE",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .flatten();
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM candidates WHERE tenant_id = $1 AND id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        return Err(RecruitmentError::CandidateNotFound);
+    }
+
+    let dir = cv_dir();
+    let filename = format!("{}.{}", Uuid::new_v4(), ext);
+    let path = dir.join(&filename);
+    write_private(&dir, &path, bytes).await?;
+
+    let updated = sqlx::query(
+        "UPDATE candidates SET cv_path = $3, cv_type = $4, updated_at = now()
+          WHERE tenant_id = $1 AND id = $2 RETURNING id",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .bind(path.to_string_lossy().to_string())
+    .bind(content_type)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if updated.is_none() {
+        let _ = tokio::fs::remove_file(&path).await;
         return Err(RecruitmentError::CandidateNotFound);
     }
     tx.commit().await?;
+    if let Some(old) = existing {
+        let _ = tokio::fs::remove_file(old).await;
+    }
     Ok(())
+}
+
+pub async fn get_cv(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    candidate_id: Uuid,
+) -> Result<CandidateFile, RecruitmentError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let row =
+        sqlx::query("SELECT cv_path, cv_type FROM candidates WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.0)
+            .bind(candidate_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    tx.commit().await?;
+    let Some(row) = row else {
+        return Err(RecruitmentError::CandidateNotFound);
+    };
+    let path: Option<String> = row.try_get("cv_path")?;
+    let Some(path) = path else {
+        return Err(RecruitmentError::NoCv);
+    };
+    let content_type: Option<String> = row.try_get("cv_type")?;
+    let bytes = match tokio::fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(RecruitmentError::CandidateNotFound)
+        }
+        Err(e) => return Err(e.into()),
+    };
+    Ok(CandidateFile {
+        content_type: content_type.unwrap_or_else(|| "application/octet-stream".into()),
+        bytes,
+    })
 }

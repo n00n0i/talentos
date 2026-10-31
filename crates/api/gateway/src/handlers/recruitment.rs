@@ -1,8 +1,9 @@
 //! Recruitment: job openings and candidate pipeline.
 
 use axum::{
+    body::Bytes,
     extract::{Path, State},
-    http::StatusCode,
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -13,7 +14,9 @@ use uuid::Uuid;
 use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
 use crate::state::AppState;
-use talentos_hr_runner::recruitment::{self, CandidateInput, JobInput, RecruitmentError};
+use talentos_hr_runner::recruitment::{
+    self, CandidateFile, CandidateInput, JobInput, RecruitmentError,
+};
 
 #[derive(Debug, Deserialize)]
 pub struct CreateJobBody {
@@ -186,10 +189,69 @@ pub async fn remove_candidate(
     }
 }
 
+/// POST /api/v1/candidates/:id/cv
+pub async fn upload_cv(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream");
+    match recruitment::set_cv(&state.pool, ctx.tenant_id, id, content_type, &body).await {
+        Ok(()) => Json(json!({ "candidate_id": id.to_string(), "has_cv": true })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
+/// GET /api/v1/candidates/:id/cv
+pub async fn download_cv(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "read_all") {
+        return forbidden;
+    }
+    match recruitment::get_cv(&state.pool, ctx.tenant_id, id).await {
+        Ok(file) => cv_response(file),
+        Err(e) => map_error(e),
+    }
+}
+
+fn cv_response(file: CandidateFile) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (
+                header::CONTENT_TYPE,
+                HeaderValue::from_str(&file.content_type)
+                    .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+            ),
+            (
+                header::CONTENT_DISPOSITION,
+                HeaderValue::from_static("inline; filename=\"cv\""),
+            ),
+            (
+                header::X_CONTENT_TYPE_OPTIONS,
+                HeaderValue::from_static("nosniff"),
+            ),
+        ],
+        file.bytes,
+    )
+        .into_response()
+}
+
 fn map_error(e: RecruitmentError) -> Response {
     use RecruitmentError::*;
     match e {
-        JobNotFound | CandidateNotFound => (
+        JobNotFound | CandidateNotFound | NoCv => (
             StatusCode::NOT_FOUND,
             Json(envelope("not_found", &e.to_string())),
         )
@@ -204,12 +266,14 @@ fn map_error(e: RecruitmentError) -> Response {
         | InvalidPhone
         | InvalidSource
         | InvalidNote
-        | InvalidStage => (
+        | InvalidStage
+        | CvTooLarge
+        | InvalidCvType => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(envelope("invalid_request", &e.to_string())),
         )
             .into_response(),
-        Db(_) => {
+        Io(_) | Db(_) => {
             tracing::error!(error = %e, "recruitment endpoint failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

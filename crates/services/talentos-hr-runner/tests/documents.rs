@@ -7,7 +7,7 @@ use talentos_attendance::bangkok_offset;
 use talentos_db::TenantPool;
 use talentos_hr_runner::documents::{
     create_document, delete_document, expiring_documents, get_file, get_my_file, list_documents,
-    list_my_documents, set_file, DocumentError, DocumentInput,
+    list_my_documents, set_file, upload_dir, DocumentError, DocumentInput,
 };
 use talentos_kernel::TenantId;
 
@@ -111,6 +111,13 @@ async fn create_list_and_expiry_alerts() {
     .expect_err("unknown type");
     assert!(matches!(err, DocumentError::InvalidType));
 
+    let mut bad_number = input("contract", "เลขยาว", None);
+    bad_number.doc_number = Some("x".repeat(101));
+    let err = create_document(&pool, tenant, user_id, employee_id, &bad_number)
+        .await
+        .expect_err("document number too long");
+    assert!(matches!(err, DocumentError::InvalidNumber));
+
     let mut bad_dates = input("contract", "วันที่ผิด", Some(1));
     bad_dates.issued_date = Some(today() + Duration::days(10));
     let err = create_document(&pool, tenant, user_id, employee_id, &bad_dates)
@@ -147,6 +154,10 @@ async fn upload_get_replace_and_delete_removes_files() {
     let (_, employee_id) = entities[0];
     let user_id = user_id_of(&raw, tenant_id, employee_id).await;
     let tenant = TenantId(tenant_id);
+    std::env::set_var(
+        "DOCUMENT_UPLOAD_DIR",
+        upload_dir().join(format!("test-{}", uuid::Uuid::new_v4())),
+    );
 
     let doc = create_document(
         &pool,
@@ -157,6 +168,16 @@ async fn upload_get_replace_and_delete_removes_files() {
     )
     .await
     .expect("document");
+
+    assert!(matches!(
+        get_file(&pool, tenant, doc.id).await,
+        Err(DocumentError::NoFile)
+    ));
+    let oversized = vec![0u8; 5 * 1024 * 1024 + 1];
+    let err = set_file(&pool, tenant, doc.id, "application/pdf", &oversized)
+        .await
+        .expect_err("oversized file");
+    assert!(matches!(err, DocumentError::FileTooLarge));
 
     set_file(&pool, tenant, doc.id, "application/pdf", b"%PDF-1.4 first")
         .await
@@ -203,6 +224,74 @@ async fn upload_get_replace_and_delete_removes_files() {
 }
 
 #[tokio::test]
+async fn documents_are_not_reachable_from_another_tenant() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_a, entities_a) = seed_tenant_entities(&raw, 1).await;
+    let (_, employee_a) = entities_a[0];
+    let user_a = user_id_of(&raw, tenant_a, employee_a).await;
+    std::env::set_var(
+        "DOCUMENT_UPLOAD_DIR",
+        upload_dir().join(format!("test-{}", uuid::Uuid::new_v4())),
+    );
+    let doc = create_document(
+        &pool,
+        TenantId(tenant_a),
+        user_a,
+        employee_a,
+        &input("contract", "ของ tenant A", None),
+    )
+    .await
+    .expect("document");
+    set_file(
+        &pool,
+        TenantId(tenant_a),
+        doc.id,
+        "application/pdf",
+        b"%PDF A",
+    )
+    .await
+    .expect("file");
+
+    let (tenant_b, _) = seed_tenant_entities(&raw, 1).await;
+    let tenant_b = TenantId(tenant_b);
+    assert!(list_documents(&pool, tenant_b, employee_a)
+        .await
+        .expect("cross-tenant list")
+        .is_empty());
+    assert!(matches!(
+        get_file(&pool, tenant_b, doc.id).await,
+        Err(DocumentError::NotFound)
+    ));
+    assert!(matches!(
+        delete_document(&pool, tenant_b, doc.id).await,
+        Err(DocumentError::NotFound)
+    ));
+    assert!(matches!(
+        set_file(&pool, tenant_b, doc.id, "application/pdf", b"x").await,
+        Err(DocumentError::NotFound)
+    ));
+    // The owner can still read the document.
+    assert_eq!(
+        get_file(&pool, TenantId(tenant_a), doc.id)
+            .await
+            .expect("owner read")
+            .bytes,
+        b"%PDF A"
+    );
+
+    delete_document(&pool, TenantId(tenant_a), doc.id)
+        .await
+        .expect("owner delete");
+    cleanup(&raw, tenant_a).await;
+    cleanup(&raw, tenant_b.0).await;
+}
+
+#[tokio::test]
 async fn self_service_lists_and_downloads_only_own_documents() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
@@ -216,6 +305,10 @@ async fn self_service_lists_and_downloads_only_own_documents() {
     let user_a = user_id_of(&raw, tenant_id, employee_a).await;
     let user_b = user_id_of(&raw, tenant_id, employee_b).await;
     let tenant = TenantId(tenant_id);
+    std::env::set_var(
+        "DOCUMENT_UPLOAD_DIR",
+        upload_dir().join(format!("test-{}", uuid::Uuid::new_v4())),
+    );
 
     let doc_a = create_document(
         &pool,

@@ -248,6 +248,17 @@ pub async fn export_personal_data(
             id,
         )
         .await?;
+        let documents = scalar_json(
+            &mut tx,
+            r#"SELECT json_agg(json_build_object(
+                   'doc_type', doc_type, 'title', title, 'doc_number', doc_number,
+                   'issued_date', issued_date, 'expiry_date', expiry_date,
+                   'has_file', file_path IS NOT NULL) ORDER BY created_at)
+                 FROM employee_documents WHERE tenant_id = $1 AND employee_id = $2"#,
+            tenant_id.0,
+            id,
+        )
+        .await?;
         let payslips = scalar_json(
             &mut tx,
             r#"SELECT json_agg(json_build_object(
@@ -291,6 +302,7 @@ pub async fn export_personal_data(
             "ot_requests": ot,
             "expense_claims": claims,
             "loans": loans,
+            "documents": documents,
             "payslips": payslips,
         }));
     }

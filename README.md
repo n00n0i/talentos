@@ -314,7 +314,7 @@ the fresh anomalies must be checked again.
 
 ## Employee documents
 
-`/documents` (HR/payroll) stores contracts, work permits, visas, ID cards, and
+`/documents` (HR writes; payroll read-only) stores contracts, work permits, visas, ID cards, and
 certificates per employee with issue/expiry dates and one file (PDF/JPEG/PNG,
 ≤5 MB). The page lists documents expiring within 60 days (including already
 expired) and supports download/delete. Employees can read their own records via
@@ -327,7 +327,7 @@ Every user has `/privacy`: accept the current privacy-notice version (recorded
 with a timestamp in `privacy_consents`) and download a JSON copy of their own
 data — account, roles, consent history, notifications, every linked employee
 profile (decrypted PII), punch events, attendance days, leave, OT, claims,
-loans, and payslips. Exports are tenant-scoped
+loans, payslips, and employee-document metadata. Exports are tenant-scoped
 and audited as `privacy.export`. Automatic deletion/anonymisation is not
 implemented; the notice states the statutory retention position.
 

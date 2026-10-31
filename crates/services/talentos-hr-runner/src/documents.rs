@@ -38,6 +38,8 @@ pub enum DocumentError {
     InvalidType,
     #[error("title must be 1-200 characters")]
     InvalidTitle,
+    #[error("document number must be at most 100 characters")]
+    InvalidNumber,
     #[error("expiry date must not precede the issue date")]
     InvalidDates,
     #[error("file is too large; maximum size is 5 MB")]
@@ -89,6 +91,22 @@ pub struct DocumentFile {
     pub bytes: Vec<u8>,
 }
 
+async fn write_private(
+    dir: &std::path::Path,
+    path: &std::path::Path,
+    bytes: &[u8],
+) -> std::io::Result<()> {
+    tokio::fs::create_dir_all(dir).await?;
+    tokio::fs::write(path, bytes).await?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        tokio::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).await?;
+        tokio::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).await?;
+    }
+    Ok(())
+}
+
 fn today() -> NaiveDate {
     Utc::now().with_timezone(&bangkok_offset()).date_naive()
 }
@@ -119,6 +137,13 @@ fn validate(input: &DocumentInput) -> Result<String, DocumentError> {
     let title = input.title.trim();
     if title.is_empty() || title.chars().count() > 200 {
         return Err(DocumentError::InvalidTitle);
+    }
+    if input
+        .doc_number
+        .as_deref()
+        .is_some_and(|n| n.trim().chars().count() > 100)
+    {
+        return Err(DocumentError::InvalidNumber);
     }
     if let (Some(issued), Some(expiry)) = (input.issued_date, input.expiry_date) {
         if expiry < issued {
@@ -209,6 +234,7 @@ pub async fn expiring_documents(
     let days = days.clamp(1, 365);
     let today = today();
     let limit = today + Duration::days(days);
+    let floor = today - Duration::days(365);
     let mut tx = pool.begin_tenant(tenant_id).await?;
     let rows = sqlx::query(
         r#"SELECT d.id, d.employee_id, d.doc_type, d.title, d.doc_number, d.issued_date,
@@ -216,11 +242,14 @@ pub async fn expiring_documents(
                   e.employee_code, e.first_name_th, e.last_name_th
              FROM employee_documents d
              JOIN employees e ON e.id = d.employee_id
-            WHERE d.tenant_id = $1 AND d.expiry_date IS NOT NULL AND d.expiry_date <= $2
+            WHERE d.tenant_id = $1 AND d.expiry_date IS NOT NULL
+              AND d.expiry_date BETWEEN $2 AND $3
+              AND e.status <> 'terminated'
             ORDER BY d.expiry_date, e.employee_code
             LIMIT 500"#,
     )
     .bind(tenant_id.0)
+    .bind(floor)
     .bind(limit)
     .fetch_all(&mut *tx)
     .await?;
@@ -307,8 +336,7 @@ pub async fn set_file(
     let dir = upload_dir();
     let filename = format!("{}.{}", Uuid::new_v4(), ext);
     let path = dir.join(&filename);
-    tokio::fs::create_dir_all(&dir).await?;
-    tokio::fs::write(&path, bytes).await?;
+    write_private(&dir, &path, bytes).await?;
 
     let updated = sqlx::query(
         "UPDATE employee_documents
@@ -365,7 +393,11 @@ async fn file_for(
         return Err(DocumentError::NoFile);
     };
     let content_type: Option<String> = row.try_get("file_type")?;
-    let bytes = tokio::fs::read(path).await?;
+    let bytes = match tokio::fs::read(path).await {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(DocumentError::NotFound),
+        Err(e) => return Err(e.into()),
+    };
     Ok(DocumentFile {
         content_type: content_type.unwrap_or_else(|| "application/octet-stream".into()),
         bytes,

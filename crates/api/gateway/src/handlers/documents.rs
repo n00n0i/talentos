@@ -160,11 +160,21 @@ pub async fn me_download(
 fn file_response(file: DocumentFile) -> Response {
     (
         StatusCode::OK,
-        [(
-            header::CONTENT_TYPE,
-            HeaderValue::from_str(&file.content_type)
-                .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
-        )],
+        [
+            (
+                header::CONTENT_TYPE,
+                HeaderValue::from_str(&file.content_type)
+                    .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+            ),
+            (
+                header::CONTENT_DISPOSITION,
+                HeaderValue::from_static("inline; filename=\"document\""),
+            ),
+            (
+                header::X_CONTENT_TYPE_OPTIONS,
+                HeaderValue::from_static("nosniff"),
+            ),
+        ],
         file.bytes,
     )
         .into_response()
@@ -178,7 +188,8 @@ fn map_error(e: DocumentError) -> Response {
             Json(envelope("not_found", &e.to_string())),
         )
             .into_response(),
-        InvalidType | InvalidTitle | InvalidDates | FileTooLarge | InvalidFileType => (
+        InvalidType | InvalidTitle | InvalidNumber | InvalidDates | FileTooLarge
+        | InvalidFileType => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(envelope("invalid_request", &e.to_string())),
         )

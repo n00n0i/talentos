@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, gw, handleApiError, thDate } from "@/lib/api";
+import { ApiError, gw, handleApiError, Me, thDate } from "@/lib/api";
 
 type Employee = {
   id: string;
@@ -61,6 +61,7 @@ export default function DocumentsPage() {
   const [form, setForm] = useState(emptyForm);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [canWrite, setCanWrite] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -79,8 +80,11 @@ export default function DocumentsPage() {
   }, []);
 
   useEffect(() => {
-    gw<{ employees: Employee[] }>("api/v1/employees?status=all")
+    gw<{ employees: Employee[] }>("api/v1/employees?status=all&limit=500")
       .then((res) => setEmployees(res.employees))
+      .catch((e) => handleApiError(e, setError));
+    gw<Me>("api/v1/auth/me")
+      .then((me) => setCanWrite(me.permissions.includes("employee.update")))
       .catch((e) => handleApiError(e, setError));
     loadExpiring().catch((e) => handleApiError(e, setError));
   }, [loadExpiring]);
@@ -95,6 +99,10 @@ export default function DocumentsPage() {
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (!employeeId) return;
+    if (file && file.size > 5 * 1024 * 1024) {
+      setError("ไฟล์ใหญ่เกิน 5 MB");
+      return;
+    }
     setBusy(true);
     setError("");
     setNotice("");
@@ -110,18 +118,15 @@ export default function DocumentsPage() {
         `api/v1/employees/${employeeId}/documents`,
         { method: "POST", body: JSON.stringify(body) },
       );
-      if (file) {
-        const res = await fetch(`/api/gw/api/v1/documents/${created.document.id}/file`, {
-          method: "POST",
-          headers: { "content-type": file.type },
-          body: file,
-        });
-        if (!res.ok) throw new ApiError(res.statusText || `HTTP ${res.status}`, res.status);
-      }
       setForm(emptyForm);
       setFile(null);
+      const uploaded = file ? await uploadFile(created.document.id, file) : true;
       await Promise.all([loadDocs(employeeId), loadExpiring()]);
-      setNotice("เพิ่มเอกสารแล้ว");
+      setNotice(
+        uploaded
+          ? "เพิ่มเอกสารแล้ว"
+          : "สร้างเอกสารแล้ว แต่ไฟล์อัปโหลดไม่สำเร็จ — อัปโหลดใหม่ที่แถวเอกสาร",
+      );
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -129,7 +134,41 @@ export default function DocumentsPage() {
     }
   }
 
+  async function uploadFile(id: string, file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      setError("ไฟล์ใหญ่เกิน 5 MB");
+      return false;
+    }
+    try {
+      const res = await fetch(`/api/gw/api/v1/documents/${id}/file`, {
+        method: "POST",
+        headers: { "content-type": file.type },
+        body: file,
+      });
+      if (!res.ok) {
+        setError(`อัปโหลดไฟล์ไม่สำเร็จ (${res.status})`);
+        return false;
+      }
+      return true;
+    } catch {
+      setError("อัปโหลดไฟล์ไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ");
+      return false;
+    }
+  }
+
+  async function attach(id: string, file: File | undefined) {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    if (await uploadFile(id, file)) {
+      await Promise.all([loadDocs(employeeId), loadExpiring()]);
+      setNotice("อัปโหลดไฟล์แล้ว");
+    }
+    setBusy(false);
+  }
+
   async function remove(id: string) {
+    if (!confirm("ลบเอกสารนี้หรือไม่? ไฟล์แนบจะถูกลบด้วย")) return;
     setBusy(true);
     setError("");
     try {
@@ -201,6 +240,7 @@ export default function DocumentsPage() {
           </label>
         </div>
 
+        {canWrite ? (
         <form onSubmit={save} style={{ marginTop: 12, display: "grid", gap: 10 }}>
           <div className="grid-2" style={{ gridTemplateColumns: "1fr 2fr", gap: 12 }}>
             <label>
@@ -273,6 +313,9 @@ export default function DocumentsPage() {
             เพิ่มเอกสาร
           </button>
         </form>
+        ) : (
+          <p className="empty" style={{ marginTop: 12 }}>บัญชีนี้ดูเอกสารได้อย่างเดียว</p>
+        )}
       </div>
 
       <div className="card">
@@ -307,22 +350,38 @@ export default function DocumentsPage() {
                         href={`/api/gw/api/v1/documents/${d.id}/file`}
                         target="_blank"
                         rel="noreferrer"
+                        style={{ marginRight: 6 }}
                       >
                         ดาวน์โหลด
                       </a>
                     ) : (
                       "—"
                     )}
+                    {canWrite && (
+                      <label className="badge" style={{ cursor: "pointer" }}>
+                        อัปโหลด
+                        <input
+                          data-testid="doc-upload"
+                          type="file"
+                          accept="application/pdf,image/jpeg,image/png"
+                          disabled={busy}
+                          style={{ display: "none" }}
+                          onChange={(e) => attach(d.id, e.target.files?.[0])}
+                        />
+                      </label>
+                    )}
                   </td>
                   <td>
-                    <button
-                      className="btn btn-sm"
-                      data-testid="delete-document"
-                      disabled={busy}
-                      onClick={() => remove(d.id)}
-                    >
-                      ลบ
-                    </button>
+                    {canWrite && (
+                      <button
+                        className="btn btn-sm"
+                        data-testid="delete-document"
+                        disabled={busy}
+                        onClick={() => remove(d.id)}
+                      >
+                        ลบ
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

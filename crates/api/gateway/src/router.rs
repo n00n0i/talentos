@@ -76,7 +76,7 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/documents/:id/file",
             get(documents::download)
                 .post(documents::upload)
-                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+                .layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)),
         )
         .route("/api/v1/me/documents", get(documents::me_list))
         .route("/api/v1/me/documents/:id/file", get(documents::me_download))
@@ -279,7 +279,7 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/me/claims/:id/receipt",
             get(claims::me_download_receipt)
                 .post(claims::me_upload_receipt)
-                .layer(axum::extract::DefaultBodyLimit::max(5 * 1024 * 1024)),
+                .layer(axum::extract::DefaultBodyLimit::max(6 * 1024 * 1024)),
         )
         .route("/api/v1/claims/approvals", get(claims::approvals))
         .route("/api/v1/claims/:id/decision", post(claims::decide))

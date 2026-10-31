@@ -16,6 +16,7 @@ pub mod loans;
 pub mod notify;
 pub mod onboarding;
 pub mod ot;
+pub mod performance;
 pub mod pf;
 pub mod privacy;
 pub mod recruitment;

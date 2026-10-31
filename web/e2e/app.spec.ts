@@ -1228,3 +1228,31 @@ test("HR records an expiring training certificate", async ({ page }) => {
   await expect(page.getByTestId("training-row").filter({ hasText: "ความปลอดภัย E2E" })).toBeVisible();
   await expect(page.getByTestId("training-expiring")).toContainText("ความปลอดภัย E2E");
 });
+
+test("HR runs a performance cycle and submits a review", async ({ page }) => {
+  await login(page);
+  await page.goto("/performance");
+
+  await page.getByTestId("cycle-name").fill("รอบประเมิน E2E");
+  await page.getByTestId("cycle-start").fill("2026-01-01");
+  await page.getByTestId("cycle-end").fill("2026-12-31");
+  await page.getByTestId("create-cycle").click();
+  await expect(page.getByText("สร้างรอบประเมินแล้ว")).toBeVisible();
+
+  const cycle = page.getByTestId("cycle-row").filter({ hasText: "รอบประเมิน E2E" });
+  await expect(cycle).toBeVisible();
+  await cycle.getByTestId("start-cycle").click();
+  await expect(page.getByText("เริ่มรอบประเมินแล้ว")).toBeVisible();
+
+  await page.getByTestId("cycle-row").filter({ hasText: "รอบประเมิน E2E" }).getByTestId("select-cycle").click();
+  const review = page.getByTestId("review-row").filter({ hasText: "E2E001" });
+  await expect(review).toBeVisible();
+  await review.getByTestId("review-rating").selectOption("4");
+  await review.getByTestId("review-strengths").fill("ส่งงานตรงเวลา");
+  await review.getByTestId("review-improvements").fill("สื่อสารเร็วขึ้น");
+  await review.getByTestId("submit-review").click();
+  await expect(page.getByText("บันทึกผลประเมินแล้ว")).toBeVisible();
+  await expect(
+    page.getByTestId("review-row").filter({ hasText: "E2E001" }),
+  ).toContainText("ส่งแล้ว");
+});

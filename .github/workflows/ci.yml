@@ -170,6 +170,7 @@ jobs:
             sleep 1
           done
           curl -sf http://127.0.0.1:18080/health
+          curl -sf http://127.0.0.1:18080/metrics | grep -q talentos_http_requests_total
           curl -sf -o /dev/null http://127.0.0.1:3000/login
       - name: Playwright
         working-directory: web

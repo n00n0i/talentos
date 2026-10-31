@@ -1,6 +1,7 @@
 mod cli;
 mod dto;
 mod handlers;
+mod metrics;
 mod middleware;
 mod notify_worker;
 mod ratelimit;

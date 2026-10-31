@@ -8,7 +8,7 @@ Last verified: 2026-10-28 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **436 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Tests | `cargo test --workspace` | **437 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
 | Migrations | `sqlx migrate run` on a fresh DB | 52 files apply cleanly (including `20261130000001_employee_documents.sql` for employee documents) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
@@ -31,7 +31,7 @@ pending isolation, RBAC; service-level DB + handler-helper units — cancel/reje
 have no browser E2E, inbox pagination is deferred), memory 3 (recall, RLS isolation, layer filter, expiry
 purge, stats), 2FA recovery/session units 5 (format/hash/normalize), approval rules 5 (precedence/threshold/snapshot), escalation 6 (overdue/idempotent/disabled), OT approval 10 (default/advance/deny/reject/cancel), loan payoff 6 (partial/full/bounds/closed), loan reversal 5 (pending/approved/duplicate/recalc), loan interest 10 (split/payoff/non-amortizing/GL), PF provider 6 (payload/sent/fail/retry/409/503), form templates 11 (validation/override/CSV/HTML/PND1/PND1A), PF rates 6 (default/effective/future/bounds), delegation 6 (active/expired/self/role scope), settlement 10 (proration, leave, notice, severance tiers, totals, isolation), claims 11 (own create/list/cancel, decisions, inbox, isolation), reports 13 (headcount, PF remittance, cost, OT trend, balanced/deterministic GL), leave balances 6 (dry-run, upsert, duplicates, bounds), leave approvals 12 (default one-step, manager→HR, role denial, override, skip, snapshot), notify 1 (payslip recipients and rendered body), OT self-service 18
 (own create/list/cancel, duplicates, decisions, inbox, approved history, reason/minute bounds), wasm-host 6 (real guest module: sandbox, capability refusal,
-tenant scoping). Total: 436 passed, 1 ignored (`load.rs`).
+tenant scoping). Total: 437 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with

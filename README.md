@@ -312,6 +312,15 @@ employee). If any exist, approval is blocked until HR reviews them
 (`POST /payroll/runs/:id/anomalies/review`); a recalculation clears the review so
 the fresh anomalies must be checked again.
 
+## Performance reviews
+
+`/performance` (HR writes; payroll read-only) creates review cycles, populates
+one pending review per active employee when started, and records a 1–5 rating
+plus strengths/improvements. Cycles close to block further edits; deleting a
+cycle cascades its reviews. Employees can read their own reviews via
+`/api/v1/me/reviews` (self UI not built yet). No goals/OKRs, calibration,
+manager workflow, notifications, or acknowledgement.
+
 ## Training
 
 `/training` (HR writes; payroll read-only) records completed courses per
@@ -785,7 +794,8 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 - [ ] Offer letters/e-signature, CV attachments, interview scheduling.
 - [x] Employee documents with expiry alerts (contracts, work permits, visas) and one downloadable file per document.
 - [x] Training records with certificate-expiry alerts.
-- [ ] Performance reviews/OKRs.
+- [x] Performance review cycles with ratings and written feedback.
+- [ ] Goals/OKR tracking, calibration, manager workflow.
 - [x] Mobile PWA shell and offline punch queue; native app if required.
 
 ### Dev environment notes

@@ -8,8 +8,9 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms,
-    graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll, pf,
-    plugins, privacy, recruitment, reports, settings, settlement, setup, training, users,
+    graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll,
+    performance, pf, plugins, privacy, recruitment, reports, settings, settlement, setup, training,
+    users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -89,6 +90,31 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/onboarding/:id",
             patch(onboarding::update).delete(onboarding::remove),
         )
+        .route(
+            "/api/v1/performance/cycles",
+            get(performance::list_cycles).post(performance::create_cycle),
+        )
+        .route(
+            "/api/v1/performance/cycles/:id/start",
+            post(performance::start_cycle),
+        )
+        .route(
+            "/api/v1/performance/cycles/:id/close",
+            post(performance::close_cycle),
+        )
+        .route(
+            "/api/v1/performance/cycles/:id",
+            delete(performance::remove_cycle),
+        )
+        .route(
+            "/api/v1/performance/cycles/:id/reviews",
+            get(performance::list_reviews),
+        )
+        .route(
+            "/api/v1/performance/reviews/:id",
+            patch(performance::submit_review),
+        )
+        .route("/api/v1/me/reviews", get(performance::me_reviews))
         .route(
             "/api/v1/jobs",
             get(recruitment::list_jobs).post(recruitment::create_job),

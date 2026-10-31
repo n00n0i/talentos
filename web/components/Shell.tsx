@@ -10,7 +10,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "ภาพรวม", icon: "overview" },
   { href: "/employees", label: "พนักงาน", icon: "users" },
   { href: "/documents", label: "เอกสาร", icon: "file" },
-  { href: "/onboarding", label: "Onboarding", icon: "users" },
+  { href: "/onboarding", label: "เริ่มงาน", icon: "users" },
   { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
   { href: "/calendar", label: "ปฏิทินทีม", icon: "clock" },
   { href: "/clock", label: "ลงเวลา", icon: "clock" },

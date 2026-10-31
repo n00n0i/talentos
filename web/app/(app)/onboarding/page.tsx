@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
 type Employee = {
@@ -32,14 +32,16 @@ export default function OnboardingPage() {
   const [canWrite, setCanWrite] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const requestId = useRef(0);
 
   const loadTasks = useCallback(async (id: string) => {
+    const seq = ++requestId.current;
     if (!id) {
       setTasks([]);
       return;
     }
     const res = await gw<{ tasks: Task[] }>(`api/v1/employees/${id}/onboarding`);
-    setTasks(res.tasks);
+    if (seq === requestId.current) setTasks(res.tasks);
   }, []);
 
   useEffect(() => {
@@ -150,7 +152,10 @@ export default function OnboardingPage() {
             <select
               data-testid="onboarding-employee"
               value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
+              onChange={(e) => {
+                setTasks([]);
+                setEmployeeId(e.target.value);
+              }}
             >
               <option value="">— เลือกพนักงาน —</option>
               {employees.map((e) => (
@@ -221,7 +226,9 @@ export default function OnboardingPage() {
       </div>
 
       <div className="card">
-        {tasks.length === 0 ? (
+        {!employeeId ? (
+          <div className="empty">เลือกพนักงานเพื่อดูรายการ onboarding</div>
+        ) : tasks.length === 0 ? (
           <div className="empty">ยังไม่มีรายการ onboarding สำหรับพนักงานคนนี้</div>
         ) : (
           <table className="table">

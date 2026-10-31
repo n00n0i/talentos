@@ -79,6 +79,15 @@ pub async fn list_tasks(
     employee_id: Uuid,
 ) -> Result<Vec<TaskView>, OnboardingError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
+    let employee: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM employees WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.0)
+            .bind(employee_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if employee.is_none() {
+        return Err(OnboardingError::EmployeeNotFound);
+    }
     let rows = sqlx::query(
         r#"SELECT id, employee_id, title, notes, due_date, status, completed_at
              FROM employee_onboarding_tasks
@@ -143,11 +152,12 @@ pub async fn create_task(
     if title.is_empty() || title.chars().count() > 200 {
         return Err(OnboardingError::InvalidTitle);
     }
-    if input
+    let notes = input
         .notes
         .as_deref()
-        .is_some_and(|n| n.chars().count() > 500)
-    {
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    if notes.is_some_and(|n| n.chars().count() > 500) {
         return Err(OnboardingError::InvalidNotes);
     }
 
@@ -171,13 +181,7 @@ pub async fn create_task(
     .bind(tenant_id.0)
     .bind(employee_id)
     .bind(title)
-    .bind(
-        input
-            .notes
-            .as_deref()
-            .map(str::trim)
-            .filter(|v| !v.is_empty()),
-    )
+    .bind(notes)
     .bind(input.due_date)
     .bind(user_id)
     .fetch_one(&mut *tx)
@@ -205,8 +209,8 @@ pub async fn set_done(
     let row = sqlx::query(
         r#"UPDATE employee_onboarding_tasks
               SET status = CASE WHEN $3 THEN 'done' ELSE 'pending' END,
-                  completed_at = CASE WHEN $3 THEN now() ELSE NULL END,
-                  completed_by = CASE WHEN $3 THEN $4 ELSE NULL END,
+                  completed_at = CASE WHEN $3 THEN COALESCE(completed_at, now()) ELSE NULL END,
+                  completed_by = CASE WHEN $3 THEN COALESCE(completed_by, $4) ELSE NULL END,
                   updated_at = now()
             WHERE tenant_id = $1 AND id = $2
             RETURNING id, employee_id, title, notes, due_date, status, completed_at"#,
@@ -274,19 +278,25 @@ pub async fn set_my_done(
     done: bool,
 ) -> Result<TaskView, OnboardingError> {
     let mut tx = pool.begin_tenant(tenant_id).await?;
-    let owned: Option<Uuid> = sqlx::query_scalar(
-        r#"SELECT t.id FROM employee_onboarding_tasks t
-             JOIN employees e ON e.id = t.employee_id
-            WHERE t.tenant_id = $1 AND t.id = $2 AND e.user_id = $3"#,
+    let row = sqlx::query(
+        r#"UPDATE employee_onboarding_tasks t
+              SET status = CASE WHEN $4 THEN 'done' ELSE 'pending' END,
+                  completed_at = CASE WHEN $4 THEN COALESCE(t.completed_at, now()) ELSE NULL END,
+                  completed_by = CASE WHEN $4 THEN COALESCE(t.completed_by, $3) ELSE NULL END,
+                  updated_at = now()
+            WHERE t.tenant_id = $1 AND t.id = $2
+              AND EXISTS (SELECT 1 FROM employees e
+                           WHERE e.id = t.employee_id AND e.user_id = $3)
+            RETURNING t.id, t.employee_id, t.title, t.notes, t.due_date, t.status, t.completed_at"#,
     )
     .bind(tenant_id.0)
     .bind(task_id)
     .bind(user_id)
+    .bind(done)
     .fetch_optional(&mut *tx)
-    .await?;
-    if owned.is_none() {
-        return Err(OnboardingError::NotFound);
-    }
+    .await?
+    .ok_or(OnboardingError::NotFound)?;
+    let view = map_task(&row, today())?;
     tx.commit().await?;
-    set_done(pool, tenant_id, user_id, task_id, done).await
+    Ok(view)
 }

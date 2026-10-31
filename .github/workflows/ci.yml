@@ -70,6 +70,19 @@ jobs:
           # Owner connection for the provisioning CLI test.
           DATABASE_ADMIN_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
         run: cargo nextest run --workspace --no-fail-fast
+      - name: Backup restore drill
+        env:
+          PGPASSWORD: talentos_ci
+          SRC_DATABASE_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
+          DEST_DATABASE_URL: postgres://talentos:talentos_ci@localhost:5432/talentos_restore
+        run: |
+          psql -h localhost -U talentos -d postgres -c "CREATE DATABASE talentos_restore"
+          bash scripts/restore-drill.sh
+      - name: Payroll load (600 employees)
+        env:
+          DATABASE_URL: postgres://talentos_app:app_ci_password@localhost:5432/talentos
+          DATABASE_ADMIN_URL: postgres://talentos:talentos_ci@localhost:5432/talentos
+        run: LOAD_EMPLOYEES=600 cargo test -p talentos-payroll-runner --test load -- --ignored --nocapture
 
   web:
     runs-on: ubuntu-latest

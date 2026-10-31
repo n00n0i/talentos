@@ -360,6 +360,12 @@ them off. The standard run is idempotent by title. Employees can read and
 complete their own tasks via `/api/v1/me/onboarding` (self UI not built yet).
 No reminders are sent; overdue tasks are flagged on the page.
 
+## Operations
+
+Backups are `pg_dump --format=custom`; `scripts/restore-drill.sh` restores one
+into a scratch database and compares critical row/RLS counts. CI runs the drill
+and a 600-employee payroll load check. See `docs/ops/backup-restore.md`.
+
 ## Metrics
 
 `GET /metrics` exposes Prometheus counters for HTTP status classes, request

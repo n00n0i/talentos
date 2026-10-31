@@ -346,7 +346,9 @@ supported. Each candidate can have one CV (PDF/JPEG/PNG ≤5 MB, stored under
 `CANDIDATE_CV_DIR`) with download/replace; deleting a candidate or opening
 removes the files. Stage changes keep an immutable history (`from → to`, who,
 when) shown per candidate, and interviews can be scheduled (onsite/online/phone,
-notes, status) per candidate. No interview scheduling, stage history, offer letters, or
+notes, status) per candidate, and offers can be created with position, salary,
+start date, and notes; the offer PDF is rendered by the same Chromium pipeline
+as payslips and tracked as draft → sent → accepted/declined. No interview scheduling, stage history, offer letters, or
 automatic employee creation yet.
 
 ## Onboarding
@@ -804,7 +806,8 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 - [x] Recruitment pipeline (openings, candidates, applied→hired/rejected stages).
 - [x] Candidate CV attachments (one file per candidate).
 - [x] Interview scheduling (time, mode, location, notes, status).
-- [ ] Offer letters/e-signature.
+- [x] Offer letters (PDF via Chromium) with draft/sent/accepted/declined status.
+- [ ] External e-signature provider integration.
 - [x] Employee documents with expiry alerts (contracts, work permits, visas) and one downloadable file per document.
 - [x] Training records with certificate-expiry alerts.
 - [x] Performance review cycles with ratings and written feedback.

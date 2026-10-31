@@ -3,13 +3,15 @@
 
 use std::path::PathBuf;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
+use rust_decimal::Decimal;
 use serde::Serialize;
 use sqlx::Row;
 use talentos_db::TenantPool;
 use talentos_kernel::TenantId;
 use uuid::Uuid;
 
+const OFFER_STATUSES: &[&str] = &["draft", "sent", "accepted", "declined"];
 const INTERVIEW_MODES: &[&str] = &["onsite", "online", "phone"];
 const INTERVIEW_STATUSES: &[&str] = &["scheduled", "completed", "cancelled"];
 
@@ -66,6 +68,16 @@ pub enum RecruitmentError {
     InvalidInterviewStatus,
     #[error("interview not found")]
     InterviewNotFound,
+    #[error("offer not found")]
+    OfferNotFound,
+    #[error("unsupported offer status")]
+    InvalidOfferStatus,
+    #[error("position title must be 1-200 characters")]
+    InvalidOfferTitle,
+    #[error("salary must be greater than zero")]
+    InvalidSalary,
+    #[error("offer notes must be at most 2000 characters")]
+    InvalidOfferNotes,
     #[error("location must be at most 500 characters")]
     InvalidLocation,
     #[error("notes must be at most 1000 characters")]
@@ -113,6 +125,38 @@ pub struct CandidateInput {
     pub phone: Option<String>,
     pub source: Option<String>,
     pub note: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct OfferInput {
+    pub position_title: String,
+    pub salary: Decimal,
+    pub start_date: NaiveDate,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OfferView {
+    pub id: Uuid,
+    pub candidate_id: Uuid,
+    pub candidate_name: String,
+    pub position_title: String,
+    pub salary: String,
+    pub start_date: NaiveDate,
+    pub notes: Option<String>,
+    pub status: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Data needed to render an offer letter PDF.
+pub struct OfferLetter {
+    pub tenant_name: String,
+    pub candidate_name: String,
+    pub position_title: String,
+    pub salary: String,
+    pub start_date: NaiveDate,
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -822,4 +866,199 @@ pub async fn delete_interview(
     }
     tx.commit().await?;
     Ok(())
+}
+
+fn map_offer(row: &sqlx::postgres::PgRow) -> Result<OfferView, sqlx::Error> {
+    Ok(OfferView {
+        id: row.try_get("id")?,
+        candidate_id: row.try_get("candidate_id")?,
+        candidate_name: format!(
+            "{} {}",
+            row.try_get::<String, _>("first_name")?,
+            row.try_get::<String, _>("last_name")?
+        ),
+        position_title: row.try_get("position_title")?,
+        salary: row.try_get::<Decimal, _>("salary")?.to_string(),
+        start_date: row.try_get("start_date")?,
+        notes: row.try_get("notes")?,
+        status: row.try_get("status")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+const OFFER_SELECT: &str = r#"SELECT o.id, o.candidate_id, c.first_name, c.last_name,
+              o.position_title, o.salary, o.start_date, o.notes, o.status,
+              o.created_at, o.updated_at
+         FROM candidate_offers o
+         JOIN candidates c ON c.id = o.candidate_id AND c.tenant_id = o.tenant_id
+        WHERE o.tenant_id = $1"#;
+
+pub async fn create_offer(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    candidate_id: Uuid,
+    input: &OfferInput,
+) -> Result<OfferView, RecruitmentError> {
+    let title = input.position_title.trim();
+    if title.is_empty() || title.chars().count() > 200 {
+        return Err(RecruitmentError::InvalidOfferTitle);
+    }
+    if input.salary <= Decimal::ZERO {
+        return Err(RecruitmentError::InvalidSalary);
+    }
+    let notes = input
+        .notes
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty());
+    if notes.is_some_and(|v| v.chars().count() > 2000) {
+        return Err(RecruitmentError::InvalidOfferNotes);
+    }
+
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM candidates WHERE tenant_id = $1 AND id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        return Err(RecruitmentError::CandidateNotFound);
+    }
+    let inserted = sqlx::query(
+        r#"INSERT INTO candidate_offers
+             (tenant_id, candidate_id, position_title, salary, start_date, notes, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           RETURNING id"#,
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .bind(title)
+    .bind(input.salary)
+    .bind(input.start_date)
+    .bind(notes)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let id: Uuid = inserted.try_get("id")?;
+    let sql = format!("{OFFER_SELECT} AND o.id = $2");
+    let row = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let view = map_offer(&row)?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+pub async fn list_offers(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    candidate_id: Uuid,
+) -> Result<Vec<OfferView>, RecruitmentError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM candidates WHERE tenant_id = $1 AND id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(candidate_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        return Err(RecruitmentError::CandidateNotFound);
+    }
+    let sql = format!("{OFFER_SELECT} AND o.candidate_id = $2 ORDER BY o.created_at DESC");
+    let rows = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(candidate_id)
+        .fetch_all(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| map_offer(row).map_err(RecruitmentError::from))
+        .collect()
+}
+
+pub async fn set_offer_status(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    offer_id: Uuid,
+    status: &str,
+) -> Result<OfferView, RecruitmentError> {
+    if !OFFER_STATUSES.contains(&status) {
+        return Err(RecruitmentError::InvalidOfferStatus);
+    }
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let updated = sqlx::query(
+        "UPDATE candidate_offers SET status = $3, updated_at = now()
+          WHERE tenant_id = $1 AND id = $2 RETURNING id",
+    )
+    .bind(tenant_id.0)
+    .bind(offer_id)
+    .bind(status)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if updated.is_none() {
+        return Err(RecruitmentError::OfferNotFound);
+    }
+    let sql = format!("{OFFER_SELECT} AND o.id = $2");
+    let row = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(offer_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let view = map_offer(&row)?;
+    tx.commit().await?;
+    Ok(view)
+}
+
+pub async fn delete_offer(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    offer_id: Uuid,
+) -> Result<(), RecruitmentError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let deleted = sqlx::query("DELETE FROM candidate_offers WHERE tenant_id = $1 AND id = $2")
+        .bind(tenant_id.0)
+        .bind(offer_id)
+        .execute(&mut *tx)
+        .await?;
+    if deleted.rows_affected() == 0 {
+        return Err(RecruitmentError::OfferNotFound);
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
+pub async fn offer_letter(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    offer_id: Uuid,
+) -> Result<OfferLetter, RecruitmentError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let sql = format!("{OFFER_SELECT} AND o.id = $2");
+    let row = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(offer_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(RecruitmentError::OfferNotFound)?;
+    let view = map_offer(&row)?;
+    let tenant_name: String = sqlx::query_scalar("SELECT name FROM tenants WHERE id = $1")
+        .bind(tenant_id.0)
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(OfferLetter {
+        tenant_name,
+        candidate_name: view.candidate_name,
+        position_title: view.position_title,
+        salary: view.salary,
+        start_date: view.start_date,
+        notes: view.notes,
+    })
 }

@@ -458,3 +458,113 @@ async fn interviews_schedule_status_and_scope() {
     cleanup(&raw, tenant_id).await;
     cleanup(&raw, other_tenant).await;
 }
+
+#[tokio::test]
+async fn offers_create_status_and_letter_data() {
+    use chrono::NaiveDate;
+    use rust_decimal::Decimal;
+    use talentos_hr_runner::recruitment::{
+        create_offer, delete_offer, list_offers, offer_letter, set_offer_status, OfferInput,
+    };
+
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let tenant = TenantId(tenant_id);
+
+    let job = create_job(&pool, tenant, user_id, &job("Dev"))
+        .await
+        .expect("job");
+    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"))
+        .await
+        .expect("candidate");
+
+    let input = OfferInput {
+        position_title: "Senior Developer".into(),
+        salary: Decimal::new(30_000, 0),
+        start_date: NaiveDate::from_ymd_opt(2026, 12, 1).unwrap(),
+        notes: Some("Hybrid".into()),
+    };
+    let offer = create_offer(&pool, tenant, user_id, alice.id, &input)
+        .await
+        .expect("offer");
+    assert_eq!(offer.status, "draft");
+    assert_eq!(offer.position_title, "Senior Developer");
+    assert!(offer.salary.starts_with("30000"));
+
+    assert_eq!(
+        list_offers(&pool, tenant, alice.id)
+            .await
+            .expect("list")
+            .len(),
+        1
+    );
+
+    let mut bad = input.clone();
+    bad.salary = Decimal::ZERO;
+    assert!(matches!(
+        create_offer(&pool, tenant, user_id, alice.id, &bad).await,
+        Err(RecruitmentError::InvalidSalary)
+    ));
+    let mut bad = input.clone();
+    bad.position_title = "   ".into();
+    assert!(matches!(
+        create_offer(&pool, tenant, user_id, alice.id, &bad).await,
+        Err(RecruitmentError::InvalidOfferTitle)
+    ));
+    let mut bad = input.clone();
+    bad.notes = Some("n".repeat(2001));
+    assert!(matches!(
+        create_offer(&pool, tenant, user_id, alice.id, &bad).await,
+        Err(RecruitmentError::InvalidOfferNotes)
+    ));
+
+    let sent = set_offer_status(&pool, tenant, offer.id, "sent")
+        .await
+        .expect("send");
+    assert_eq!(sent.status, "sent");
+    let accepted = set_offer_status(&pool, tenant, offer.id, "accepted")
+        .await
+        .expect("accept");
+    assert_eq!(accepted.status, "accepted");
+    assert!(matches!(
+        set_offer_status(&pool, tenant, offer.id, "signed").await,
+        Err(RecruitmentError::InvalidOfferStatus)
+    ));
+
+    let letter = offer_letter(&pool, tenant, offer.id).await.expect("letter");
+    assert_eq!(letter.tenant_name, "Test Co");
+    assert_eq!(letter.candidate_name, "Alice ทดสอบ");
+    assert_eq!(letter.position_title, "Senior Developer");
+
+    let (other_tenant, _) = seed_tenant_entities(&raw, 1).await;
+    let other = TenantId(other_tenant);
+    assert!(matches!(
+        list_offers(&pool, other, alice.id).await,
+        Err(RecruitmentError::CandidateNotFound)
+    ));
+    assert!(matches!(
+        offer_letter(&pool, other, offer.id).await,
+        Err(RecruitmentError::OfferNotFound)
+    ));
+    assert!(matches!(
+        delete_offer(&pool, other, offer.id).await,
+        Err(RecruitmentError::OfferNotFound)
+    ));
+
+    delete_candidate(&pool, tenant, alice.id)
+        .await
+        .expect("delete candidate");
+    assert!(matches!(
+        list_offers(&pool, tenant, alice.id).await,
+        Err(RecruitmentError::CandidateNotFound)
+    ));
+
+    cleanup(&raw, tenant_id).await;
+    cleanup(&raw, other_tenant).await;
+}

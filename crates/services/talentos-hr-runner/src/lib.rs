@@ -8,6 +8,7 @@ pub mod attendance;
 pub mod calendar;
 pub mod claims;
 pub mod delegations;
+pub mod documents;
 pub mod escalation;
 pub mod forms;
 pub mod leave;

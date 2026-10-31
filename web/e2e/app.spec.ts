@@ -1123,3 +1123,36 @@ test("employee accepts the privacy notice and exports their personal data", asyn
   expect(data.notice_version).toBeTruthy();
   expect(Array.isArray(data.employees[0].payslips)).toBe(true);
 });
+
+test("HR adds an expiring document and downloads its file", async ({ page }) => {
+  await login(page);
+  await page.goto("/documents");
+
+  const employeeId = await page
+    .getByTestId("doc-employee")
+    .locator("option", { hasText: "E2E001" })
+    .getAttribute("value");
+  await page.getByTestId("doc-employee").selectOption(employeeId!);
+  await page.getByTestId("doc-type").selectOption("work_permit");
+  await page.getByTestId("doc-title").fill("ใบอนุญาตทำงาน E2E");
+  const expiry = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(
+    new Date(Date.now() + 20 * 86_400_000),
+  );
+  await page.getByTestId("doc-expiry").fill(expiry);
+  await page.getByTestId("doc-file").setInputFiles({
+    name: "permit.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 e2e permit"),
+  });
+  await page.getByTestId("save-document").click();
+  await expect(page.getByText("เพิ่มเอกสารแล้ว")).toBeVisible();
+
+  const row = page.getByTestId("document-row").filter({ hasText: "ใบอนุญาตทำงาน E2E" });
+  await expect(row).toBeVisible();
+  await expect(page.getByTestId("expiring-list")).toContainText("ใบอนุญาตทำงาน E2E");
+
+  const href = await row.getByTestId("doc-download").getAttribute("href");
+  const res = await page.request.get(href!);
+  expect(res.status()).toBe(200);
+  expect(await res.text()).toContain("%PDF-1.4 e2e permit");
+});

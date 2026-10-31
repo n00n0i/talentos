@@ -2,7 +2,7 @@
 
 อัปเดต: 2026-10-31  
 Repo: `/home/opc/content-creator/talentos`  
-Branch: `master` @ `ce88371`  
+Branch: `master` @ `3f9ddc2` (handoff snapshot; ฟีเจอร์/เทสต์ยืนยันที่ `ce88371`)  
 CI: GitHub Actions `CI` เขียว (quality / web / e2e / build-release) — Strix Pentest อาจยังรันแยกอยู่
 
 ---

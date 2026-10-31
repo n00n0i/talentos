@@ -312,6 +312,12 @@ employee). If any exist, approval is blocked until HR reviews them
 (`POST /payroll/runs/:id/anomalies/review`); a recalculation clears the review so
 the fresh anomalies must be checked again.
 
+## Metrics
+
+`GET /metrics` exposes Prometheus counters for HTTP status classes, request
+duration sum/count, and uptime; set `METRICS_TOKEN` to require a bearer token.
+Scrape and alert examples are in `docs/ops/metrics.md`.
+
 ## Employee documents
 
 `/documents` (HR writes; payroll read-only) stores contracts, work permits, visas, ID cards, and

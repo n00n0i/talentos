@@ -340,9 +340,11 @@ pub fn build(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health::health))
+        .route("/metrics", get(crate::metrics::endpoint))
         .merge(public)
         .merge(protected)
         .layer(cors)
+        .layer(axum::middleware::from_fn(crate::metrics::track))
         .layer(axum::middleware::from_fn(log_request))
         .layer(SetRequestIdLayer::new(
             header::HeaderName::from_static("x-request-id"),

@@ -1,6 +1,7 @@
 mod cli;
 mod dto;
 mod handlers;
+mod metrics;
 mod middleware;
 mod notify_worker;
 mod ratelimit;
@@ -225,6 +226,7 @@ async fn main() {
         });
     }
 
+    metrics::init();
     let app = router::build(state);
 
     let listener = tokio::net::TcpListener::bind(bind_addr)

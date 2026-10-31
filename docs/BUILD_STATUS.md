@@ -9,7 +9,7 @@ Last verified: 2026-10-31 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
 | Tests | `cargo test --workspace` | **451 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 62 files apply cleanly (including `20261209000001_review_ack.sql` for review acknowledgement) |
+| Migrations | `sqlx migrate run` on a fresh DB | 63 files apply cleanly (including `20261209000001_review_ack.sql` for review acknowledgement) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 25, rag 7,

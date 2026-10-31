@@ -80,6 +80,7 @@ test("HR admin can open every admin module", async ({ page }) => {
     "/recruitment",
     "/training",
     "/performance",
+    "/goals",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
@@ -88,7 +89,7 @@ test("HR admin can open every admin module", async ({ page }) => {
 
 test("payroll manager is limited to payroll, reports, people", async ({ page }) => {
   await login(page, PAYROLL);
-  for (const path of ["/payroll", "/reports", "/employees", "/privacy", "/documents", "/onboarding", "/recruitment", "/training", "/performance"]) {
+  for (const path of ["/payroll", "/reports", "/employees", "/privacy", "/documents", "/onboarding", "/recruitment", "/training", "/performance", "/goals"]) {
     await page.goto(path);
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
   }
@@ -101,6 +102,9 @@ test("payroll manager is limited to payroll, reports, people", async ({ page }) 
   await page.goto("/performance");
   await expect(page.getByTestId("create-cycle")).toHaveCount(0);
   await expect(page.getByTestId("submit-review")).toHaveCount(0);
+  await page.goto("/goals");
+  await expect(page.getByTestId("add-goal")).toHaveCount(0);
+  await expect(page.getByTestId("save-goal")).toHaveCount(0);
   for (const path of ["/settings", "/users", "/forms", "/audit", "/loans", "/final-settlement"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
@@ -128,6 +132,7 @@ test("manager is limited to team and self-service areas", async ({ page }) => {
     "/recruitment",
     "/training",
     "/performance",
+    "/goals",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
@@ -157,6 +162,7 @@ test("employee is limited to self-service areas", async ({ page }) => {
     "/recruitment",
     "/training",
     "/performance",
+    "/goals",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);

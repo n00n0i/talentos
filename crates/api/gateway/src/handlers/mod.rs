@@ -8,6 +8,7 @@ pub mod delegations;
 pub mod documents;
 pub mod employees;
 pub mod forms;
+pub mod goals;
 pub mod graphql;
 pub mod health;
 pub mod leave;

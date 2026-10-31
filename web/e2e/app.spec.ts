@@ -1256,3 +1256,27 @@ test("HR runs a performance cycle and submits a review", async ({ page }) => {
     page.getByTestId("review-row").filter({ hasText: "E2E001" }),
   ).toContainText("ส่งแล้ว");
 });
+
+test("HR adds a goal and updates its progress", async ({ page }) => {
+  await login(page);
+  await page.goto("/goals");
+
+  const employeeId = await page
+    .getByTestId("goal-employee")
+    .locator("option", { hasText: "E2E001" })
+    .getAttribute("value");
+  await page.getByTestId("goal-employee").selectOption(employeeId!);
+  await page.getByTestId("goal-title").fill("เพิ่มยอดขาย E2E");
+  await page.getByTestId("goal-target").fill("20%");
+  await page.getByTestId("add-goal").click();
+  await expect(page.getByText("เพิ่มเป้าหมายแล้ว")).toBeVisible();
+
+  const row = page.getByTestId("goal-row").filter({ hasText: "เพิ่มยอดขาย E2E" });
+  await expect(row).toBeVisible();
+  await row.getByTestId("goal-progress").fill("40");
+  await row.getByTestId("save-goal").click();
+  await expect(page.getByText("บันทึกความคืบหน้าแล้ว")).toBeVisible();
+  await expect(
+    page.getByTestId("goal-row").filter({ hasText: "เพิ่มยอดขาย E2E" }).getByTestId("goal-progress"),
+  ).toHaveValue("40");
+});

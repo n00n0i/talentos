@@ -321,6 +321,13 @@ cycle cascades its reviews. Employees can read their own reviews via
 `/api/v1/me/reviews` (self UI not built yet). No goals/OKRs, calibration,
 manager workflow, notifications, or acknowledgement.
 
+## Goals / OKRs
+
+`/goals` (HR writes; payroll read-only) sets per-employee goals, optionally tied
+to a review cycle, with a target, 0–100 progress, and active/achieved/cancelled
+status. Employees can read their own goals via `/api/v1/me/goals` (self UI not
+built yet). No key results, weights, alignment, check-ins, or reminders.
+
 ## Training
 
 `/training` (HR writes; payroll read-only) records completed courses per
@@ -795,7 +802,8 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 - [x] Employee documents with expiry alerts (contracts, work permits, visas) and one downloadable file per document.
 - [x] Training records with certificate-expiry alerts.
 - [x] Performance review cycles with ratings and written feedback.
-- [ ] Goals/OKR tracking, calibration, manager workflow.
+- [x] Per-employee goals/OKRs with progress and status.
+- [ ] Calibration, manager workflow, goal check-ins.
 - [x] Mobile PWA shell and offline punch queue; native app if required.
 
 ### Dev environment notes

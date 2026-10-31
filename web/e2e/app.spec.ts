@@ -1324,3 +1324,22 @@ test("HR adds a goal and updates its progress", async ({ page }) => {
     page.getByTestId("goal-row").filter({ hasText: "เพิ่มยอดขาย E2E" }).getByTestId("goal-progress"),
   ).toHaveValue("40");
 });
+
+test("employee acknowledges their performance review", async ({ page }) => {
+  await login(page);
+  await page.getByLabel("ออกจากระบบ").click();
+  await page.getByLabel("องค์กร").fill("e2e");
+  await page.getByLabel("อีเมล").fill(invitedEmail);
+  await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
+  await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
+  await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
+
+  await page.goto("/me/reviews");
+  const review = page.getByTestId("my-review").filter({ hasText: "รอบประเมิน E2E" });
+  await expect(review).toContainText("4/5");
+  await review.getByTestId("acknowledge-review").click();
+  await expect(page.getByText("รับทราบผลประเมินแล้ว")).toBeVisible();
+  await expect(
+    page.getByTestId("my-review").filter({ hasText: "รอบประเมิน E2E" }),
+  ).toContainText("รับทราบแล้ว");
+});

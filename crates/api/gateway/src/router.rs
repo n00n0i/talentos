@@ -116,6 +116,10 @@ pub fn build(state: AppState) -> Router {
         )
         .route("/api/v1/me/reviews", get(performance::me_reviews))
         .route(
+            "/api/v1/me/reviews/:id/acknowledge",
+            post(performance::me_acknowledge),
+        )
+        .route(
             "/api/v1/employees/:id/goals",
             get(goals::list).post(goals::create),
         )

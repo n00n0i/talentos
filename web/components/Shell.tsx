@@ -15,6 +15,7 @@ const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/training", label: "อบรม", icon: "file" },
   { href: "/performance", label: "ประเมินผล", icon: "file" },
   { href: "/goals", label: "เป้าหมาย", icon: "file" },
+  { href: "/me/reviews", label: "ผลประเมินของฉัน", icon: "file" },
   { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
   { href: "/calendar", label: "ปฏิทินทีม", icon: "clock" },
   { href: "/clock", label: "ลงเวลา", icon: "clock" },
@@ -127,7 +128,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         { href: "/reports", label: "รายงาน", icon: "file" as IconName },
       ]
     : NAV;
-  const employeeNav = ["/clock", "/leave", "/ot", "/claims", "/me/payslips", "/privacy"];
+  const employeeNav = [
+    "/clock",
+    "/leave",
+    "/ot",
+    "/claims",
+    "/me/payslips",
+    "/privacy",
+    "/me/reviews",
+  ];
   const items = !me
     ? baseNav
     : canHr

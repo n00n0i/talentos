@@ -317,9 +317,9 @@ the fresh anomalies must be checked again.
 `/performance` (HR writes; payroll read-only) creates review cycles, populates
 one pending review per active employee when started, and records a 1–5 rating
 plus strengths/improvements. Cycles close to block further edits; deleting a
-cycle cascades its reviews. Employees can read their own reviews via
-`/api/v1/me/reviews` (self UI not built yet). No goals/OKRs, calibration,
-manager workflow, notifications, or acknowledgement.
+cycle cascades its reviews. Employees see their own reviews at `/me/reviews`
+and acknowledge submitted reviews (status becomes `acknowledged`). No
+calibration, manager workflow, notifications, or dispute flows.
 
 ## Goals / OKRs
 
@@ -812,6 +812,7 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 - [x] Training records with certificate-expiry alerts.
 - [x] Performance review cycles with ratings and written feedback.
 - [x] Per-employee goals/OKRs with progress and status.
+- [x] Employee self-service review page with acknowledgement.
 - [ ] Calibration, manager workflow, goal check-ins.
 - [x] Mobile PWA shell and offline punch queue; native app if required.
 

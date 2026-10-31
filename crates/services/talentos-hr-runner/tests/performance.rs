@@ -5,8 +5,8 @@ use chrono::NaiveDate;
 use sqlx::PgPool;
 use talentos_db::TenantPool;
 use talentos_hr_runner::performance::{
-    close_cycle, create_cycle, delete_cycle, list_cycles, list_my_reviews, list_reviews,
-    start_cycle, submit_review, CycleInput, PerformanceError,
+    acknowledge_review, close_cycle, create_cycle, delete_cycle, list_cycles, list_my_reviews,
+    list_reviews, start_cycle, submit_review, CycleInput, PerformanceError,
 };
 use talentos_kernel::TenantId;
 
@@ -134,6 +134,30 @@ async fn cycle_populates_active_employees_and_submits_reviews() {
         .expect("A self reviews");
     assert_eq!(mine.len(), 1);
     assert_eq!(mine[0].rating, Some(4));
+    assert_eq!(mine[0].status, "submitted");
+    let acked = acknowledge_review(&pool, tenant, user_a, review_a.id)
+        .await
+        .expect("acknowledge");
+    assert_eq!(acked.status, "acknowledged");
+    assert!(acked.acknowledged_at.is_some());
+    let again = acknowledge_review(&pool, tenant, user_a, review_a.id)
+        .await
+        .expect("repeat acknowledge");
+    assert_eq!(again.acknowledged_at, acked.acknowledged_at);
+    assert!(matches!(
+        acknowledge_review(&pool, tenant, user_b, review_a.id).await,
+        Err(PerformanceError::ReviewNotFound)
+    ));
+    let pending_b = list_reviews(&pool, tenant, created.id)
+        .await
+        .expect("reviews")
+        .into_iter()
+        .find(|r| r.employee_id == employee_b)
+        .expect("B review");
+    assert!(matches!(
+        acknowledge_review(&pool, tenant, user_b, pending_b.id).await,
+        Err(PerformanceError::ReviewNotSubmitted)
+    ));
     let b_reviews = list_my_reviews(&pool, tenant, user_b)
         .await
         .expect("B self reviews");
@@ -227,6 +251,10 @@ async fn validation_and_tenant_isolation() {
     ));
     assert!(matches!(
         submit_review(&pool, other, admin, review.id, 4, None, None).await,
+        Err(PerformanceError::ReviewNotFound)
+    ));
+    assert!(matches!(
+        acknowledge_review(&pool, other, admin, review.id).await,
         Err(PerformanceError::ReviewNotFound)
     ));
     assert!(matches!(

@@ -27,6 +27,8 @@ pub enum PerformanceError {
     CycleNotDraft,
     #[error("cycle must be active")]
     CycleNotActive,
+    #[error("review has not been submitted yet")]
+    ReviewNotSubmitted,
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -65,6 +67,7 @@ pub struct ReviewView {
     pub strengths: Option<String>,
     pub improvements: Option<String>,
     pub submitted_at: Option<DateTime<Utc>>,
+    pub acknowledged_at: Option<DateTime<Utc>>,
 }
 
 fn map_cycle(row: &sqlx::postgres::PgRow) -> Result<CycleView, sqlx::Error> {
@@ -99,12 +102,13 @@ fn map_review(row: &sqlx::postgres::PgRow) -> Result<ReviewView, sqlx::Error> {
         strengths: row.try_get("strengths")?,
         improvements: row.try_get("improvements")?,
         submitted_at: row.try_get("submitted_at")?,
+        acknowledged_at: row.try_get("acknowledged_at")?,
     })
 }
 
 const REVIEW_SELECT: &str = r#"SELECT r.id, r.cycle_id, c.name AS cycle_name, c.period_start,
               c.period_end, r.employee_id, e.employee_code, e.first_name_th, e.last_name_th,
-              r.status, r.rating, r.strengths, r.improvements, r.submitted_at
+              r.status, r.rating, r.strengths, r.improvements, r.submitted_at, r.acknowledged_at
          FROM performance_reviews r
          JOIN performance_cycles c ON c.id = r.cycle_id AND c.tenant_id = r.tenant_id
          JOIN employees e ON e.id = r.employee_id AND e.tenant_id = r.tenant_id
@@ -341,7 +345,8 @@ pub async fn submit_review(
     sqlx::query(
         r#"UPDATE performance_reviews
               SET status = 'submitted', rating = $3, strengths = $4, improvements = $5,
-                  reviewer_user_id = $6, submitted_at = now(), updated_at = now()
+                  reviewer_user_id = $6, submitted_at = now(),
+                  acknowledged_at = NULL, updated_at = now()
             WHERE tenant_id = $1 AND id = $2"#,
     )
     .bind(tenant_id.0)
@@ -383,4 +388,50 @@ pub async fn list_my_reviews(
     rows.iter()
         .map(|row| map_review(row).map_err(PerformanceError::from))
         .collect()
+}
+
+pub async fn acknowledge_review(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    review_id: Uuid,
+) -> Result<ReviewView, PerformanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let status: Option<String> = sqlx::query_scalar(
+        r#"SELECT r.status FROM performance_reviews r
+             JOIN employees e ON e.id = r.employee_id AND e.tenant_id = r.tenant_id
+            WHERE r.tenant_id = $1 AND r.id = $2 AND e.user_id = $3
+            FOR UPDATE"#,
+    )
+    .bind(tenant_id.0)
+    .bind(review_id)
+    .bind(user_id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    match status.as_deref() {
+        None => return Err(PerformanceError::ReviewNotFound),
+        Some("submitted") | Some("acknowledged") => {}
+        Some(_) => return Err(PerformanceError::ReviewNotSubmitted),
+    }
+
+    sqlx::query(
+        "UPDATE performance_reviews
+            SET status = 'acknowledged',
+                acknowledged_at = COALESCE(acknowledged_at, now()),
+                updated_at = now()
+          WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id.0)
+    .bind(review_id)
+    .execute(&mut *tx)
+    .await?;
+    let sql = format!("{REVIEW_SELECT} AND r.id = $2");
+    let row = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(review_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    let view = map_review(&row)?;
+    tx.commit().await?;
+    Ok(view)
 }

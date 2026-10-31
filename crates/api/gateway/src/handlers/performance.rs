@@ -147,6 +147,18 @@ pub async fn submit_review(
     }
 }
 
+/// POST /api/v1/me/reviews/:id/acknowledge
+pub async fn me_acknowledge(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+) -> Response {
+    match performance::acknowledge_review(&state.pool, ctx.tenant_id, ctx.user_id.0, id).await {
+        Ok(review) => Json(json!({ "review": review })).into_response(),
+        Err(e) => map_error(e),
+    }
+}
+
 /// GET /api/v1/me/reviews
 pub async fn me_reviews(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
     match performance::list_my_reviews(&state.pool, ctx.tenant_id, ctx.user_id.0).await {
@@ -163,7 +175,7 @@ fn map_error(e: PerformanceError) -> Response {
             Json(envelope("not_found", &e.to_string())),
         )
             .into_response(),
-        CycleNotDraft | CycleNotActive => (
+        CycleNotDraft | CycleNotActive | ReviewNotSubmitted => (
             StatusCode::CONFLICT,
             Json(envelope("conflict", &e.to_string())),
         )

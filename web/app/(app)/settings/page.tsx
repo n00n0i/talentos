@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { gw, handleApiError, Me } from "@/lib/api";
+import { useI18N } from "@/lib/i18n";
 
 type Num = string | number;
 type PayrollSettings = {
@@ -87,6 +88,7 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
+  const { t } = useI18N();
   const [system, setSystem] = useState<System | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -178,7 +180,7 @@ export default function SettingsPage() {
       setRuleMinDays("");
       setRuleChain("hr_admin");
       await loadRules();
-      setNotice("บันทึกเงื่อนไขการอนุมัติแล้ว");
+      setNotice(t("settings.ruleSavedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -192,7 +194,7 @@ export default function SettingsPage() {
     try {
       await gw(`api/v1/leave/approval-rules/${id}`, { method: "DELETE" });
       await loadRules();
-      setNotice("ลบเงื่อนไขแล้ว");
+      setNotice(t("settings.ruleDeletedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     }
@@ -223,7 +225,7 @@ export default function SettingsPage() {
           gl_claim_account: policy.gl_claim_account,
         }),
       });
-      setNotice("บันทึกสูตรเงินเดือนแล้ว — มีผลกับรอบถัดไป");
+      setNotice(t("settings.savedPolicyNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -241,7 +243,7 @@ export default function SettingsPage() {
         method: "PUT",
         body: JSON.stringify({ name: tenant.name }),
       });
-      setNotice("บันทึกชื่อองค์กรแล้ว");
+      setNotice(t("settings.savedTenantNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -264,7 +266,7 @@ export default function SettingsPage() {
             : e
         )
       );
-      setNotice("บันทึกข้อมูลนิติบุคคลแล้ว");
+      setNotice(t("settings.savedEntityNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -306,7 +308,7 @@ export default function SettingsPage() {
       if (!enabling) {
         setRecoveryCodes(null);
       }
-      setNotice(enabling ? "เปิดใช้ 2FA แล้ว" : "ปิด 2FA แล้ว");
+      setNotice(enabling ? t("settings.twoFaEnabledNotice") : t("settings.twoFaDisabledNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -330,7 +332,7 @@ export default function SettingsPage() {
       });
       setRecoveryCodes(res.codes);
       setRecoveryTotp("");
-      setNotice("สร้างรหัสสำรองใหม่แล้ว");
+      setNotice(t("settings.recoveryCodesRegeneratedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -363,7 +365,7 @@ export default function SettingsPage() {
     try {
       await gw(`api/v1/notifications/${id}/retry`, { method: "POST" });
       await loadNotifications();
-      setNotice("ส่งซ้ำการแจ้งเตือนแล้ว");
+      setNotice(t("settings.notificationRetriedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     }
@@ -373,8 +375,8 @@ export default function SettingsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ตั้งค่า</h1>
-          <p className="page-sub">บริหารจัดการองค์กร สูตรเงินเดือน และสถานะระบบ</p>
+          <h1>{t("settings.title")}</h1>
+          <p className="page-sub">{t("settings.subtitle")}</p>
         </div>
       </div>
 
@@ -396,7 +398,7 @@ export default function SettingsPage() {
       <div className="grid-2">
         <form className="card card-pad" onSubmit={savePolicy} style={{ display: "grid", gap: 14 }}>
           <div>
-            <h2>สูตรเงินเดือนและ OT</h2>
+            <h2>{t("settings.payrollFormulas")}</h2>
             <p className="hint" style={{ marginTop: 4 }}>
               ค่าเหล่านี้เป็นนโยบายบริษัท — อัตราตามกฎหมาย (SSO/ภาษี) แก้ที่นี่ไม่ได้
             </p>
@@ -558,14 +560,14 @@ export default function SettingsPage() {
           </div>
           <div>
             <button className="btn btn-primary" data-testid="save-policy" type="submit" disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "บันทึกสูตร"}
+              {busy ? t("common.loading") : t("common.save")}
             </button>
           </div>
         </form>
 
         <div className="card">
           <div className="card-head">
-            <h2>สถานะระบบ</h2>
+            <h2>{t("settings.systemStatus")}</h2>
             <span className="hint">ตรวจสอบตอนเปิดหน้า</span>
           </div>
           <table className="table">
@@ -618,7 +620,7 @@ export default function SettingsPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>เงื่อนไขการอนุมัติ</h2>
+          <h2>{t("settings.approvalRules")}</h2>
           <span className="hint" data-testid="rules-count">{rules.length} เงื่อนไข</span>
         </div>
         <form className="form-row" onSubmit={addRule} style={{ padding: 16, gap: 10, alignItems: "end" }}>
@@ -655,7 +657,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <button className="btn btn-primary" data-testid="add-rule" type="submit" disabled={busy}>
-              เพิ่มเงื่อนไข
+              {t("settings.addRule")}
             </button>
           </div>
         </form>
@@ -683,7 +685,7 @@ export default function SettingsPage() {
                   </td>
                   <td className="num">
                     <button className="btn btn-sm btn-danger" onClick={() => deleteRule(rule.id)}>
-                      ลบ
+                      {t("common.delete")}
                     </button>
                   </td>
                 </tr>
@@ -695,7 +697,7 @@ export default function SettingsPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>การแจ้งเตือน</h2>
+          <h2>{t("settings.notifications")}</h2>
           <span className="hint" data-testid="notify-summary">
             {notifySummary ? (
               <>
@@ -757,7 +759,7 @@ export default function SettingsPage() {
       </div>
 
       <form className="card card-pad" onSubmit={toggle2fa} style={{ display: "grid", gap: 12 }}>
-        <h2>ความปลอดภัย (2FA)</h2>
+        <h2>{t("settings.security2fa")}</h2>
         <p data-testid="totp-status">
           <span className={`badge ${totpEnabled ? "success" : ""}`}>
             {totpEnabled ? "เปิดใช้งานอยู่" : "ปิดอยู่"}
@@ -868,7 +870,7 @@ export default function SettingsPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>อุปกรณ์และเซสชัน</h2>
+          <h2>{t("sessions.devices")}</h2>
           <span className="hint">{sessions.length} เซสชันใช้งานอยู่</span>
         </div>
         <table className="table">
@@ -909,7 +911,7 @@ export default function SettingsPage() {
       </div>
 
       <form className="card card-pad" onSubmit={saveTenant} style={{ display: "grid", gap: 12 }}>
-        <h2>องค์กร</h2>
+        <h2>{t("settings.organization")}</h2>
         <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
           <div className="field">
             <label>ชื่อองค์กร</label>
@@ -930,7 +932,7 @@ export default function SettingsPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>นิติบุคคล</h2>
+          <h2>{t("settings.entities")}</h2>
           <span className="hint">{entities.length} แห่ง</span>
         </div>
         <table className="table">
@@ -956,11 +958,12 @@ export default function SettingsPage() {
 }
 
 function StatusRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
+  const { t } = useI18N();
   return (
     <tr>
       <td>{label}</td>
       <td>
-        <span className={`badge ${ok ? "success" : "danger"}`}>{ok ? "พร้อม" : "ต้องแก้ไข"}</span>
+        <span className={`badge ${ok ? "success" : "danger"}`} data-testid="status-row-badge">{ok ? t("common.ready") : t("common.fix")}</span>
       </td>
       <td className="hint">{detail}</td>
     </tr>
@@ -976,6 +979,7 @@ function EntityRow({
   busy: boolean;
   onSave: (entity: Entity, name: string, taxId: string, ssoAccount: string, branch: string) => void;
 }) {
+  const { t } = useI18N();
   const [name, setName] = useState(entity.name);
   const [taxId, setTaxId] = useState(entity.tax_id ?? "");
   const [ssoAccount, setSsoAccount] = useState(entity.sso_account ?? "");
@@ -1026,7 +1030,7 @@ function EntityRow({
       </td>
       <td className="num">
         <button className="btn btn-sm" disabled={busy} onClick={() => onSave(entity, name, taxId, ssoAccount, branch)}>
-          บันทึก
+          {t("common.save")}
         </button>
       </td>
     </tr>

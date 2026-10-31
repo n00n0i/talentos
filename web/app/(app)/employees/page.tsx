@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, thb } from "@/lib/api";
+import { useI18N } from "@/lib/i18n";
 
 type Employee = {
   id: string;
@@ -200,6 +201,7 @@ function csvToImportRows(text: string): ImportRow[] {
 }
 
 export default function EmployeesPage() {
+  const { t } = useI18N();
   const [rows, setRows] = useState<Employee[] | null>(null);
   const [query, setQuery] = useState("");
   const [showTerminated, setShowTerminated] = useState(false);
@@ -298,7 +300,7 @@ export default function EmployeesPage() {
       };
       if (editing === "new") {
         await gw("api/v1/employees", { method: "POST", body: JSON.stringify(body) });
-        setNotice("เพิ่มพนักงานแล้ว");
+        setNotice(t("employees.addNotice"));
       } else if (editing) {
         await gw(`api/v1/employees/${editing.id}`, {
           method: "PUT",
@@ -319,7 +321,7 @@ export default function EmployeesPage() {
           method: "PUT",
           body: JSON.stringify({ manager_id: form.manager_id || null }),
         });
-        setNotice("บันทึกการแก้ไขแล้ว");
+        setNotice(t("employees.savedNotice"));
       }
       setEditing(null);
       await load(showTerminated);
@@ -366,7 +368,7 @@ export default function EmployeesPage() {
         setImportResult(r);
         setError("ไม่มีการนำเข้าพนักงาน เนื่องจากข้อมูลบางแถวไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วลองใหม่");
       } else {
-        setNotice(`นำเข้าพนักงาน ${r.created} รายการแล้ว`);
+        setNotice(t("employees.importedNotice", { n: r.created }));
         setImportRows([]);
         setImportResult(null);
         setImportKey((k) => k + 1);
@@ -380,12 +382,12 @@ export default function EmployeesPage() {
   }
 
   async function terminate(employee: Employee) {
-    if (!confirm(`ยืนยันการปิดสถานะพนักงาน ${employee.employee_code}? ประวัติเงินเดือนจะยังอยู่`)) return;
+    if (!confirm(t("employees.confirmTerminate", { code: employee.employee_code }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/employees/${employee.id}`, { method: "DELETE" });
-      setNotice("ปิดสถานะพนักงานแล้ว");
+      setNotice(t("employees.closedNotice"));
       await load(showTerminated);
     } catch (e) {
       handleApiError(e, setError);
@@ -413,8 +415,8 @@ export default function EmployeesPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>พนักงาน</h1>
-          <p className="page-sub">ข้อมูลพนักงานในองค์กรของคุณ</p>
+          <h1>{t("employees.title")}</h1>
+          <p className="page-sub">{t("employees.subtitle")}</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <label className="check">
@@ -423,16 +425,16 @@ export default function EmployeesPage() {
               checked={showTerminated}
               onChange={(e) => setShowTerminated(e.target.checked)}
             />
-            รวมที่พ้นสภาพ
+            {t("employees.includeTerminated")}
           </label>
           <input
             style={{ height: 34, width: 220, border: "1px solid var(--border)", borderRadius: 6, padding: "0 10px" }}
-            placeholder="ค้นหารหัส ชื่อ หรือตำแหน่ง"
+            placeholder={t("employees.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <button className="btn btn-primary" data-testid="add-employee" onClick={() => setEditing("new")}>
-            เพิ่มพนักงาน
+            {t("employees.add")}
           </button>
         </div>
       </div>
@@ -442,32 +444,32 @@ export default function EmployeesPage() {
 
       {editing && (
         <form className="card card-pad" onSubmit={submit} style={{ display: "grid", gap: 14 }}>
-          <h2>{editing === "new" ? "เพิ่มพนักงาน" : `แก้ไข ${editing.employee_code}`}</h2>
+          <h2>{editing === "new" ? t("employees.newTitle") : t("employees.editTitle", { code: editing.employee_code })}</h2>
           <div className="form-row">
             <div className="field">
-              <label>รหัสพนักงาน</label>
+              <label>{t("employees.employeeCode")}</label>
               <input data-testid="employee-code" value={form.employee_code} onChange={(e) => set("employee_code", e.target.value)} required />
             </div>
             <div className="field">
-              <label>ชื่อ (ไทย)</label>
+              <label>{t("employees.firstNameTh")}</label>
               <input data-testid="employee-first-name" value={form.first_name_th} onChange={(e) => set("first_name_th", e.target.value)} required />
             </div>
             <div className="field">
-              <label>นามสกุล (ไทย)</label>
+              <label>{t("employees.lastNameTh")}</label>
               <input data-testid="employee-last-name" value={form.last_name_th} onChange={(e) => set("last_name_th", e.target.value)} required />
             </div>
           </div>
           <div className="form-row">
             <div className="field">
-              <label>ตำแหน่ง</label>
+              <label>{t("employees.position")}</label>
               <input data-testid="employee-position" value={form.position_title} onChange={(e) => set("position_title", e.target.value)} required />
             </div>
             <div className="field">
-              <label>แผนก</label>
+              <label>{t("employees.department")}</label>
               <input value={form.department} onChange={(e) => set("department", e.target.value)} />
             </div>
             <div className="field">
-              <label>ศูนย์ต้นทุน (Cost Center)</label>
+              <label>{t("employees.costCenter")}</label>
               <input
                 data-testid="employee-cost-center"
                 value={form.cost_center}
@@ -475,7 +477,7 @@ export default function EmployeesPage() {
               />
             </div>
             <div className="field">
-              <label>เงินเดือน (บาท)</label>
+              <label>{t("employees.salaryBaht")}</label>
               <input
                 type="number"
                 min="0"
@@ -489,15 +491,15 @@ export default function EmployeesPage() {
           </div>
           <div className="form-row">
             <div className="field">
-              <label>วันเริ่มงาน</label>
+              <label>{t("employees.hireDate")}</label>
               <input data-testid="employee-hire-date" type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} required />
             </div>
             <div className="field">
-              <label>ธนาคาร</label>
+              <label>{t("employees.bank")}</label>
               <input value={form.bank_name} onChange={(e) => set("bank_name", e.target.value)} />
             </div>
             <div className="field">
-              <label>เลขบัญชี</label>
+              <label>{t("employees.accountNumber")}</label>
               <input
                 value={form.bank_account_number}
                 placeholder={editing !== "new" && editing ? (editing.bank_account_number_masked ?? "") : ""}
@@ -512,7 +514,7 @@ export default function EmployeesPage() {
           </div>
           <div className="form-row">
             <div className="field">
-              <label>เลขบัตรประชาชน</label>
+              <label>{t("employees.nationalId")}</label>
               <input
                 value={form.national_id}
                 placeholder={editing !== "new" && editing ? (editing.national_id_masked ?? "") : ""}
@@ -521,7 +523,7 @@ export default function EmployeesPage() {
               <span className="hint">เข้ารหัสก่อนบันทึก · แก้แล้วแสดงเฉพาะ 4 ตัวท้าย</span>
             </div>
             <div className="field">
-              <label>เลขประกันสังคม</label>
+              <label>{t("employees.ssoNumber")}</label>
               <input
                 value={form.sso_number}
                 placeholder={editing !== "new" && editing ? (editing.sso_number_masked ?? "") : ""}
@@ -530,7 +532,7 @@ export default function EmployeesPage() {
               <span className="hint">เว้นว่างเพื่อคงเดิม</span>
             </div>
             <div className="field">
-              <label>ผูกบัญชีผู้ใช้</label>
+              <label>{t("employees.linkUser")}</label>
               <select
                 data-testid="employee-user"
                 value={form.user_id}
@@ -547,7 +549,7 @@ export default function EmployeesPage() {
               <span className="hint">ให้พนักงานดูสลิปของตัวเองได้</span>
             </div>
             <div className="field">
-              <label>ผู้ดูแล (Manager)</label>
+              <label>{t("employees.reportingManager")}</label>
               <select
                 data-testid="employee-manager"
                 value={form.manager_id}
@@ -572,7 +574,7 @@ export default function EmployeesPage() {
                 checked={form.sso_enrolled}
                 onChange={(e) => set("sso_enrolled", e.target.checked)}
               />
-              อยู่ในระบบประกันสังคม (มาตรา 33)
+              {t("employees.ssoEnrolled")}
             </label>
             <label className="check">
               <input
@@ -580,12 +582,12 @@ export default function EmployeesPage() {
                 checked={form.pf_member}
                 onChange={(e) => set("pf_member", e.target.checked)}
               />
-              เป็นสมาชิกกองทุนสำรองเลี้ยงชีพ
+              {t("employees.pfMember")}
             </label>
           </div>
           <div className="form-row">
             <div className="field">
-              <label>อัตรา PF (%)</label>
+              <label>{t("employees.pfRate")}</label>
               <input
                 data-testid="employee-pf-rate"
                 type="number"
@@ -599,7 +601,7 @@ export default function EmployeesPage() {
               <span className="hint">ใช้เมื่อเป็นสมาชิกกองทุนฯ (เว้นว่าง = 5%)</span>
             </div>
             <div className="field">
-              <label>มีผลตั้งแต่</label>
+              <label>{t("employees.effectiveFrom")}</label>
               <input
                 data-testid="employee-pf-rate-from"
                 type="date"
@@ -611,22 +613,22 @@ export default function EmployeesPage() {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-primary" data-testid="save-employee" type="submit" disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "บันทึก"}
+              {busy ? t("common.loading") : t("common.save")}
             </button>
             <button className="btn" type="button" onClick={() => setEditing(null)}>
-              ยกเลิก
+              {t("common.cancel")}
             </button>
           </div>
         </form>
       )}
 
       <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
-        <h2>นำเข้าพนักงานจากไฟล์ CSV</h2>
+        <h2>{t("employees.importTitle")}</h2>
         <p className="hint">
           คอลัมน์ที่จำเป็น: {IMPORT_REQUIRED.join(", ")} · ไม่บังคับ: {IMPORT_OPTIONAL.join(", ")} (ไฟล์ไม่เกิน 2 MB
           และ {IMPORT_MAX_ROWS} แถว)
         </p>
-        <label htmlFor="import-csv">เลือกไฟล์ CSV พนักงาน</label>
+        <label htmlFor="import-csv">{t("employees.selectFile")}</label>
         <input
           key={importKey}
           id="import-csv"
@@ -640,7 +642,7 @@ export default function EmployeesPage() {
           <>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <button className="btn" data-testid="dry-run-import" onClick={() => runImport(true)} disabled={busy}>
-                ตรวจสอบไฟล์
+                {t("employees.dryRun")}
               </button>
               <button
                 className="btn btn-primary"
@@ -648,7 +650,7 @@ export default function EmployeesPage() {
                 onClick={() => runImport(false)}
                 disabled={busy || !importResult || importResult.valid === 0 || importResult.invalid > 0}
               >
-                ยืนยันนำเข้า
+                {t("employees.confirmImport")}
               </button>
               {importResult && (
                 <span data-testid="import-summary">
@@ -659,7 +661,7 @@ export default function EmployeesPage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>แถว</th>
+                    <th>{t("employees.hireDate")}</th>
                   <th>รหัส</th>
                   <th>ชื่อ</th>
                   <th>ตำแหน่ง</th>
@@ -700,20 +702,20 @@ export default function EmployeesPage() {
 
       <div className="card">
         {rows === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{t("common.loading")}</div>
         ) : filtered.length === 0 ? (
-          <div className="empty">ไม่พบพนักงาน</div>
+          <div className="empty">{t("employees.empty")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>รหัส</th>
-                <th>ชื่อ</th>
-                <th>ตำแหน่ง</th>
-                <th>แผนก</th>
-                <th>ผู้ดูแล</th>
-                <th className="num">เงินเดือน</th>
-                <th>สถานะ</th>
+                <th>{t("employees.code")}</th>
+                <th>{t("employees.name")}</th>
+                <th>{t("employees.position")}</th>
+                <th>{t("employees.department")}</th>
+                <th>{t("employees.manager")}</th>
+                <th className="num">{t("employees.salary")}</th>
+                <th>{t("employees.status")}</th>
                 <th />
               </tr>
             </thead>
@@ -730,16 +732,16 @@ export default function EmployeesPage() {
                   <td className="num">฿{thb(e.base_salary)}</td>
                   <td>
                     <span className={`badge ${e.status === "active" ? "success" : e.status === "terminated" ? "danger" : ""}`}>
-                      {e.status === "active" ? "ทำงานอยู่" : e.status === "terminated" ? "พ้นสภาพ" : e.status}
+                      {e.status === "active" ? t("employees.active") : e.status === "terminated" ? t("employees.terminated") : e.status}
                     </span>
                   </td>
                   <td className="num" style={{ whiteSpace: "nowrap" }}>
                     <button className="btn btn-sm" onClick={() => setEditing(e)}>
-                      แก้ไข
+                      {t("common.edit")}
                     </button>{" "}
                     {e.status !== "terminated" && (
                       <button className="btn btn-sm btn-danger" onClick={() => terminate(e)} disabled={busy}>
-                        ปิดสถานะ
+                        {t("employees.closeStatus")}
                       </button>
                     )}
                   </td>

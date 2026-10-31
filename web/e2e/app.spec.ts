@@ -54,6 +54,24 @@ test("first-run setup creates the tenant and admin", async ({ page }) => {
   await login(page);
 });
 
+test("switches to English via the lang-toggle and sees EN nav labels", async ({ page, context }) => {
+  await login(page);
+  // Switch to EN
+  await page.getByTestId("lang-toggle").click();
+  await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Payroll" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+  // The toggle now shows "TH" (to switch back)
+  await expect(page.getByTestId("lang-toggle")).toHaveText("TH");
+  // Cookie is set to en
+  const cookies = await context.cookies();
+  const langCookie = cookies.find((c) => c.name === "talentos_lang");
+  expect(langCookie?.value).toBe("en");
+  // Reload and confirm it persists
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
+});
+
 test("settings persist across reload", async ({ page }) => {
   await login(page);
   await page.goto("/settings");

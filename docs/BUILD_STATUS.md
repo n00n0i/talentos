@@ -8,8 +8,8 @@ Last verified: 2026-10-31 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **442 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 54 files apply cleanly (including `20261201000001_recruitment.sql` for job openings/candidates) |
+| Tests | `cargo test --workspace` | **444 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 55 files apply cleanly (including `20261202000001_training_records.sql` for training records) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 25, rag 7,
@@ -33,8 +33,8 @@ purge, stats), 2FA recovery/session units 5 (format/hash/normalize), approval ru
 (own create/list/cancel, duplicates, decisions, inbox, approved history, reason/minute bounds), wasm-host 6 (real guest module: sandbox, capability refusal,
 tenant scoping), privacy 3 (consent idempotency/version, export scope/decrypt/audit,
 account-only), documents 4 (expiry/file lifecycle/tenant+self isolation), onboarding 3
-(standard/dates, completion/duplicates, self/RLS), recruitment 2 (pipeline, validation/isolation).
-Total: 442 passed, 1 ignored (`load.rs`).
+(standard/dates, completion/duplicates, self/RLS), recruitment 2 (pipeline, validation/isolation), training 2 (expiry/validation, self/RLS).
+Total: 444 passed, 1 ignored (`load.rs`).
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -94,7 +94,7 @@ volume): migrate → gateway → web → nginx with the TLS overlay. HTTPS `/hea
 `talentos-gateway provision` created the first tenant through the compose
 service. This task did not re-run the compose/TLS verification; the new leave
 self-service, notifications, and TOTP were verified via API/DB tests and the
-49/49 Playwright E2E suite.
+50/50 Playwright E2E suite.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings, TOTP 2FA enrollment) and `/users` (invite, roles, deactivate,
@@ -107,11 +107,11 @@ classified holiday > weekend > weekday automatically. HTTPS is a compose overlay
 (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout.
-Browser E2E (`web/e2e`, Playwright) passes 49/49 locally and runs in CI: invite
+Browser E2E (`web/e2e`, Playwright) passes 50/50 locally and runs in CI: invite
 acceptance → login, settings + audit, employee → attendance → payroll → approval,
 holiday OT, user invite, password reset, self-service payslips, employee clock
 punch with GPS, HR shift creation and day correction/approval, and employee leave
-request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LINE id save, OT request → HR approval (plus approved history), a two-step manager→HR leave chain, opening leave-balance CSV import, the reports/GL page, a loan/advance with payroll installment, an expense claim with receipt approval, a final-settlement draft, a privacy-notice acceptance plus personal-data export, an expiring employee document with a downloadable file, a standard onboarding checklist, and a recruitment job with a candidate moved to interview. Payroll load test: 500 employees in ~0.38 s locally
+request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LINE id save, OT request → HR approval (plus approved history), a two-step manager→HR leave chain, opening leave-balance CSV import, the reports/GL page, a loan/advance with payroll installment, an expense claim with receipt approval, a final-settlement draft, a privacy-notice acceptance plus personal-data export, an expiring employee document with a downloadable file, a standard onboarding checklist, a recruitment job with a candidate moved to interview, and an expiring training certificate. Payroll load test: 500 employees in ~0.38 s locally
 (~1,300/s).
 
 ## Known risks

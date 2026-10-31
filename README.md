@@ -312,6 +312,14 @@ employee). If any exist, approval is blocked until HR reviews them
 (`POST /payroll/runs/:id/anomalies/review`); a recalculation clears the review so
 the fresh anomalies must be checked again.
 
+## Training
+
+`/training` (HR writes; payroll read-only) records completed courses per
+employee (title, provider, completion and certificate-expiry dates). Certificates
+expiring within 90 days, plus recently expired ones, are listed at the top.
+Employees can read their own history via `/api/v1/me/training` (self UI not built
+yet). No file upload, course catalog, or reminders.
+
 ## Recruitment
 
 `/recruitment` (HR writes; payroll read-only) manages job openings (title,
@@ -776,7 +784,8 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 - [x] Recruitment pipeline (openings, candidates, applied→hired/rejected stages).
 - [ ] Offer letters/e-signature, CV attachments, interview scheduling.
 - [x] Employee documents with expiry alerts (contracts, work permits, visas) and one downloadable file per document.
-- [ ] Performance reviews/OKRs, training records.
+- [x] Training records with certificate-expiry alerts.
+- [ ] Performance reviews/OKRs.
 - [x] Mobile PWA shell and offline punch queue; native app if required.
 
 ### Dev environment notes

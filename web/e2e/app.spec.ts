@@ -1204,3 +1204,27 @@ test("HR opens a job and moves a candidate through the pipeline", async ({ page 
   await expect(candidate.getByTestId("candidate-stage")).toHaveValue("interview");
   await expect(jobRow).toContainText("1 คน");
 });
+
+test("HR records an expiring training certificate", async ({ page }) => {
+  await login(page);
+  await page.goto("/training");
+
+  const employeeId = await page
+    .getByTestId("training-employee")
+    .locator("option", { hasText: "E2E001" })
+    .getAttribute("value");
+  await page.getByTestId("training-employee").selectOption(employeeId!);
+  await page.getByTestId("training-title").fill("ความปลอดภัย E2E");
+  await page.getByTestId("training-provider").fill("TalentOS Academy");
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
+  const expiry = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(
+    new Date(Date.now() + 30 * 86_400_000),
+  );
+  await page.getByTestId("training-completed").fill(today);
+  await page.getByTestId("training-expires").fill(expiry);
+  await page.getByTestId("save-training").click();
+  await expect(page.getByText("บันทึกการอบรมแล้ว")).toBeVisible();
+
+  await expect(page.getByTestId("training-row").filter({ hasText: "ความปลอดภัย E2E" })).toBeVisible();
+  await expect(page.getByTestId("training-expiring")).toContainText("ความปลอดภัย E2E");
+});

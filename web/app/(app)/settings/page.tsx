@@ -110,10 +110,25 @@ export default function SettingsPage() {
   const [ruleType, setRuleType] = useState("");
   const [ruleMinDays, setRuleMinDays] = useState("");
   const [ruleChain, setRuleChain] = useState("hr_admin");
+  const [canPurge, setCanPurge] = useState(false);
+  const [pdpaPolicy, setPdpaPolicy] = useState<{
+    payroll_retention_years: number;
+    ops_retention_months: number;
+  } | null>(null);
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
-      .then((me) => setTotpEnabled(Boolean(me.totp_enabled)))
+      .then((me) => {
+        setTotpEnabled(Boolean(me.totp_enabled));
+        if (me.permissions.includes("privacy.purge")) {
+          setCanPurge(true);
+          gw<{ payroll_retention_years: number; ops_retention_months: number }>(
+            "api/v1/privacy/policy"
+          )
+            .then(setPdpaPolicy)
+            .catch(() => {});
+        }
+      })
       .catch((e) => handleApiError(e, setError));
     loadSessions();
     loadNotifications();
@@ -131,6 +146,23 @@ export default function SettingsPage() {
       })
       .catch((e) => handleApiError(e, setError));
   }, []);
+
+  async function purgeNow() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await gw<{ purged: number }>("api/v1/privacy/retention-purge", {
+        method: "POST",
+        body: "{}",
+      });
+      setNotice(`Purge now: ลบข้อมูลพนกงาน ${res.purged} คน`);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function loadSessions() {
     try {
@@ -564,6 +596,24 @@ export default function SettingsPage() {
             </button>
           </div>
         </form>
+
+        {canPurge && (
+          <div className="card card-pad" data-testid="pdpa-purge-card" style={{ display: "grid", gap: 12 }}>
+            <h2 style={{ fontSize: 16 }}>PDPA: การเก็บรักษาและลบข้อมูล</h2>
+            <p className="hint">
+              เก็บรักษาเอกสารภาษี/เงินเดือน {pdpaPolicy?.payroll_retention_years ?? 7} ปี ·
+              ข้อมูลบรืหารหลังลาออก {pdpaPolicy?.ops_retention_months ?? 12} เดือน
+            </p>
+            <button
+              className="btn btn-primary"
+              data-testid="pdpa-purge"
+              disabled={busy}
+              onClick={purgeNow}
+            >
+              ลบข้อมูลท่ีหมดกําหนด (Purge now)
+            </button>
+          </div>
+        )}
 
         <div className="card">
           <div className="card-head">

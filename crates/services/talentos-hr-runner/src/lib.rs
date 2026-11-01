@@ -17,6 +17,7 @@ pub mod loans;
 pub mod notify;
 pub mod onboarding;
 pub mod ot;
+pub mod pdpa;
 pub mod performance;
 pub mod pf;
 pub mod privacy;
@@ -70,6 +71,10 @@ pub use ot::{
     decide_request as decide_ot_request, list_requests as list_ot_requests,
     pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests,
     OtDecideOutcome, OtError, OtInput, OtRequestView, PendingOt,
+};
+pub use pdpa::{
+    get_policy, purge_employee_pii, run_retention_purge, PdpaError, PdpaPolicy, PurgeResult,
+    DEFAULT_OPS_RETENTION_MONTHS, DEFAULT_PAYROLL_RETENTION_YEARS,
 };
 pub use performance::{
     list_calibrations, list_cycles_for_manager, list_direct_reports, set_employee_manager,

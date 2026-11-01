@@ -8,7 +8,7 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms, goals,
-    graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll,
+    graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll, pdpa,
     performance, pf, plugins, privacy, recruitment, reports, settings, settlement, setup, training,
     users,
 };
@@ -234,6 +234,12 @@ pub fn build(state: AppState) -> Router {
             axum::routing::put(settings::put_entity),
         )
         .route("/api/v1/settings/system", get(settings::system))
+        .route("/api/v1/privacy/policy", get(pdpa::policy))
+        .route("/api/v1/privacy/purge/:employee_id", post(pdpa::purge))
+        .route(
+            "/api/v1/privacy/retention-purge",
+            post(pdpa::retention_purge),
+        )
         .route("/api/v1/audit", get(audit::list))
         .route("/api/v1/notifications", get(notifications::list))
         .route(

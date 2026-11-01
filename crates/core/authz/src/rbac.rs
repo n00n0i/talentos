@@ -109,6 +109,7 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 &["hr_admin", "manager"][..],
             ),
             (("audit_log", "read"), &["hr_admin"][..]),
+            (("privacy", "purge"), &["hr_admin"][..]),
             (
                 ("approval_delegation", "manage"),
                 &["hr_admin", "manager"][..],
@@ -230,6 +231,17 @@ mod tests {
             assert!(
                 !has_permission(&[role.into()], "performance", "manage_direct"),
                 "{role} should not manage direct performance"
+            );
+        }
+    }
+
+    #[test]
+    fn only_hr_admin_purges_privacy() {
+        assert!(has_permission(&["hr_admin".into()], "privacy", "purge"));
+        for role in ["payroll_manager", "manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "privacy", "purge"),
+                "{role} must not purge"
             );
         }
     }

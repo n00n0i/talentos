@@ -20,6 +20,7 @@ pub mod notifications;
 pub mod onboarding;
 pub mod ot;
 pub mod payroll;
+pub mod pdpa;
 pub mod performance;
 pub mod pf;
 pub mod plugins;

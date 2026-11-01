@@ -149,6 +149,11 @@ async fn main() {
             pool.clone(),
             talentos_model_gw::HuakatiClient::new().ok().map(Arc::new),
         )),
+        base_url: std::env::var("APP_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty()),
+        http: reqwest::Client::new(),
+        oidc_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         started_at: std::time::Instant::now(),
     };
 

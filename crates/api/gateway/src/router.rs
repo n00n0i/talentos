@@ -8,9 +8,9 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms, goals,
-    graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll, pdpa,
-    performance, pf, plugins, privacy, recruitment, reports, settings, settlement, setup, training,
-    users,
+    graphql, health, leave, loans, mcp, me, memory, notifications, oidc, onboarding, ot, payroll,
+    pdpa, performance, pf, plugins, privacy, recruitment, reports, settings, settlement, setup,
+    training, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -25,7 +25,11 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/v1/auth/reset-password",
             post(users::accept_password_reset),
-        );
+        )
+        .layer(axum::Extension(state.http.clone()))
+        .layer(axum::Extension(state.oidc_cache.clone()))
+        .route("/api/v1/auth/oidc/authorize", get(oidc::authorize))
+        .route("/api/v1/auth/oidc/callback", get(oidc::callback));
 
     let protected = Router::new()
         .route("/api/v1/auth/me", get(auth::me))
@@ -241,6 +245,10 @@ pub fn build(state: AppState) -> Router {
             post(pdpa::retention_purge),
         )
         .route("/api/v1/audit", get(audit::list))
+        .route(
+            "/api/v1/auth/oidc/settings",
+            get(oidc::get_settings).post(oidc::save_settings),
+        )
         .route("/api/v1/notifications", get(notifications::list))
         .route(
             "/api/v1/notifications/:id/retry",

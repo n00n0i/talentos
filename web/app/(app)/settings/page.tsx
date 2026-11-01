@@ -101,7 +101,7 @@ export default function SettingsPage() {
   const [totpCode, setTotpCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [recoveryTotp, setRecoveryTotp] = useState("");
-  const [sessions, setSessions] = useState<
+    const [sessions, setSessions] = useState<
     { id: number; created_at: string; expires_at: string; ip_address: string | null; user_agent: string | null }[]
   >([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -111,6 +111,20 @@ export default function SettingsPage() {
   const [ruleMinDays, setRuleMinDays] = useState("");
   const [ruleChain, setRuleChain] = useState("hr_admin");
   const [canPurge, setCanPurge] = useState(false);
+  const [oidc, setOidc] = useState<{
+    configured: boolean;
+    issuer?: string;
+    client_id?: string;
+    client_secret_masked?: string | null;
+    allowed_domains?: string[];
+    enabled?: boolean;
+  } | null>(null);
+  const [oidcIssuer, setOidcIssuer] = useState("");
+  const [oidcClientId, setOidcClientId] = useState("");
+  const [oidcClientSecret, setOidcClientSecret] = useState("");
+  const [oidcAllowedDomains, setOidcAllowedDomains] = useState("");
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [canManageOidc, setCanManageOidc] = useState(false);
   const [pdpaPolicy, setPdpaPolicy] = useState<{
     payroll_retention_years: number;
     ops_retention_months: number;
@@ -127,6 +141,10 @@ export default function SettingsPage() {
           )
             .then(setPdpaPolicy)
             .catch(() => {});
+        }
+        if (me.permissions.includes("auth.oidc_manage")) {
+          setCanManageOidc(true);
+          loadOidcSettings();
         }
       })
       .catch((e) => handleApiError(e, setError));
@@ -146,6 +164,58 @@ export default function SettingsPage() {
       })
       .catch((e) => handleApiError(e, setError));
   }, []);
+
+  async function loadOidcSettings() {
+    try {
+      const res = await gw<{
+        configured: boolean;
+        issuer?: string;
+        client_id?: string;
+        client_secret_masked?: string | null;
+        allowed_domains?: string[];
+        enabled?: boolean;
+      }>("api/v1/auth/oidc/settings");
+      setOidc(res);
+      if (res.configured) {
+        setOidcIssuer(res.issuer ?? "");
+        setOidcClientId(res.client_id ?? "");
+        setOidcAllowedDomains((res.allowed_domains ?? []).join(", "));
+        setOidcEnabled(Boolean(res.enabled));
+      }
+    } catch {
+      setOidc({ configured: false });
+    }
+  }
+
+  async function saveOidc(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const domains = oidcAllowedDomains
+        .split(",")
+        .map((d) => d.trim())
+        .filter((d) => d.length > 0);
+      await gw("api/v1/auth/oidc/settings", {
+        method: "POST",
+        body: JSON.stringify({
+          issuer: oidcIssuer,
+          client_id: oidcClientId,
+          client_secret: oidcClientSecret,
+          allowed_domains: domains,
+          enabled: oidcEnabled,
+        }),
+      });
+      setOidcClientSecret("");
+      await loadOidcSettings();
+      setNotice(t("settings.oidcSavedNotice"));
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function purgeNow() {
     setBusy(true);
@@ -917,6 +987,86 @@ export default function SettingsPage() {
           </div>
         )}
       </form>
+
+      {canManageOidc && (
+        <form className="card card-pad" data-testid="oidc-settings" onSubmit={saveOidc} style={{ display: "grid", gap: 12 }}>
+          <h2>{t("settings.ssoOidc")}</h2>
+          <p data-testid="oidc-status" style={{ margin: 0 }}>
+            <span className={`badge ${oidc?.configured ? "success" : ""}`}>
+              {oidc?.configured ? t("settings.oidcStatusConfigured") : t("settings.oidcStatusNotConfigured")}
+            </span>
+            {oidc?.configured && oidc.client_secret_masked && (
+              <span className="hint" style={{ marginLeft: 8 }}>
+                secret: {oidc.client_secret_masked}
+              </span>
+            )}
+          </p>
+          <p className="hint">
+            ตั้งค่า SSO แบบ OIDC สำหรับเข้าสู่ระบบ — ระบุ issuer, client id/secret และ domain ที่อนุญาต
+          </p>
+          <div className="field">
+            <label>{t("settings.oidcIssuer")}</label>
+            <input
+              data-testid="oidc-issuer"
+              value={oidcIssuer}
+              onChange={(e) => setOidcIssuer(e.target.value)}
+              placeholder="https://sso.company.com"
+              required
+            />
+          </div>
+          <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <label>{t("settings.oidcClientId")}</label>
+              <input
+                data-testid="oidc-client-id"
+                value={oidcClientId}
+                onChange={(e) => setOidcClientId(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>{t("settings.oidcClientSecret")}</label>
+              <input
+                data-testid="oidc-client-secret"
+                type="password"
+                value={oidcClientSecret}
+                onChange={(e) => setOidcClientSecret(e.target.value)}
+                placeholder={oidc?.configured ? "•••• (ไม่ว่าง = ไม่เปลี่ยน)" : "Secret"}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label>{t("settings.oidcAllowedDomains")}</label>
+            <input
+              data-testid="oidc-allowed-domains"
+              value={oidcAllowedDomains}
+              onChange={(e) => setOidcAllowedDomains(e.target.value)}
+              placeholder="example.com, corp.example.com"
+            />
+            <p className="hint">ไม่ว่าง = อนุญาตทุก domain · คั่นด้วยคอมม่า</p>
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              data-testid="oidc-enabled"
+              checked={oidcEnabled}
+              onChange={(e) => setOidcEnabled(e.target.checked)}
+              style={{ width: "auto" }}
+            />
+            <span>{t("settings.oidcEnabled")}</span>
+          </label>
+          <div>
+            <button
+              className="btn btn-primary"
+              data-testid="oidc-save"
+              type="submit"
+              disabled={busy || (oidc?.configured && oidcClientSecret === "")}
+            >
+              {busy ? t("common.loading") : t("common.save")}
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="card">
         <div className="card-head">

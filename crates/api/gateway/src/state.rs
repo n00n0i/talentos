@@ -4,6 +4,8 @@ use axum::extract::FromRef;
 
 use talentos_db::TenantPool;
 
+use crate::handlers::oidc;
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: Arc<TenantPool>,
@@ -18,6 +20,13 @@ pub struct AppState {
     pub memory: std::sync::Arc<talentos_memory::MemoryStore>,
     /// `None` only when PII_ENCRYPTION_KEY is unset (dev); production must set it.
     pub pii: Option<std::sync::Arc<talentos_db::pii::PiiCipher>>,
+    /// Base URL of the app (e.g. `http://localhost:3000`), used to build
+    /// absolute `redirect_uri` values for the OIDC callback. `None` in tests.
+    pub base_url: Option<String>,
+    /// Shared HTTP client for outbound OIDC discovery / token exchange.
+    pub http: reqwest::Client,
+    /// Shared OIDC discovery cache, keyed by issuer.
+    pub oidc_cache: oidc::DiscoveryCache,
     pub started_at: std::time::Instant,
 }
 

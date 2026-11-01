@@ -109,6 +109,7 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 &["hr_admin", "manager"][..],
             ),
             (("audit_log", "read"), &["hr_admin"][..]),
+            (("auth", "oidc_manage"), &["hr_admin"][..]),
             (("privacy", "purge"), &["hr_admin"][..]),
             (
                 ("approval_delegation", "manage"),
@@ -217,6 +218,7 @@ mod tests {
         assert!(perms.contains(&"employee.create".to_string()));
         assert!(perms.contains(&"audit_log.read".to_string()));
         assert!(perms.len() >= 18); // hr_admin has nearly all permissions
+        assert!(perms.contains(&"auth.oidc_manage".to_string()));
     }
 
     #[test]
@@ -242,6 +244,17 @@ mod tests {
             assert!(
                 !has_permission(&[role.into()], "privacy", "purge"),
                 "{role} must not purge"
+            );
+        }
+    }
+
+    #[test]
+    fn only_hr_admin_manages_oidc_settings() {
+        assert!(has_permission(&["hr_admin".into()], "auth", "oidc_manage"));
+        for role in ["payroll_manager", "manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "auth", "oidc_manage"),
+                "{role} must not manage OIDC settings"
             );
         }
     }

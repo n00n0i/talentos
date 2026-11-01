@@ -396,22 +396,22 @@ pub async fn callback(State(state): State<AppState>, Query(q): Query<CallbackQue
     }
 
     // Link or create the user by email.
-    let linked = match link_or_create_user(&state, &tenant_id, &email).await {
-        Ok(r) => r,
+    let linked_user_id = match link_or_create_user(&state, &tenant_id, &email).await {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return error_redirect("oidc_user_not_found");
+        }
         Err(resp) => return resp,
     };
-
-    if !linked {
-        return error_redirect("oidc_user_not_found");
-    }
 
     // Successful OIDC login: audit-log it.
     if let Err(e) = sqlx::query(
         r#"INSERT INTO audit_log
              (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
-           VALUES ($1, 'user', $2, 'auth.oidc_login', 'session', $2, '{}'::jsonb)"#,
+           VALUES ($1, 'user', $2, 'auth.oidc_login', 'session', $3, '{}'::jsonb)"#,
     )
     .bind(tenant_id.0)
+    .bind(linked_user_id.to_string())
     .bind(tenant_id.0.to_string())
     .execute(&state.auth_pool)
     .await
@@ -664,6 +664,7 @@ async fn resolve_user_info(
     // No userinfo endpoint: decode the id_token as a JWT (unverified — the token
     // was just issued by the provider over TLS, so this is acceptable for
     // claim extraction in a skeleton; full verification is a follow-up).
+    // TODO: verify id_token signature via JWKS before enabling in production
     if let Some(id_token) = &token.id_token {
         let payload = id_token
             .split('.')
@@ -691,14 +692,15 @@ async fn resolve_user_info(
     ))
 }
 
-/// Link an existing user by email, or create a new one. Returns true if the user
-/// was found/created and is active.
+/// Link an existing user by email, or create a new one. Returns the linked
+/// (or newly created) active user's id, or None if the email has no active
+/// user in the tenant.
 #[allow(clippy::result_large_err)]
 async fn link_or_create_user(
     state: &AppState,
     tenant_id: &TenantId,
     email: &str,
-) -> Result<bool, Response> {
+) -> Result<Option<Uuid>, Response> {
     let mut tx = state
         .pool
         .begin_tenant(*tenant_id)
@@ -706,7 +708,7 @@ async fn link_or_create_user(
         .map_err(|e| internal_err(&e.to_string()))?;
 
     let existing_res: Result<Option<Uuid>, sqlx::Error> =
-        sqlx::query_scalar("SELECT id FROM users WHERE tenant_id =  AND lower(email) = ")
+        sqlx::query_scalar("SELECT id FROM users WHERE tenant_id = $1 AND lower(email) = $2")
             .bind(tenant_id.0)
             .bind(email)
             .fetch_optional(&mut *tx)
@@ -721,7 +723,7 @@ async fn link_or_create_user(
 
     if let Some(uid) = existing {
         let active_res: Result<bool, sqlx::Error> =
-            sqlx::query_scalar("SELECT is_active FROM users WHERE id =  AND tenant_id = ")
+            sqlx::query_scalar("SELECT is_active FROM users WHERE id = $1 AND tenant_id = $2")
                 .bind(uid)
                 .bind(tenant_id.0)
                 .fetch_one(&mut *tx)
@@ -736,20 +738,21 @@ async fn link_or_create_user(
 
         if !active {
             let _ = tx.rollback().await;
-            return Ok(false);
+            return Ok(None);
         }
 
         // Update last login timestamp (best-effort).
-        let _ = sqlx::query("UPDATE users SET last_login_at = now() WHERE id =  AND tenant_id = ")
-            .bind(uid)
-            .bind(tenant_id.0)
-            .execute(&mut *tx)
-            .await;
+        let _ =
+            sqlx::query("UPDATE users SET last_login_at = now() WHERE id = $1 AND tenant_id = $2")
+                .bind(uid)
+                .bind(tenant_id.0)
+                .execute(&mut *tx)
+                .await;
 
         if let Err(e) = tx.commit().await {
             return Err(internal_err(&e.to_string()));
         }
-        return Ok(true);
+        return Ok(Some(uid));
     }
 
     // No user: create one with an OIDC-only placeholder password hash and the
@@ -758,7 +761,7 @@ async fn link_or_create_user(
 
     let created_res: Result<Uuid, sqlx::Error> = sqlx::query_scalar(
         r#"INSERT INTO users (tenant_id, email, password_hash, is_active)
-           VALUES (, , , TRUE) RETURNING id"#,
+           VALUES ($1, $2, $3, TRUE) RETURNING id"#,
     )
     .bind(tenant_id.0)
     .bind(email)
@@ -774,7 +777,7 @@ async fn link_or_create_user(
     };
 
     let role_id_res: Result<i32, sqlx::Error> = sqlx::query_scalar(
-        r#"INSERT INTO roles (tenant_id, name) VALUES (, 'employee')
+        r#"INSERT INTO roles (tenant_id, name) VALUES ($1, 'employee')
            ON CONFLICT (tenant_id, name) DO UPDATE SET name = EXCLUDED.name
            RETURNING id"#,
     )
@@ -789,12 +792,13 @@ async fn link_or_create_user(
         }
     };
 
-    let assign_res: Result<_, sqlx::Error> =
-        sqlx::query("INSERT INTO user_roles (user_id, role_id) VALUES (, ) ON CONFLICT DO NOTHING")
-            .bind(created)
-            .bind(role_id)
-            .execute(&mut *tx)
-            .await;
+    let assign_res: Result<_, sqlx::Error> = sqlx::query(
+        "INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(created)
+    .bind(role_id)
+    .execute(&mut *tx)
+    .await;
     if let Err(e) = assign_res {
         let _ = tx.rollback().await;
         return Err(internal_err(&e.to_string()));
@@ -804,7 +808,7 @@ async fn link_or_create_user(
         return Err(internal_err(&e.to_string()));
     }
 
-    Ok(true)
+    Ok(Some(created))
 }
 
 // ---------------------------------------------------------------------------
@@ -1063,5 +1067,191 @@ mod tests {
         let tampered = format!("{}.{}.{}", parts[0], parts[1], sig);
         let result = read_state(SECRET, &tampered);
         assert!(result.is_err());
+    }
+
+    // ------------------------------------------------------------------
+    // DB tests: link_or_create_user — exercises the bind placeholders in
+    // the real queries (they fail at parse/execute time if `$n` are wrong).
+    // Skips when DATABASE_URL / DATABASE_ADMIN_URL are unset.
+    // ------------------------------------------------------------------
+
+    fn test_app_state(pool: talentos_db::TenantPool, auth_pool: sqlx::PgPool) -> AppState {
+        let redis_url =
+            std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let pool_arc = std::sync::Arc::new(pool);
+        AppState {
+            pool: pool_arc.clone(),
+            auth_pool,
+            jwt_secret: {
+                let bytes: Vec<u8> = b"test-secret-for-oidc-state-32bytes-ok!!".to_vec();
+                std::sync::Arc::from(bytes)
+            },
+            redis: fred::prelude::Client::new(
+                fred::prelude::Config::from_url(&redis_url).expect("REDIS_URL"),
+                None,
+                None,
+                None,
+            ),
+            access_ttl_secs: 900,
+            refresh_ttl_days: 7,
+            allowed_origins: Vec::new(),
+            graphql_schema: std::sync::Arc::new(talentos_graphql::build_schema()),
+            memory: std::sync::Arc::new(talentos_memory::MemoryStore::new(pool_arc, None)),
+            pii: None,
+            base_url: None,
+            http: reqwest::Client::new(),
+            oidc_cache: std::sync::Arc::new(
+                std::sync::Mutex::new(std::collections::HashMap::new()),
+            ),
+            started_at: std::time::Instant::now(),
+        }
+    }
+
+    async fn seed_oidc_tenant(admin: &sqlx::PgPool, tenant_id: &Uuid) {
+        sqlx::query("INSERT INTO tenants (id, name, slug) VALUES ($1, 'OIDC Test', $2)")
+            .bind(tenant_id)
+            .bind(format!("oidc-test-{}", &tenant_id.to_string()[..8]))
+            .execute(admin)
+            .await
+            .expect("insert tenant");
+    }
+
+    async fn cleanup_oidc_tenant(admin: &sqlx::PgPool, tenant_id: &Uuid) {
+        for stmt in [
+            "DELETE FROM user_roles WHERE user_id IN (SELECT id FROM users WHERE tenant_id = $1)",
+            "DELETE FROM users WHERE tenant_id = $1",
+            "DELETE FROM roles WHERE tenant_id = $1",
+            "DELETE FROM tenant_oidc_config WHERE tenant_id = $1",
+            "DELETE FROM tenants WHERE id = $1",
+        ] {
+            let _ = sqlx::query(stmt).bind(tenant_id).execute(admin).await;
+        }
+    }
+
+    /// A user that exists and is active in the tenant must be found by email.
+    #[tokio::test]
+    async fn db_link_existing_active_user_by_email() {
+        let db_url = std::env::var("DATABASE_URL").ok();
+        let admin_url = std::env::var("DATABASE_ADMIN_URL").ok();
+        let (Some(db_url), Some(admin_url)) = (db_url, admin_url) else {
+            eprintln!("SKIP: DATABASE_URL/DATABASE_ADMIN_URL unset");
+            return;
+        };
+        let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
+        let pool = talentos_db::TenantPool::connect(&db_url, 2).await.unwrap();
+        let auth_pool = sqlx::PgPool::connect(&db_url).await.unwrap();
+        let state = test_app_state(pool, auth_pool);
+
+        let tenant_id = Uuid::new_v4();
+        seed_oidc_tenant(&admin, &tenant_id).await;
+
+        // Seed an active user directly via the tenant pool.
+        let mut tx = state.pool.begin_tenant(TenantId(tenant_id)).await.unwrap();
+        let user_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (id, tenant_id, email, password_hash, is_active)
+             VALUES ($1, $2, 'sso-link@example.com', 'x', true)",
+        )
+        .bind(user_id)
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        // Case 1: existing active user — must be found (binds resolve, query succeeds).
+        let found = link_or_create_user(&state, &TenantId(tenant_id), "sso-link@example.com")
+            .await
+            .expect("link_or_create_user must succeed against the dev DB")
+            .expect("an active user with this email must be found");
+        assert_eq!(found, user_id);
+
+        cleanup_oidc_tenant(&admin, &tenant_id).await;
+    }
+
+    /// A new email in a tenant with no user yet must be created.
+    #[tokio::test]
+    async fn db_link_or_create_new_user_in_empty_tenant() {
+        let db_url = std::env::var("DATABASE_URL").ok();
+        let admin_url = std::env::var("DATABASE_ADMIN_URL").ok();
+        let (Some(db_url), Some(admin_url)) = (db_url, admin_url) else {
+            eprintln!("SKIP: DATABASE_URL/DATABASE_ADMIN_URL unset");
+            return;
+        };
+        let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
+        let pool = talentos_db::TenantPool::connect(&db_url, 2).await.unwrap();
+        let auth_pool = sqlx::PgPool::connect(&db_url).await.unwrap();
+        let state = test_app_state(pool, auth_pool);
+
+        let tenant_id = Uuid::new_v4();
+        seed_oidc_tenant(&admin, &tenant_id).await;
+
+        // No user exists yet in this tenant; the INSERT path must run
+        // (placeholders must resolve).
+        let created = link_or_create_user(&state, &TenantId(tenant_id), "sso-new@example.com")
+            .await
+            .expect("link_or_create_user (create path) must succeed against the dev DB")
+            .expect("a new user must be created for an unknown email");
+        assert!(!created.is_nil());
+
+        // Verify rows landed: user + role link, read through a tenant tx.
+        let mut verify = state.pool.begin_tenant(TenantId(tenant_id)).await.unwrap();
+        let user_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE email = $1 AND is_active")
+                .bind("sso-new@example.com")
+                .fetch_one(&mut *verify)
+                .await
+                .expect("users count query must succeed against the dev DB");
+        assert_eq!(user_count, 1);
+
+        let user_role_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM user_roles ur
+             JOIN users u ON ur.user_id = u.id
+             WHERE u.email = $1",
+        )
+        .bind("sso-new@example.com")
+        .fetch_one(&mut *verify)
+        .await
+        .expect("user_roles count query must succeed against the dev DB");
+        assert_eq!(user_role_count, 1, "the default role must be assigned");
+        let _ = verify.rollback().await;
+
+        cleanup_oidc_tenant(&admin, &tenant_id).await;
+    }
+
+    /// An inactive user must be rejected (found but not active).
+    #[tokio::test]
+    async fn db_inactive_user_is_rejected() {
+        let db_url = std::env::var("DATABASE_URL").ok();
+        let admin_url = std::env::var("DATABASE_ADMIN_URL").ok();
+        let (Some(db_url), Some(admin_url)) = (db_url, admin_url) else {
+            eprintln!("SKIP: DATABASE_URL/DATABASE_ADMIN_URL unset");
+            return;
+        };
+        let admin = sqlx::PgPool::connect(&admin_url).await.unwrap();
+        let pool = talentos_db::TenantPool::connect(&db_url, 2).await.unwrap();
+        let auth_pool = sqlx::PgPool::connect(&db_url).await.unwrap();
+        let state = test_app_state(pool, auth_pool);
+
+        let tenant_id = Uuid::new_v4();
+        seed_oidc_tenant(&admin, &tenant_id).await;
+
+        let mut tx = state.pool.begin_tenant(TenantId(tenant_id)).await.unwrap();
+        sqlx::query(
+            "INSERT INTO users (tenant_id, email, password_hash, is_active)
+             VALUES ($1, 'sso-inactive@example.com', 'x', false)",
+        )
+        .bind(tenant_id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+
+        let found = link_or_create_user(&state, &TenantId(tenant_id), "sso-inactive@example.com")
+            .await
+            .expect("link_or_create_user must succeed against the dev DB");
+        assert!(found.is_none(), "an inactive user must not be linked");
+
+        cleanup_oidc_tenant(&admin, &tenant_id).await;
     }
 }

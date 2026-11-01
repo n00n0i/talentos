@@ -252,6 +252,79 @@ async fn export_contains_all_linked_employees_and_no_one_else() {
 }
 
 #[tokio::test]
+async fn export_decrypts_candidate_email_phone() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let (_entity_id, employee_id) = entities[0];
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+    let tenant = TenantId(tenant_id);
+
+    let cipher = PiiCipher::from_hex(&"a".repeat(64)).expect("cipher");
+    let pii = Some(Arc::new(cipher));
+
+    // Create a candidate via the service so email/phone are stored encrypted.
+    let job = talentos_hr_runner::recruitment::create_job(
+        &pool,
+        tenant,
+        user_id,
+        &talentos_hr_runner::recruitment::JobInput {
+            title: "Pii Export".into(),
+            department: None,
+            employment_type: "full_time".into(),
+            headcount: 1,
+            description: None,
+        },
+    )
+    .await
+    .expect("job");
+    let candidate = talentos_hr_runner::recruitment::create_candidate(
+        &pool,
+        tenant,
+        user_id,
+        job.id,
+        &talentos_hr_runner::recruitment::CandidateInput {
+            first_name: "Dsar".into(),
+            last_name: "Candidate".into(),
+            email: Some("dsar@example.com".into()),
+            phone: Some("0809998887".into()),
+            source: None,
+            note: None,
+        },
+        &pii,
+    )
+    .await
+    .expect("candidate");
+    assert!(candidate.email.is_some(), "service decrypts for display");
+
+    let data = export_personal_data(&pool, tenant, user_id, &pii)
+        .await
+        .expect("export");
+    let candidates = data["candidates"].as_array().expect("candidates array");
+    assert_eq!(
+        candidates.len(),
+        1,
+        "candidate created by the user is exported"
+    );
+    assert_eq!(candidates[0]["email"], "dsar@example.com");
+    assert_eq!(candidates[0]["phone"], "0809998887");
+    assert_eq!(candidates[0]["job_title"], "Pii Export");
+
+    // The export must not leak the raw ciphertext.
+    let text = data.to_string();
+    assert!(
+        !text.contains("v1:"),
+        "ciphertext must not leak into the export"
+    );
+
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
 async fn export_without_employee_returns_account_only() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");

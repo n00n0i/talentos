@@ -338,6 +338,25 @@ export default function RecruitmentPage() {
     }
   }
 
+  async function signOffer(id: string) {
+    const name = window.prompt("กรอกชื่อบผ้สมครเพื่ือลงนามในขอเสนอ");
+    if (!name || !name.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/offers/${id}/sign`, {
+        method: "POST",
+        body: JSON.stringify({ typed_name: name.trim() }),
+      });
+      if (offerFor) await showOffers(offerFor);
+      setNotice("ลายมือชื่่อแล่ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeOffer(id: string) {
     if (!confirm("ลบข้อเสนอนี้หรือไม่?")) return;
     setBusy(true);
@@ -876,6 +895,15 @@ export default function RecruitmentPage() {
                         <option value="accepted">ตอบรับ</option>
                         <option value="declined">ปฏิเสธ</option>
                       </select>
+                      <button
+                        className="btn btn-sm"
+                        data-testid="offer-sign"
+                        disabled={busy || !canWrite}
+                        onClick={() => signOffer(offer.id)}
+                        style={{ marginLeft: 6 }}
+                      >
+                        ลายมือชื่่อ
+                      </button>
                       {canWrite && (
                         <button
                           className="btn btn-sm"

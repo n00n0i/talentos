@@ -684,13 +684,20 @@ pub async fn export_pnd1a_csv(
 /// GET /api/v1/payroll/runs/:id/bank-payout.csv — bank transfer file from the
 /// active `bank_payout` template. Approved runs only. Column header + one row
 /// per payslip (no totals/metadata, so banks parse it directly). Missing bank
-/// account becomes an empty cell. Returns `(filename, body)`.
+/// account becomes an empty cell. `template_id` selects a `bank_templates`
+/// row instead (its field_order drives the columns); `None` uses the tenant's
+/// active form template. Returns `(filename, body)`.
 pub async fn export_bank_payout_csv(
     conn: &mut PgConnection,
     run_id: Uuid,
     pii: &Option<Arc<talentos_db::pii::PiiCipher>>,
+    template_id: Option<Uuid>,
 ) -> Result<(String, String), FormError> {
-    let template = load_active_template(conn, FORM_TYPE_BANK_PAYOUT).await?;
+    let template = if let Some(template_id) = template_id {
+        load_bank_template_as_form(conn, template_id).await?
+    } else {
+        load_active_template(conn, FORM_TYPE_BANK_PAYOUT).await?
+    };
 
     let run = sqlx::query(
         "SELECT status, period_start, period_end FROM payroll_runs \
@@ -726,7 +733,9 @@ pub async fn export_bank_payout_csv(
     .fetch_all(&mut *conn)
     .await?;
 
-    let mut body = String::from("\u{feff}");
+    // No BOM: banks parse the transfer file directly (register CSVs keep the
+    // BOM so Excel renders Thai text).
+    let mut body = String::new();
     body.push_str(
         &template
             .config
@@ -756,6 +765,59 @@ pub async fn export_bank_payout_csv(
 
     let filename = format!("bank-payout-{run_id}-{period_start}-{period_end}.csv");
     Ok((filename, body))
+}
+
+/// Load one `bank_templates` row and adapt its field_order into a
+/// column-based form template, reusing the `bank_payout` source vocabulary
+/// (employee_code / employee_name / bank_name / bank_account / net). Sources
+/// outside that set fall through to an empty cell, which `resolve_bank_value`
+/// already handles.
+async fn load_bank_template_as_form(
+    conn: &mut PgConnection,
+    template_id: Uuid,
+) -> Result<FormTemplate, FormError> {
+    let row = sqlx::query(
+        "SELECT layout_name, field_order, header_row \
+         FROM bank_templates WHERE id = $1 AND tenant_id = current_tenant_id()",
+    )
+    .bind(template_id)
+    .fetch_optional(conn)
+    .await?;
+
+    let Some(row) = row else {
+        return Err(FormError::NotFound);
+    };
+
+    let field_order: Vec<String> = row.get("field_order");
+    let header_row: Option<String> = row.get("header_row");
+    let labels: Vec<&str> = header_row
+        .as_deref()
+        .map(|h| h.split(',').map(str::trim).collect())
+        .unwrap_or_default();
+
+    let columns: Vec<FormColumn> = field_order
+        .iter()
+        .enumerate()
+        .map(|(i, source)| FormColumn {
+            label: labels
+                .get(i)
+                .filter(|l| !l.is_empty())
+                .map_or_else(|| source.as_str(), |l| l)
+                .to_string(),
+            source: source.clone(),
+        })
+        .collect();
+
+    Ok(FormTemplate {
+        form_type: "bank_payout".to_string(),
+        version: 0,
+        config: FormConfig {
+            title: row.get("layout_name"),
+            columns,
+            ..FormConfig::default()
+        },
+        is_tenant_override: true,
+    })
 }
 
 fn resolve_bank_value(

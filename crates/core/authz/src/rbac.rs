@@ -46,6 +46,11 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 &["hr_admin", "payroll_manager"][..],
             ),
             (
+                ("payout_template", "read"),
+                &["hr_admin", "payroll_manager"][..],
+            ),
+            (("payout_template", "create"), &["hr_admin"][..]),
+            (
                 ("leave_request", "submit_self"),
                 &["hr_admin", "payroll_manager", "manager", "employee"][..],
             ),
@@ -104,7 +109,13 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
             (("user_management", "assign_role"), &["hr_admin"][..]),
             (("user_management", "reset_2fa"), &["hr_admin"][..]),
             (("user_management", "update"), &["hr_admin"][..]),
+            (
+                ("performance", "manage_direct"),
+                &["hr_admin", "manager"][..],
+            ),
             (("audit_log", "read"), &["hr_admin"][..]),
+            (("auth", "oidc_manage"), &["hr_admin"][..]),
+            (("privacy", "purge"), &["hr_admin"][..]),
             (
                 ("approval_delegation", "manage"),
                 &["hr_admin", "manager"][..],
@@ -169,6 +180,31 @@ mod tests {
     }
 
     #[test]
+    fn only_hr_admin_creates_payout_templates() {
+        assert!(has_permission(
+            &["hr_admin".to_string()],
+            "payout_template",
+            "create"
+        ));
+        for role in ["payroll_manager", "manager", "employee"] {
+            assert!(
+                !has_permission(&[role.to_string()], "payout_template", "create"),
+                "{role} must not create payout templates"
+            );
+        }
+        assert!(has_permission(
+            &["payroll_manager".into()],
+            "payout_template",
+            "read"
+        ));
+        assert!(!has_permission(
+            &["employee".into()],
+            "payout_template",
+            "read"
+        ));
+    }
+
+    #[test]
     fn all_roles_can_view_own_payslip() {
         for role in ROLES {
             assert!(
@@ -212,6 +248,45 @@ mod tests {
         assert!(perms.contains(&"employee.create".to_string()));
         assert!(perms.contains(&"audit_log.read".to_string()));
         assert!(perms.len() >= 18); // hr_admin has nearly all permissions
+        assert!(perms.contains(&"auth.oidc_manage".to_string()));
+    }
+
+    #[test]
+    fn manager_can_manage_direct_performance_but_employee_cannot() {
+        for role in ["hr_admin", "manager"] {
+            assert!(
+                has_permission(&[role.into()], "performance", "manage_direct"),
+                "{role} should manage direct performance"
+            );
+        }
+        for role in ["payroll_manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "performance", "manage_direct"),
+                "{role} should not manage direct performance"
+            );
+        }
+    }
+
+    #[test]
+    fn only_hr_admin_purges_privacy() {
+        assert!(has_permission(&["hr_admin".into()], "privacy", "purge"));
+        for role in ["payroll_manager", "manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "privacy", "purge"),
+                "{role} must not purge"
+            );
+        }
+    }
+
+    #[test]
+    fn only_hr_admin_manages_oidc_settings() {
+        assert!(has_permission(&["hr_admin".into()], "auth", "oidc_manage"));
+        for role in ["payroll_manager", "manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "auth", "oidc_manage"),
+                "{role} must not manage OIDC settings"
+            );
+        }
     }
 
     #[test]

@@ -54,6 +54,25 @@ test("first-run setup creates the tenant and admin", async ({ page }) => {
   await login(page);
 });
 
+test("switches to English via the lang-toggle and sees EN nav labels", async ({ page, context }) => {
+  await login(page);
+  // Switch to EN
+  await page.getByTestId("lang-toggle").click();
+  await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Payroll" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+  // The toggle now shows "TH" (to switch back)
+  await expect(page.getByTestId("lang-toggle")).toHaveText("TH");
+  // Cookie is set to en
+  const cookies = await context.cookies();
+  const langCookie = cookies.find((c) => c.name === "talentos_lang");
+  expect(langCookie?.value).toBe("en");
+  // Reload and confirm it persists
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
+  await context.clearCookies();
+});
+
 test("settings persist across reload", async ({ page }) => {
   await login(page);
   await page.goto("/settings");
@@ -1323,6 +1342,82 @@ test("HR adds a goal and updates its progress", async ({ page }) => {
   await expect(
     page.getByTestId("goal-row").filter({ hasText: "เพิ่มยอดขาย E2E" }).getByTestId("goal-progress"),
   ).toHaveValue("40");
+});
+
+test("manager workflow: reporting line, calibration, goal check-in", async ({ page }) => {
+  // Runs after the manager role test above has created manager-e2e@example.com,
+  // and after HR has created the "รอบประเมืน E2E" cycle + "เพิ่่่มยอดขาย E2E" goal for E2E001.
+  await login(page);
+
+  // 1. As HR, create a second employee that will be the manager's direct report.
+  await page.goto("/employees");
+  await page.getByTestId("add-employee").click();
+  await page.getByTestId("employee-code").fill("E2E002");
+  await page.getByTestId("employee-first-name").fill("สมสรี");
+  await page.getByTestId("employee-last-name").fill("ลู่กข่า E2E");
+  await page.getByTestId("employee-position").fill("Junior Engineer");
+  await page.getByTestId("employee-salary").fill("20000");
+  await page.getByTestId("employee-hire-date").fill("2026-02-01");
+  await page.getByTestId("save-employee").click();
+  await expect(page.getByText("เพิ่มพนักงานแล้ว")).toBeVisible();
+
+  // 2. Link the manager user to E2E001 (the employee who holds the review),
+  //    then assign E2E002's reporting manager to E2E001.
+  const linkRow = page.getByRole("row", { name: /E2E001/ });
+  await linkRow.getByRole("button", { name: "แก้ไข" }).click();
+  await page.getByTestId("employee-user").selectOption({ label: `${managerEmail} · ผู้จัดการ E2E` });
+  await page.getByTestId("save-employee").click();
+  await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
+
+  const reportRow = page.getByRole("row", { name: /E2E002/ });
+  await reportRow.getByRole("button", { name: "แก้ไข" }).click();
+  const managerOption = page.getByTestId("employee-manager").locator("option").filter({ hasText: "E2E001" });
+  await managerOption.waitFor({ state: "attached" });
+  const managerOptionValue = await managerOption.getAttribute("value");
+  await page.getByTestId("employee-manager").selectOption(managerOptionValue!);
+  await page.getByTestId("save-employee").click();
+  await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
+
+  // 3. Manager logs in and sees their direct report's review cycle.
+  await switchUser(page, managerEmail, "ManagerPass123!");
+  await page.goto("/performance");
+  await expect(page.getByTestId("cycle-row").filter({ hasText: "รอบประเมืน E2E" })).toBeVisible();
+  await page
+    .getByTestId("cycle-row")
+    .filter({ hasText: "รอบประเมืน E2E" })
+    .getByTestId("select-cycle")
+    .click();
+  await expect(page.getByTestId("calibration-employee")).toBeVisible();
+
+  // 4. Manager adds a calibration for their direct report.
+  const calibrationOption = page.getByTestId("calibration-employee").locator("option").filter({ hasText: "E2E002" });
+  await calibrationOption.waitFor({ state: "attached" });
+  await page.getByTestId("calibration-employee").selectOption((await calibrationOption.getAttribute("value"))!);
+  await page.getByTestId("calibration-rating").selectOption("4");
+  await page.getByTestId("calibration-notes").fill("E2E CAL");
+  await page.getByTestId("save-calibration").click();
+  await expect(page.getByText("บันทึกการจัดวางระดับแล้ว")).toBeVisible();
+  await expect(
+    page.getByTestId("calibration-row").filter({ hasText: "E2E002" }),
+  ).toContainText("4/5");
+
+  // 5. Manager logs a goal check-in for the direct report's goal.
+  await page.goto("/goals");
+  await page.getByTestId("checkin-goal").waitFor({ state: "attached" });
+  const checkinGoalOption = page
+    .getByTestId("checkin-goal")
+    .locator("option")
+    .filter({ hasText: "เพิ่่่่่มยอดขาย E2E" });
+  await checkinGoalOption.waitFor({ state: "attached" });
+  await page
+    .getByTestId("checkin-goal")
+    .selectOption((await checkinGoalOption.getAttribute("value"))!);
+  await page.getByTestId("checkin-note").fill("คืืบหน่าตำแผน");
+  await page.getByTestId("add-checkin").click();
+  await expect(page.getByText("บันทึก check-in แล้ว")).toBeVisible();
+  await expect(
+    page.getByTestId("checkin-row").filter({ hasText: "คืืบหน่าตำแผน" }),
+  ).toBeVisible();
 });
 
 test("employee acknowledges their performance review", async ({ page }) => {

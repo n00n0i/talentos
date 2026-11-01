@@ -2,6 +2,7 @@ mod cli;
 mod dto;
 mod handlers;
 mod metrics;
+mod metrics_alert;
 mod middleware;
 mod notify_worker;
 mod ratelimit;
@@ -148,6 +149,11 @@ async fn main() {
             pool.clone(),
             talentos_model_gw::HuakatiClient::new().ok().map(Arc::new),
         )),
+        base_url: std::env::var("APP_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty()),
+        http: reqwest::Client::new(),
+        oidc_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         started_at: std::time::Instant::now(),
     };
 
@@ -227,7 +233,15 @@ async fn main() {
     }
 
     metrics::init();
-    let app = router::build(state);
+    let app = router::build(state.clone());
+
+    // Business-metric alert sweep: POST to METRICS_ALERT_WEBHOOK when
+    // notification backlog or stuck-run age crosses the configured thresholds.
+    {
+        let alert_http = reqwest::Client::new();
+        let alert_cfg = metrics_alert::AlertConfig::from_env();
+        metrics_alert::spawn_worker(auth_pool.clone(), alert_http, alert_cfg);
+    }
 
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await

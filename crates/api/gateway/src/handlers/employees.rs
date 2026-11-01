@@ -135,6 +135,8 @@ pub struct EmployeeDto {
     pub national_id_masked: Option<String>,
     pub sso_number_masked: Option<String>,
     pub user_id: Option<Uuid>,
+    /// The employee's direct manager (reporting line).
+    pub manager_id: Option<Uuid>,
 }
 
 /// GET /api/v1/employees?q=&status=&limit=
@@ -158,7 +160,8 @@ pub async fn list(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
                   first_name_en, last_name_en, position_title, department, cost_center,
                   base_salary, hire_date, termination_date, status, pf_member,
-                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number, user_id
+                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number,
+                  user_id, manager_id
              FROM employees
             WHERE tenant_id = $1
               AND ($2 = 'all' OR status = $2)
@@ -635,6 +638,50 @@ pub async fn terminate(
         .into_response()
 }
 
+/// PUT /api/v1/employees/:id/manager — set or clear the reporting manager.
+#[derive(Debug, Deserialize)]
+pub struct ManagerBody {
+    pub manager_id: Option<Uuid>,
+}
+
+pub async fn set_manager(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ManagerBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    let tenant = talentos_kernel::TenantId(ctx.tenant_id.0);
+    match talentos_hr_runner::performance::set_employee_manager(
+        &state.pool,
+        tenant,
+        ctx.user_id.0,
+        id,
+        body.manager_id,
+    )
+    .await
+    {
+        Ok(()) => {
+            let updated = match fetch_one(&state, ctx.tenant_id.0, id).await {
+                Ok(Some(employee)) => employee,
+                Ok(None) => return not_found(),
+                Err(e) => return internal_err(&e),
+            };
+            (StatusCode::OK, Json(updated)).into_response()
+        }
+        Err(talentos_hr_runner::performance::PerformanceError::ReviewNotFound) => not_found(),
+        Err(e) => match e {
+            talentos_hr_runner::performance::PerformanceError::ManagerNotFound
+            | talentos_hr_runner::performance::PerformanceError::SelfAssignment => {
+                conflict("manager must be a different employee in this tenant")
+            }
+            other => internal_err(&other.to_string()),
+        },
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PfRateBody {
     pub effective_from: NaiveDate,
@@ -842,7 +889,8 @@ async fn fetch_one(
         r#"SELECT id, entity_id, employee_code, first_name_th, last_name_th,
                   first_name_en, last_name_en, position_title, department, cost_center,
                   base_salary, hire_date, termination_date, status, pf_member,
-                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number, user_id
+                  sso_enrolled, bank_name, bank_account_number, national_id, sso_number,
+                  user_id, manager_id
              FROM employees WHERE id = $1 AND tenant_id = $2"#,
     )
     .bind(id)
@@ -884,6 +932,7 @@ fn row_to_dto(
         national_id_masked: mask_value(pii, row.get("national_id")),
         sso_number_masked: mask_value(pii, row.get("sso_number")),
         user_id: row.get("user_id"),
+        manager_id: row.get("manager_id"),
     }
 }
 

@@ -26,6 +26,22 @@ type Review = {
   submitted_at: string | null;
 };
 
+type DirectReport = {
+  id: string;
+  employee_code: string;
+  employee_name: string;
+};
+
+type Calibration = {
+  id: string;
+  cycle_id: string;
+  employee_id: string;
+  employee_code: string;
+  employee_name: string;
+  calibrated_rating: number;
+  notes: string | null;
+};
+
 const emptyCycle = { name: "", period_start: "", period_end: "" };
 type Draft = { rating: string; strengths: string; improvements: string };
 
@@ -36,15 +52,23 @@ export default function PerformancePage() {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [form, setForm] = useState(emptyCycle);
   const [canWrite, setCanWrite] = useState(false);
+  const [canDirect, setCanDirect] = useState(false);
+  const [directReports, setDirectReports] = useState<DirectReport[]>([]);
+  const [calibrations, setCalibrations] = useState<Calibration[]>([]);
+  const [calibrationEmployee, setCalibrationEmployee] = useState("");
+  const [calibrationRating, setCalibrationRating] = useState("");
+  const [calibrationNotes, setCalibrationNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const loadCycles = useCallback(async () => {
-    const res = await gw<{ cycles: Cycle[] }>("api/v1/performance/cycles");
+    const res = await gw<{ cycles: Cycle[] }>(
+      canDirect ? "api/v1/me/performance/cycles" : "api/v1/performance/cycles",
+    );
     setCycles(res.cycles);
     setSelected((current) => res.cycles.find((c) => c.id === current?.id) ?? null);
-  }, []);
+  }, [canDirect]);
 
   const loadReviews = useCallback(async (cycleId: string) => {
     const res = await gw<{ reviews: Review[] }>(
@@ -56,17 +80,77 @@ export default function PerformancePage() {
   useEffect(() => {
     loadCycles().catch((e) => handleApiError(e, setError));
     gw<Me>("api/v1/auth/me")
-      .then((me) => setCanWrite(me.permissions.includes("employee.update")))
+      .then((me) => {
+        setCanWrite(me.permissions.includes("employee.update"));
+        setCanDirect(me.permissions.includes("performance.manage_direct"));
+      })
       .catch((e) => handleApiError(e, setError));
   }, [loadCycles]);
+
+  useEffect(() => {
+    if (!canDirect) return;
+    gw<{ direct_reports: DirectReport[] }>("api/v1/me/direct-reports")
+      .then((res) => setDirectReports(res.direct_reports))
+      .catch((e) => handleApiError(e, setError));
+  }, [canDirect]);
+
+  const loadCalibrations = useCallback(async (cycleId: string) => {
+    const res = await gw<{ calibrations: Calibration[] }>(
+      `api/v1/performance/cycles/${cycleId}/calibrations`,
+    );
+    setCalibrations(res.calibrations);
+  }, []);
+
+  useEffect(() => {
+    if (!canDirect || !selected) {
+      setCalibrations([]);
+      return;
+    }
+    loadCalibrations(selected.id).catch((e) => handleApiError(e, setError));
+  }, [canDirect, selected, loadCalibrations]);
+
+  async function saveCalibration() {
+    if (!selected || !calibrationEmployee || !calibrationRating) {
+      setError("เลือกพนักงานและคะแนนก่อนบันทึก");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(`api/v1/performance/cycles/${selected.id}/calibrations`, {
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: calibrationEmployee,
+          calibrated_rating: Number(calibrationRating),
+          notes: calibrationNotes.trim() || null,
+        }),
+      });
+      setCalibrationNotes("");
+      setCalibrationRating("");
+      await loadCalibrations(selected.id);
+      setNotice("บันทึกการจัดวางระดับแล้ว");
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!selected) {
       setReviews([]);
       return;
     }
+    // The full review table is read_all-gated server-side. Managers who only
+    // hold performance.manage_direct get their calibrations instead, so skip
+    // the reviews call for them.
+    if (!canWrite && canDirect) {
+      setReviews([]);
+      return;
+    }
     loadReviews(selected.id).catch((e) => handleApiError(e, setError));
-  }, [selected, loadReviews]);
+  }, [selected, canWrite, canDirect, loadReviews]);
 
   useEffect(() => {
     setDrafts(
@@ -409,6 +493,80 @@ export default function PerformancePage() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {selected && canDirect && (
+        <div className="card card-pad" style={{ marginTop: 12 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>
+            การจัดวางระดับ (Calibration) — ลูกข่าท่ีรายงานตรง
+          </h2>
+          {calibrations.length === 0 ? (
+            <div className="empty">ยงไม่มีกำรจัดวางระดัยในรอบนี้</div>
+          ) : (
+            <table className="table" style={{ marginBottom: 14 }}>
+              <thead>
+                <tr>
+                  <th>พนั กงาน</th>
+                  <th>คะแนนที่จัดวาง</th>
+                  <th>หมายเหตุ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calibrations.map((c) => (
+                  <tr key={c.id} data-testid="calibration-row">
+                    <td>
+                      {c.employee_name} ({c.employee_code})
+                    </td>
+                    <td>{c.calibrated_rating}/5</td>
+                    <td>{c.notes ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <select
+                data-testid="calibration-employee"
+                value={calibrationEmployee}
+                onChange={(e) => setCalibrationEmployee(e.target.value)}
+              >
+                <option value="">— เลือกพนั กงาน —</option>
+                {directReports.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.employee_code} · {r.employee_name}
+                  </option>
+                ))}
+              </select>
+              <select
+                data-testid="calibration-rating"
+                value={calibrationRating}
+                onChange={(e) => setCalibrationRating(e.target.value)}
+              >
+                <option value="">—</option>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <input
+                data-testid="calibration-notes"
+                placeholder="หมายเหตุ (ไมบั งคัก)"
+                value={calibrationNotes}
+                onChange={(e) => setCalibrationNotes(e.target.value)}
+              />
+            </div>
+            <button
+              className="btn btn-sm btn-primary"
+              data-testid="save-calibration"
+              disabled={busy}
+              onClick={saveCalibration}
+            >
+              บันทักลงกำรจัดวางระดัย
+            </button>
+          </div>
         </div>
       )}
     </>

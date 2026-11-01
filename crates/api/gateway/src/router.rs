@@ -7,10 +7,10 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms, goals,
-    graphql, health, leave, loans, mcp, me, memory, notifications, onboarding, ot, payroll,
-    performance, pf, plugins, privacy, recruitment, reports, settings, settlement, setup, training,
-    users,
+    ai, attendance, audit, auth, bank_templates, calendar, claims, delegations, documents,
+    employees, forms, goals, graphql, health, leave, loans, mcp, me, memory, notifications, oidc,
+    onboarding, ot, payroll, pdpa, performance, pf, plugins, privacy, recruitment, reports,
+    settings, settlement, setup, training, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -25,7 +25,11 @@ pub fn build(state: AppState) -> Router {
         .route(
             "/api/v1/auth/reset-password",
             post(users::accept_password_reset),
-        );
+        )
+        .layer(axum::Extension(state.http.clone()))
+        .layer(axum::Extension(state.oidc_cache.clone()))
+        .route("/api/v1/auth/oidc/authorize", get(oidc::authorize))
+        .route("/api/v1/auth/oidc/callback", get(oidc::callback));
 
     let protected = Router::new()
         .route("/api/v1/auth/me", get(auth::me))
@@ -47,6 +51,7 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/me/payslips/:id/render", get(me::render))
         .route("/api/v1/me/payslips/:id/50tawi", get(me::payslip_50tawi))
         .route("/api/v1/me/payslips/:id/pdf", get(me::pdf))
+        .route("/api/v1/me/payslips/:id/sign", post(me::sign_payslip))
         .route("/api/v1/me/attendance", get(me::my_attendance))
         .route("/api/v1/me/attendance/punch", post(me::punch))
         .route("/api/v1/me/privacy", get(privacy::status))
@@ -120,6 +125,22 @@ pub fn build(state: AppState) -> Router {
             post(performance::me_acknowledge),
         )
         .route(
+            "/api/v1/performance/cycles/:id/calibrations",
+            get(performance::list_calibrations).post(performance::upsert_calibration),
+        )
+        .route(
+            "/api/v1/me/performance/cycles",
+            get(performance::me_direct_cycles),
+        )
+        .route(
+            "/api/v1/me/direct-reports",
+            get(performance::me_direct_reports),
+        )
+        .route(
+            "/api/v1/employees/:id/manager",
+            axum::routing::put(employees::set_manager),
+        )
+        .route(
             "/api/v1/employees/:id/goals",
             get(goals::list).post(goals::create),
         )
@@ -127,6 +148,11 @@ pub fn build(state: AppState) -> Router {
             "/api/v1/goals/:id",
             patch(goals::update).delete(goals::remove),
         )
+        .route(
+            "/api/v1/goals/:id/check-ins",
+            get(goals::list_check_ins).post(goals::add_check_in),
+        )
+        .route("/api/v1/me/direct-goals", get(goals::me_direct_goals))
         .route("/api/v1/me/goals", get(goals::me_list))
         .route(
             "/api/v1/jobs",
@@ -153,6 +179,7 @@ pub fn build(state: AppState) -> Router {
             patch(recruitment::update_offer).delete(recruitment::remove_offer),
         )
         .route("/api/v1/offers/:id/pdf", get(recruitment::offer_pdf))
+        .route("/api/v1/offers/:id/sign", post(recruitment::offer_sign))
         .route(
             "/api/v1/candidates/:id/interviews",
             get(recruitment::list_interviews).post(recruitment::schedule_interview),
@@ -213,7 +240,17 @@ pub fn build(state: AppState) -> Router {
             axum::routing::put(settings::put_entity),
         )
         .route("/api/v1/settings/system", get(settings::system))
+        .route("/api/v1/privacy/policy", get(pdpa::policy))
+        .route("/api/v1/privacy/purge/:employee_id", post(pdpa::purge))
+        .route(
+            "/api/v1/privacy/retention-purge",
+            post(pdpa::retention_purge),
+        )
         .route("/api/v1/audit", get(audit::list))
+        .route(
+            "/api/v1/auth/oidc/settings",
+            get(oidc::get_settings).post(oidc::save_settings),
+        )
         .route("/api/v1/notifications", get(notifications::list))
         .route(
             "/api/v1/notifications/:id/retry",
@@ -283,7 +320,16 @@ pub fn build(state: AppState) -> Router {
         )
         .route(
             "/api/v1/payroll/runs/:id/bank-payout.csv",
-            get(forms::export_bank_payout_csv),
+            get(bank_templates::export_bank_payout_csv_handler),
+        )
+        .route(
+            "/api/v1/payout/bank-templates",
+            get(bank_templates::list_bank_template_handlers)
+                .post(bank_templates::create_bank_template_handler),
+        )
+        .route(
+            "/api/v1/payout/bank-templates/:id",
+            get(bank_templates::get_bank_template_handler),
         )
         .route("/api/v1/reports/pnd1a.csv", get(forms::export_pnd1a_csv))
         .route(
@@ -448,6 +494,7 @@ pub fn build(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health::health))
         .route("/metrics", get(crate::metrics::endpoint))
+        .route("/business-metrics", get(crate::metrics::business_endpoint))
         .merge(public)
         .merge(protected)
         .layer(cors)

@@ -232,3 +232,112 @@ async fn validation() {
 
     cleanup(&raw, tenant_id).await;
 }
+
+use talentos_hr_runner::goals::{add_goal_check_in, list_goal_check_ins, list_goals_for_manager};
+
+/// Assign `manager_id` on a seeded employee so the manager's user can manage them.
+async fn link_manager(
+    pool: &sqlx::PgPool,
+    tenant_id: uuid::Uuid,
+    report: uuid::Uuid,
+    manager: uuid::Uuid,
+) {
+    let mut tx = pool.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query("UPDATE employees SET manager_id = $3 WHERE id = $1 AND tenant_id = $2")
+        .bind(report)
+        .bind(tenant_id)
+        .bind(manager)
+        .execute(&mut *tx)
+        .await
+        .expect("set manager");
+    tx.commit().await.expect("commit");
+}
+
+#[tokio::test]
+async fn goal_check_ins_manager_only_and_audited() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = sqlx::PgPool::connect(&url).await.expect("connect");
+    let pool = talentos_db::TenantPool::connect(&url, 2)
+        .await
+        .expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 2).await;
+    let report = entities[0].1;
+    let manager = entities[1].1;
+    let tenant = TenantId(tenant_id);
+
+    // The manager user (linked to `manager`) manages `report`.
+    let manager_user = user_id_of(&raw, tenant_id, manager).await;
+    link_manager(&raw, tenant_id, report, manager).await;
+
+    // A goal owned by the report.
+    let input = GoalInput {
+        cycle_id: None,
+        title: " เป้าหมาย E2E".into(),
+        description: None,
+        target: None,
+    };
+    let owner_user = user_id_of(&raw, tenant_id, report).await;
+    let goal = create_goal(&pool, tenant, owner_user, report, &input)
+        .await
+        .expect("goal");
+
+    // The manager can add a check-in.
+    let check_in = add_goal_check_in(&pool, tenant, manager_user, goal.id, "คืบหน้าดี")
+        .await
+        .expect("check-in");
+    assert_eq!(check_in.goal_id, goal.id);
+    assert_eq!(check_in.note, "คืบหน้าดี");
+
+    // A non-manager (the report's own user) cannot add a check-in.
+    assert!(matches!(
+        add_goal_check_in(&pool, tenant, owner_user, goal.id, "ไม่ได้").await,
+        Err(talentos_hr_runner::goals::CheckInError::NotManager)
+    ));
+
+    // List returns the check-in.
+    let check_ins = list_goal_check_ins(&pool, tenant, goal.id)
+        .await
+        .expect("check-ins");
+    assert!(check_ins.iter().any(|c| c.id == check_in.id));
+
+    // Validation: empty note rejected.
+    assert!(matches!(
+        add_goal_check_in(&pool, tenant, manager_user, goal.id, "  ").await,
+        Err(talentos_hr_runner::goals::CheckInError::InvalidNote)
+    ));
+
+    let audits: i64 = {
+        let mut tx = raw.begin().await.expect("begin");
+        sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+            .bind(tenant_id.to_string())
+            .execute(&mut *tx)
+            .await
+            .expect("set tenant");
+        let n = sqlx::query_scalar(
+            "SELECT count(*) FROM audit_log WHERE tenant_id = $1 AND action = 'performance.check_in'",
+        )
+        .bind(tenant_id)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("check-in audit count");
+        let _ = tx.rollback().await;
+        n
+    };
+    assert!(audits >= 1, "check-in is audit-logged");
+
+    // The manager's direct goals include this goal.
+    let direct = list_goals_for_manager(&pool, tenant, manager_user)
+        .await
+        .expect("direct goals");
+    assert!(direct.iter().any(|g| g.id == goal.id));
+
+    cleanup(&raw, tenant_id).await;
+}

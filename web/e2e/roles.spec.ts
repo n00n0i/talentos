@@ -114,7 +114,17 @@ test("payroll manager is limited to payroll, reports, people", async ({ page }) 
 
 test("manager is limited to team and self-service areas", async ({ page }) => {
   await login(page, MANAGER);
-  for (const path of ["/attendance", "/leave", "/ot", "/claims", "/clock", "/privacy", "/me/reviews"]) {
+  for (const path of [
+    "/attendance",
+    "/leave",
+    "/ot",
+    "/claims",
+    "/clock",
+    "/privacy",
+    "/me/reviews",
+    "/performance",
+    "/goals",
+  ]) {
     await page.goto(path);
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
   }
@@ -132,8 +142,6 @@ test("manager is limited to team and self-service areas", async ({ page }) => {
     "/onboarding",
     "/recruitment",
     "/training",
-    "/performance",
-    "/goals",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);

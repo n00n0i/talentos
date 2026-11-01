@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { gw, handleApiError, Me } from "@/lib/api";
+import { useI18N } from "@/lib/i18n";
 
 type Num = string | number;
 type PayrollSettings = {
@@ -87,6 +88,7 @@ const LEAVE_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function SettingsPage() {
+  const { t } = useI18N();
   const [system, setSystem] = useState<System | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [entities, setEntities] = useState<Entity[]>([]);
@@ -99,7 +101,7 @@ export default function SettingsPage() {
   const [totpCode, setTotpCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [recoveryTotp, setRecoveryTotp] = useState("");
-  const [sessions, setSessions] = useState<
+    const [sessions, setSessions] = useState<
     { id: number; created_at: string; expires_at: string; ip_address: string | null; user_agent: string | null }[]
   >([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -108,10 +110,43 @@ export default function SettingsPage() {
   const [ruleType, setRuleType] = useState("");
   const [ruleMinDays, setRuleMinDays] = useState("");
   const [ruleChain, setRuleChain] = useState("hr_admin");
+  const [canPurge, setCanPurge] = useState(false);
+  const [oidc, setOidc] = useState<{
+    configured: boolean;
+    issuer?: string;
+    client_id?: string;
+    client_secret_masked?: string | null;
+    allowed_domains?: string[];
+    enabled?: boolean;
+  } | null>(null);
+  const [oidcIssuer, setOidcIssuer] = useState("");
+  const [oidcClientId, setOidcClientId] = useState("");
+  const [oidcClientSecret, setOidcClientSecret] = useState("");
+  const [oidcAllowedDomains, setOidcAllowedDomains] = useState("");
+  const [oidcEnabled, setOidcEnabled] = useState(false);
+  const [canManageOidc, setCanManageOidc] = useState(false);
+  const [pdpaPolicy, setPdpaPolicy] = useState<{
+    payroll_retention_years: number;
+    ops_retention_months: number;
+  } | null>(null);
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
-      .then((me) => setTotpEnabled(Boolean(me.totp_enabled)))
+      .then((me) => {
+        setTotpEnabled(Boolean(me.totp_enabled));
+        if (me.permissions.includes("privacy.purge")) {
+          setCanPurge(true);
+          gw<{ payroll_retention_years: number; ops_retention_months: number }>(
+            "api/v1/privacy/policy"
+          )
+            .then(setPdpaPolicy)
+            .catch(() => {});
+        }
+        if (me.permissions.includes("auth.oidc_manage")) {
+          setCanManageOidc(true);
+          loadOidcSettings();
+        }
+      })
       .catch((e) => handleApiError(e, setError));
     loadSessions();
     loadNotifications();
@@ -129,6 +164,75 @@ export default function SettingsPage() {
       })
       .catch((e) => handleApiError(e, setError));
   }, []);
+
+  async function loadOidcSettings() {
+    try {
+      const res = await gw<{
+        configured: boolean;
+        issuer?: string;
+        client_id?: string;
+        client_secret_masked?: string | null;
+        allowed_domains?: string[];
+        enabled?: boolean;
+      }>("api/v1/auth/oidc/settings");
+      setOidc(res);
+      if (res.configured) {
+        setOidcIssuer(res.issuer ?? "");
+        setOidcClientId(res.client_id ?? "");
+        setOidcAllowedDomains((res.allowed_domains ?? []).join(", "));
+        setOidcEnabled(Boolean(res.enabled));
+      }
+    } catch {
+      setOidc({ configured: false });
+    }
+  }
+
+  async function saveOidc(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const domains = oidcAllowedDomains
+        .split(",")
+        .map((d) => d.trim())
+        .filter((d) => d.length > 0);
+      await gw("api/v1/auth/oidc/settings", {
+        method: "POST",
+        body: JSON.stringify({
+          issuer: oidcIssuer,
+          client_id: oidcClientId,
+          client_secret: oidcClientSecret,
+          allowed_domains: domains,
+          enabled: oidcEnabled,
+        }),
+      });
+      setOidcClientSecret("");
+      await loadOidcSettings();
+      setNotice(t("settings.oidcSavedNotice"));
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function purgeNow() {
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await gw<{ purged: number }>("api/v1/privacy/retention-purge", {
+        method: "POST",
+        body: "{}",
+      });
+      setNotice(`Purge now: ลบข้อมูลพนกงาน ${res.purged} คน`);
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function loadSessions() {
     try {
@@ -178,7 +282,7 @@ export default function SettingsPage() {
       setRuleMinDays("");
       setRuleChain("hr_admin");
       await loadRules();
-      setNotice("บันทึกเงื่อนไขการอนุมัติแล้ว");
+      setNotice(t("settings.ruleSavedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -192,7 +296,7 @@ export default function SettingsPage() {
     try {
       await gw(`api/v1/leave/approval-rules/${id}`, { method: "DELETE" });
       await loadRules();
-      setNotice("ลบเงื่อนไขแล้ว");
+      setNotice(t("settings.ruleDeletedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     }
@@ -223,7 +327,7 @@ export default function SettingsPage() {
           gl_claim_account: policy.gl_claim_account,
         }),
       });
-      setNotice("บันทึกสูตรเงินเดือนแล้ว — มีผลกับรอบถัดไป");
+      setNotice(t("settings.savedPolicyNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -241,7 +345,7 @@ export default function SettingsPage() {
         method: "PUT",
         body: JSON.stringify({ name: tenant.name }),
       });
-      setNotice("บันทึกชื่อองค์กรแล้ว");
+      setNotice(t("settings.savedTenantNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -264,7 +368,7 @@ export default function SettingsPage() {
             : e
         )
       );
-      setNotice("บันทึกข้อมูลนิติบุคคลแล้ว");
+      setNotice(t("settings.savedEntityNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -306,7 +410,7 @@ export default function SettingsPage() {
       if (!enabling) {
         setRecoveryCodes(null);
       }
-      setNotice(enabling ? "เปิดใช้ 2FA แล้ว" : "ปิด 2FA แล้ว");
+      setNotice(enabling ? t("settings.twoFaEnabledNotice") : t("settings.twoFaDisabledNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -330,7 +434,7 @@ export default function SettingsPage() {
       });
       setRecoveryCodes(res.codes);
       setRecoveryTotp("");
-      setNotice("สร้างรหัสสำรองใหม่แล้ว");
+      setNotice(t("settings.recoveryCodesRegeneratedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -363,7 +467,7 @@ export default function SettingsPage() {
     try {
       await gw(`api/v1/notifications/${id}/retry`, { method: "POST" });
       await loadNotifications();
-      setNotice("ส่งซ้ำการแจ้งเตือนแล้ว");
+      setNotice(t("settings.notificationRetriedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     }
@@ -373,8 +477,8 @@ export default function SettingsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ตั้งค่า</h1>
-          <p className="page-sub">บริหารจัดการองค์กร สูตรเงินเดือน และสถานะระบบ</p>
+          <h1>{t("settings.title")}</h1>
+          <p className="page-sub">{t("settings.subtitle")}</p>
         </div>
       </div>
 
@@ -396,7 +500,7 @@ export default function SettingsPage() {
       <div className="grid-2">
         <form className="card card-pad" onSubmit={savePolicy} style={{ display: "grid", gap: 14 }}>
           <div>
-            <h2>สูตรเงินเดือนและ OT</h2>
+            <h2>{t("settings.payrollFormulas")}</h2>
             <p className="hint" style={{ marginTop: 4 }}>
               ค่าเหล่านี้เป็นนโยบายบริษัท — อัตราตามกฎหมาย (SSO/ภาษี) แก้ที่นี่ไม่ได้
             </p>
@@ -558,14 +662,32 @@ export default function SettingsPage() {
           </div>
           <div>
             <button className="btn btn-primary" data-testid="save-policy" type="submit" disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "บันทึกสูตร"}
+              {busy ? t("common.loading") : t("common.save")}
             </button>
           </div>
         </form>
 
+        {canPurge && (
+          <div className="card card-pad" data-testid="pdpa-purge-card" style={{ display: "grid", gap: 12 }}>
+            <h2 style={{ fontSize: 16 }}>PDPA: การเก็บรักษาและลบข้อมูล</h2>
+            <p className="hint">
+              เก็บรักษาเอกสารภาษี/เงินเดือน {pdpaPolicy?.payroll_retention_years ?? 7} ปี ·
+              ข้อมูลบรืหารหลังลาออก {pdpaPolicy?.ops_retention_months ?? 12} เดือน
+            </p>
+            <button
+              className="btn btn-primary"
+              data-testid="pdpa-purge"
+              disabled={busy}
+              onClick={purgeNow}
+            >
+              ลบข้อมูลท่ีหมดกําหนด (Purge now)
+            </button>
+          </div>
+        )}
+
         <div className="card">
           <div className="card-head">
-            <h2>สถานะระบบ</h2>
+            <h2>{t("settings.systemStatus")}</h2>
             <span className="hint">ตรวจสอบตอนเปิดหน้า</span>
           </div>
           <table className="table">
@@ -618,7 +740,7 @@ export default function SettingsPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>เงื่อนไขการอนุมัติ</h2>
+          <h2>{t("settings.approvalRules")}</h2>
           <span className="hint" data-testid="rules-count">{rules.length} เงื่อนไข</span>
         </div>
         <form className="form-row" onSubmit={addRule} style={{ padding: 16, gap: 10, alignItems: "end" }}>
@@ -655,7 +777,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <button className="btn btn-primary" data-testid="add-rule" type="submit" disabled={busy}>
-              เพิ่มเงื่อนไข
+              {t("settings.addRule")}
             </button>
           </div>
         </form>
@@ -683,7 +805,7 @@ export default function SettingsPage() {
                   </td>
                   <td className="num">
                     <button className="btn btn-sm btn-danger" onClick={() => deleteRule(rule.id)}>
-                      ลบ
+                      {t("common.delete")}
                     </button>
                   </td>
                 </tr>
@@ -695,7 +817,7 @@ export default function SettingsPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>การแจ้งเตือน</h2>
+          <h2>{t("settings.notifications")}</h2>
           <span className="hint" data-testid="notify-summary">
             {notifySummary ? (
               <>
@@ -757,7 +879,7 @@ export default function SettingsPage() {
       </div>
 
       <form className="card card-pad" onSubmit={toggle2fa} style={{ display: "grid", gap: 12 }}>
-        <h2>ความปลอดภัย (2FA)</h2>
+        <h2>{t("settings.security2fa")}</h2>
         <p data-testid="totp-status">
           <span className={`badge ${totpEnabled ? "success" : ""}`}>
             {totpEnabled ? "เปิดใช้งานอยู่" : "ปิดอยู่"}
@@ -866,9 +988,89 @@ export default function SettingsPage() {
         )}
       </form>
 
+      {canManageOidc && (
+        <form className="card card-pad" data-testid="oidc-settings" onSubmit={saveOidc} style={{ display: "grid", gap: 12 }}>
+          <h2>{t("settings.ssoOidc")}</h2>
+          <p data-testid="oidc-status" style={{ margin: 0 }}>
+            <span className={`badge ${oidc?.configured ? "success" : ""}`}>
+              {oidc?.configured ? t("settings.oidcStatusConfigured") : t("settings.oidcStatusNotConfigured")}
+            </span>
+            {oidc?.configured && oidc.client_secret_masked && (
+              <span className="hint" style={{ marginLeft: 8 }}>
+                secret: {oidc.client_secret_masked}
+              </span>
+            )}
+          </p>
+          <p className="hint">
+            ตั้งค่า SSO แบบ OIDC สำหรับเข้าสู่ระบบ — ระบุ issuer, client id/secret และ domain ที่อนุญาต
+          </p>
+          <div className="field">
+            <label>{t("settings.oidcIssuer")}</label>
+            <input
+              data-testid="oidc-issuer"
+              value={oidcIssuer}
+              onChange={(e) => setOidcIssuer(e.target.value)}
+              placeholder="https://sso.company.com"
+              required
+            />
+          </div>
+          <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
+            <div className="field">
+              <label>{t("settings.oidcClientId")}</label>
+              <input
+                data-testid="oidc-client-id"
+                value={oidcClientId}
+                onChange={(e) => setOidcClientId(e.target.value)}
+                required
+              />
+            </div>
+            <div className="field">
+              <label>{t("settings.oidcClientSecret")}</label>
+              <input
+                data-testid="oidc-client-secret"
+                type="password"
+                value={oidcClientSecret}
+                onChange={(e) => setOidcClientSecret(e.target.value)}
+                placeholder={oidc?.configured ? "•••• (ไม่ว่าง = ไม่เปลี่ยน)" : "Secret"}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label>{t("settings.oidcAllowedDomains")}</label>
+            <input
+              data-testid="oidc-allowed-domains"
+              value={oidcAllowedDomains}
+              onChange={(e) => setOidcAllowedDomains(e.target.value)}
+              placeholder="example.com, corp.example.com"
+            />
+            <p className="hint">ไม่ว่าง = อนุญาตทุก domain · คั่นด้วยคอมม่า</p>
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              data-testid="oidc-enabled"
+              checked={oidcEnabled}
+              onChange={(e) => setOidcEnabled(e.target.checked)}
+              style={{ width: "auto" }}
+            />
+            <span>{t("settings.oidcEnabled")}</span>
+          </label>
+          <div>
+            <button
+              className="btn btn-primary"
+              data-testid="oidc-save"
+              type="submit"
+              disabled={busy || (oidc?.configured && oidcClientSecret === "")}
+            >
+              {busy ? t("common.loading") : t("common.save")}
+            </button>
+          </div>
+        </form>
+      )}
+
       <div className="card">
         <div className="card-head">
-          <h2>อุปกรณ์และเซสชัน</h2>
+          <h2>{t("sessions.devices")}</h2>
           <span className="hint">{sessions.length} เซสชันใช้งานอยู่</span>
         </div>
         <table className="table">
@@ -909,7 +1111,7 @@ export default function SettingsPage() {
       </div>
 
       <form className="card card-pad" onSubmit={saveTenant} style={{ display: "grid", gap: 12 }}>
-        <h2>องค์กร</h2>
+        <h2>{t("settings.organization")}</h2>
         <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
           <div className="field">
             <label>ชื่อองค์กร</label>
@@ -930,7 +1132,7 @@ export default function SettingsPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>นิติบุคคล</h2>
+          <h2>{t("settings.entities")}</h2>
           <span className="hint">{entities.length} แห่ง</span>
         </div>
         <table className="table">
@@ -956,11 +1158,12 @@ export default function SettingsPage() {
 }
 
 function StatusRow({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
+  const { t } = useI18N();
   return (
     <tr>
       <td>{label}</td>
       <td>
-        <span className={`badge ${ok ? "success" : "danger"}`}>{ok ? "พร้อม" : "ต้องแก้ไข"}</span>
+        <span className={`badge ${ok ? "success" : "danger"}`} data-testid="status-row-badge">{ok ? t("common.ready") : t("common.fix")}</span>
       </td>
       <td className="hint">{detail}</td>
     </tr>
@@ -976,6 +1179,7 @@ function EntityRow({
   busy: boolean;
   onSave: (entity: Entity, name: string, taxId: string, ssoAccount: string, branch: string) => void;
 }) {
+  const { t } = useI18N();
   const [name, setName] = useState(entity.name);
   const [taxId, setTaxId] = useState(entity.tax_id ?? "");
   const [ssoAccount, setSsoAccount] = useState(entity.sso_account ?? "");
@@ -1026,7 +1230,7 @@ function EntityRow({
       </td>
       <td className="num">
         <button className="btn btn-sm" disabled={busy} onClick={() => onSave(entity, name, taxId, ssoAccount, branch)}>
-          บันทึก
+          {t("common.save")}
         </button>
       </td>
     </tr>

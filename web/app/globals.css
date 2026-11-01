@@ -221,6 +221,24 @@ h3 {
   color: var(--text);
   border-color: var(--line-strong);
 }
+.lang-toggle {
+  width: 40px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.lang-toggle:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
 .icon {
   display: block;
   flex: none;

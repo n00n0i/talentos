@@ -1,6 +1,6 @@
 # Build status — verified locally
 
-Last verified: 2026-10-31 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, PostgreSQL 16 + pgvector.
+Last verified: 2026-11-01 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, PostgreSQL 16 + pgvector.
 
 ## Gate results
 
@@ -8,8 +8,8 @@ Last verified: 2026-10-31 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **451 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 63 files apply cleanly (including `20261209000001_review_ack.sql` for review acknowledgement) |
+| Tests | `cargo test --workspace` | **498 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 69 files apply cleanly (including `20261214000001_bank_templates.sql`, `20261213000001_document_signatures.sql`, `20261212000001_pdpa_retention.sql`, `20261211000001_performance_manager.sql`, `20261210000001_candidate_pii.sql`, `20261101000003_tenant_oidc_config.sql`) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 25, rag 7,
@@ -34,7 +34,19 @@ purge, stats), 2FA recovery/session units 5 (format/hash/normalize), approval ru
 tenant scoping), privacy 3 (consent idempotency/version, export scope/decrypt/audit,
 account-only), documents 4 (expiry/file lifecycle/tenant+self isolation), onboarding 3
 (standard/dates, completion/duplicates, self/RLS), recruitment 2 (pipeline, validation/isolation), training 2 (expiry/validation, self/RLS), performance 2 (start/submit/close/acknowledge, isolation), goals 2 (CRUD/filter, validation/isolation).
-Total: 451 passed, 1 ignored (`load.rs`).
+Total: 498 passed, 1 ignored (`load.rs`).
+
+New in this cycle (handoff-execution branch, 2026-11-01):
+- gateway business metrics 8 tests (outbox backlog, payroll run status, stuck-run age)
+- gateway alert webhook 7 tests (thresholds, payload shape, sweep)
+- bank template 4 tests (RLS isolation, create audit, unverified default, invalid field 422)
+- OIDC 8 tests (discovery cache, PKCE S256, state sign/verify round-trip + tamper, callback user-link DB tests: link existing active, create new in empty tenant, reject inactive)
+- esign 4 tests (payslip hash + audit, idempotent per-signer, not-owned rejected, empty name rejected)
+- PDPA 6 tests (PII wiped, payslips retained, ops data purged per cutoff, audit row, tenant isolation, retention purge only expired)
+- performance manager 4 tests (manager assignment + audit, self/cross-tenant rejection, manager-scoped cycles/direct reports, calibration upsert + not-manager rejection)
+- goals check-in 3 tests (manager-only, audit, direct-goal listing)
+- authz 44 tests (new `performance.manage_direct`, `privacy.purge`, `auth.oidc_manage`, `payout_template.*` permissions)
+- i18n vitest 11 tests (th/en resolution, fallback, interpolation, dict integrity)
 
 Manual HTTP smoke test (local, real Postgres + Redis + Chromium): health → login →
 `/auth/me` → `/ai/tools` → create payroll run → run reaches `pending_approval` with
@@ -107,12 +119,26 @@ classified holiday > weekend > weekday automatically. HTTPS is a compose overlay
 (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout.
-Browser E2E (`web/e2e`, Playwright) passes 53/53 locally and runs in CI: invite
+Browser E2E (`web/e2e`, Playwright) passes 55/55 locally and runs in CI: invite
 acceptance → login, settings + audit, employee → attendance → payroll → approval,
 holiday OT, user invite, password reset, self-service payslips, employee clock
 punch with GPS, HR shift creation and day correction/approval, and employee leave
 request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LINE id save, OT request → HR approval (plus approved history), a two-step manager→HR leave chain, opening leave-balance CSV import, the reports/GL page, a loan/advance with payroll installment, an expense claim with receipt approval, a final-settlement draft, a privacy-notice acceptance plus personal-data export, an expiring employee document with a downloadable file, a standard onboarding checklist, a recruitment job with a candidate moved to interview, an expiring training certificate, a performance cycle with a submitted review, a goal with updated progress, a candidate CV upload/download, its stage history, an interview, and an offer letter with status/PDF link, and employee acknowledgement of a review. Payroll load test: 500 employees in ~0.38 s locally
 (~1,300/s).
+
+New in this cycle (2026-11-01):
+- EN i18n layer: `lang-toggle` TH/EN switcher; 11 vitest unit tests + 1 Playwright case
+- Performance manager workflow: manager links to employee → direct-report cycles + calibrations + goal check-ins (4 service tests + 1 E2E journey)
+- PDPA purge: `pdpa-purge` admin button + retention policy in `/settings` (6 service tests)
+- E-signature: payslip sign button on `/me/payslips` (`payslip-sign` data-testid, 4 service tests)
+- OIDC settings: `/settings` OIDC card with save/reload (1 Playwright case, 8 gateway tests)
+- Ops gauges: `/business-metrics` endpoint + alert webhook + `scripts/backup.sh`
+
+Note: the `creates an employee, records OT, runs and approves payroll` E2E case
+has a pre-existing non-idempotent design (depends on the serial `first-run setup`
+test having run first; fails with `employee_code already exists` on re-run without
+a clean tenant). It passes in a clean-DB serial run (handoff §4.5: run E2E after
+`DELETE FROM tenants`).
 
 ## Known risks
 

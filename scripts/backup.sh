@@ -10,9 +10,9 @@ stamp="$(date +%Y%m%d-%H%M%S)"
 file="$BACKUP_DIR/talentos-$stamp.sql.gz"
 
 if [ -n "${PG_HOST:-}" ]; then
-    # Host mode: psql on the host with DATABASE_ADMIN_URL or PG_* variables.
-    PGPASSWORD="${PGPASSWORD:-}" psql -h "$PG_HOST" -U "${PG_USER:-talentos}" \
-        -d "${PG_DATABASE:-talentos}" --no-owner --clean --if-exists \
+    # Host mode: pg_dump on the host with DATABASE_ADMIN_URL or PG_* variables.
+    PGPASSWORD="${PGPASSWORD:-}" pg_dump -h "$PG_HOST" -U "${PG_USER:-talentos}" \
+        -d "${PG_DATABASE:-talentos}" --no-owner \
         | gzip > "$file"
 else
     # Container mode (default): run pg_dump inside the compose postgres service.

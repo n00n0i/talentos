@@ -119,7 +119,7 @@ classified holiday > weekend > weekday automatically. HTTPS is a compose overlay
 (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout.
-Browser E2E (`web/e2e`, Playwright) passes 55/55 locally and runs in CI: invite
+Browser E2E (`web/e2e`, Playwright) passes 56/56 locally and runs in CI: invite
 acceptance → login, settings + audit, employee → attendance → payroll → approval,
 holiday OT, user invite, password reset, self-service payslips, employee clock
 punch with GPS, HR shift creation and day correction/approval, and employee leave

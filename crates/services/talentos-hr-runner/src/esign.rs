@@ -78,7 +78,10 @@ pub async fn external_provider(provider: &str) -> String {
 }
 
 fn provider_name() -> String {
-    std::env::var("E_SIGNATURE_PROVIDER").unwrap_or_else(|_| "internal".into())
+    match std::env::var("E_SIGNATURE_PROVIDER") {
+        Ok(name) => format!("internal({name})"),
+        Err(_) => "internal".to_string(),
+    }
 }
 
 fn sha256_hex(bytes: &[u8]) -> String {

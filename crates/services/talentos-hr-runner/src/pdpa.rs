@@ -149,6 +149,7 @@ pub async fn purge_employee_pii(
         policy.ops_retention_months,
     );
     if let Some(cutoff) = cutoff {
+        // shortcut: purged document blobs remain on disk — no stable per-employee prefix at upload; follow-up task for blob cleanup
         let pairs = [
             (
                 "SELECT count(*) FROM attendance_days
@@ -183,10 +184,10 @@ pub async fn purge_employee_pii(
             (
                 "SELECT count(*) FROM employee_documents
                   WHERE tenant_id = $1 AND employee_id = $2
-                    AND (expiry_date IS NULL OR expiry_date < $3)",
+                    AND COALESCE(expiry_date, created_at::date) < $3",
                 "DELETE FROM employee_documents
                   WHERE tenant_id = $1 AND employee_id = $2
-                    AND (expiry_date IS NULL OR expiry_date < $3)",
+                    AND COALESCE(expiry_date, created_at::date) < $3",
             ),
         ];
         for (count_sql, delete_sql) in pairs {
@@ -248,7 +249,6 @@ pub async fn run_retention_purge(
     actor_type: &str,
 ) -> Result<Vec<PurgeResult>, PdpaError> {
     let policy = get_policy(pool, tenant_id).await?;
-
     let due: Vec<Uuid> = {
         let mut tx = pool.begin_tenant(tenant_id).await?;
         let ids = sqlx::query_scalar::<_, Uuid>(
@@ -274,12 +274,4 @@ pub async fn run_retention_purge(
         results.push(result);
     }
     Ok(results)
-}
-
-/// The tenant's policy value pair, for the settings UI.
-pub fn policy_defaults() -> (i32, i32) {
-    (
-        DEFAULT_PAYROLL_RETENTION_YEARS,
-        DEFAULT_OPS_RETENTION_MONTHS,
-    )
 }

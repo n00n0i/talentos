@@ -36,18 +36,27 @@ async fn terminated_with_ops_data(
     let terminated_on = today - chrono::Duration::days(terminated_ago_days);
     sqlx::query(
         "UPDATE employees
-            SET termination_date = $3, status = 'terminated',
-                national_id = '3100111111111', bank_account_number = $4, sso_number = $5
-          WHERE id = $1",
+            SET national_id = '3100111111111', bank_account_number = $3, sso_number = $4
+          WHERE tenant_id = $2 AND id = $1",
     )
     .bind(employee_id)
     .bind(tenant_id)
-    .bind(terminated_on)
     .bind(enc("999-0-12345-6"))
     .bind(enc("11-00111111-1"))
     .execute(&mut *tx)
     .await
     .expect("terminate");
+    sqlx::query(
+        "UPDATE employees
+                   SET termination_date = $3, status = 'terminated'
+                 WHERE tenant_id = $2 AND id = $1",
+    )
+    .bind(employee_id)
+    .bind(tenant_id)
+    .bind(terminated_on)
+    .execute(&mut *tx)
+    .await
+    .expect("terminate dates");
     // Old operational data (outside the window) and recent (inside).
     let old_date = today - chrono::Duration::days(terminated_ago_days + 180);
     let recent_date = terminated_on;
@@ -312,6 +321,116 @@ async fn retention_purge_touches_only_expired_terminated_employees() {
     }
     let _ = tx.rollback().await;
 
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn recent_unexpiring_doc_not_purged() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+    let tenant = TenantId(tenant_id);
+
+    // Terminated 18 months ago; 12-month retention → cutoff is 6 months ago (in the past).
+    // Seed a document created yesterday with no expiry: it must survive.
+    terminated_with_ops_data(&raw, tenant_id, entity_id, employee_id, 540).await;
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        r#"INSERT INTO employee_documents (tenant_id, employee_id, doc_type, title, created_at)
+           VALUES ($1, $2, 'other', 'recent-doc', now() - interval '1 day')"#,
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .execute(&mut *tx)
+    .await
+    .expect("insert recent doc");
+    let _ = tx.commit().await;
+
+    let _result = purge_employee_pii(&pool, tenant, employee_id, user_id, "user")
+        .await
+        .expect("purge");
+    let mut tx2 = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx2)
+        .await
+        .expect("set tenant");
+    let docs: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM employee_documents
+          WHERE tenant_id = $1 AND employee_id = $2 AND title = 'recent-doc'",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .fetch_one(&mut *tx2)
+    .await
+    .expect("doc count");
+    assert_eq!(docs, 1, "recent unexpiring doc must survive the purge");
+    let _ = tx2.rollback().await;
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
+async fn old_unexpiring_doc_purged() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entity_id, employee_id) = seed_tenant_employee(&raw).await;
+    let user_id = user_id_of(&raw, tenant_id, employee_id).await;
+    let tenant = TenantId(tenant_id);
+
+    // Terminated 18 months ago; 12-month retention → cutoff is 6 months ago (in the past).
+    // Seed a document created 2 years ago with no expiry: it must be purged.
+    terminated_with_ops_data(&raw, tenant_id, entity_id, employee_id, 540).await;
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    sqlx::query(
+        r#"INSERT INTO employee_documents (tenant_id, employee_id, doc_type, title, created_at)
+           VALUES ($1, $2, 'other', 'old-doc', now() - interval '2 years')"#,
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .execute(&mut *tx)
+    .await
+    .expect("insert old doc");
+    let _ = tx.commit().await;
+
+    let _result = purge_employee_pii(&pool, tenant, employee_id, user_id, "user")
+        .await
+        .expect("purge");
+    let mut tx2 = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx2)
+        .await
+        .expect("set tenant");
+    let docs: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM employee_documents
+          WHERE tenant_id = $1 AND employee_id = $2 AND title = 'old-doc'",
+    )
+    .bind(tenant_id)
+    .bind(employee_id)
+    .fetch_one(&mut *tx2)
+    .await
+    .expect("doc count");
+    assert_eq!(docs, 0, "old unexpiring doc must be purged");
+    let _ = tx2.rollback().await;
     cleanup(&raw, tenant_id).await;
 }
 

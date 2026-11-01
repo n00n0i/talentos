@@ -116,14 +116,17 @@ export default function Shell({ children }: { children: React.ReactNode }) {
       "/goals",
     ];
     const attendanceOnly = ["/attendance", "/calendar"];
-    // /performance and /goals are reachable by managers with manage_direct.
+    // /performance and /goals are reachable only by managers with manage_direct.
     const directOnly = ["/performance", "/goals"];
     const denied =
       (adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
       (payrollOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canReports) ||
       (hrOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
         !canHr &&
-        !directOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`))) ||
+        !(
+          canDirect &&
+          directOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+        )) ||
       (attendanceOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
         !me.permissions.includes("attendance.read"));
     if (denied) router.replace("/clock");

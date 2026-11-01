@@ -641,7 +641,7 @@ async fn bank_payout_csv_columns_order_and_decrypt() -> Result<(), Box<dyn std::
 
     let pii = Some(std::sync::Arc::new(cipher));
     let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
-    let (filename, body) = export_bank_payout_csv(&mut *tx, run_id, &pii).await?;
+    let (filename, body) = export_bank_payout_csv(&mut *tx, run_id, &pii, None).await?;
     tx.rollback().await?;
 
     assert!(filename.starts_with("bank-payout-"));
@@ -676,7 +676,7 @@ async fn bank_payout_csv_legacy_plaintext_account() -> Result<(), Box<dyn std::e
     let cipher = talentos_db::pii::PiiCipher::from_hex(&"11".repeat(32))?;
     let pii = Some(std::sync::Arc::new(cipher));
     let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
-    let (_, body) = export_bank_payout_csv(&mut *tx, run_id, &pii).await?;
+    let (_, body) = export_bank_payout_csv(&mut *tx, run_id, &pii, None).await?;
     tx.rollback().await?;
 
     assert!(body.contains("9876543210"), "plaintext account intact");
@@ -695,7 +695,7 @@ async fn bank_payout_csv_rejects_unapproved_run() -> Result<(), Box<dyn std::err
     let run_id = seed_run(&pool, &seed, "draft").await?;
 
     let mut tx = tenant_conn(&pool, seed.tenant_id).await?;
-    let result = export_bank_payout_csv(&mut *tx, run_id, &None).await;
+    let result = export_bank_payout_csv(&mut *tx, run_id, &None, None).await;
     tx.rollback().await?;
     assert!(matches!(result, Err(FormError::NotFound)));
 

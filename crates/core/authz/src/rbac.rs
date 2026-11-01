@@ -46,6 +46,11 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 &["hr_admin", "payroll_manager"][..],
             ),
             (
+                ("payout_template", "read"),
+                &["hr_admin", "payroll_manager"][..],
+            ),
+            (("payout_template", "create"), &["hr_admin"][..]),
+            (
                 ("leave_request", "submit_self"),
                 &["hr_admin", "payroll_manager", "manager", "employee"][..],
             ),
@@ -171,6 +176,31 @@ mod tests {
             &["manager".into()],
             "payroll_run",
             "export_report"
+        ));
+    }
+
+    #[test]
+    fn only_hr_admin_creates_payout_templates() {
+        assert!(has_permission(
+            &["hr_admin".to_string()],
+            "payout_template",
+            "create"
+        ));
+        for role in ["payroll_manager", "manager", "employee"] {
+            assert!(
+                !has_permission(&[role.to_string()], "payout_template", "create"),
+                "{role} must not create payout templates"
+            );
+        }
+        assert!(has_permission(
+            &["payroll_manager".into()],
+            "payout_template",
+            "read"
+        ));
+        assert!(!has_permission(
+            &["employee".into()],
+            "payout_template",
+            "read"
         ));
     }
 

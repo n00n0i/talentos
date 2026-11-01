@@ -168,6 +168,10 @@ request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LI
 - Bulk employee import enforces the 2 MB / 1000-row limits in the browser only;
   direct API callers can send larger batches. PII fields are not part of the CSV
   and are added on the employee page after import.
+- Bank payout file templates ship `unverified = TRUE` (seeds and every tenant-
+  created layout) and require accountant sign-off against the bank's live spec
+  before a real transfer-file upload. The Bangkok Bank seed is a public-sample
+  layout, not a verified spec; see `docs/ops/bank-payout-csv.md`.
 
 ## Deferred — not wired
 

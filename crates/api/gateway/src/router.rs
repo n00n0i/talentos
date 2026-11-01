@@ -7,10 +7,10 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, calendar, claims, delegations, documents, employees, forms, goals,
-    graphql, health, leave, loans, mcp, me, memory, notifications, oidc, onboarding, ot, payroll,
-    pdpa, performance, pf, plugins, privacy, recruitment, reports, settings, settlement, setup,
-    training, users,
+    ai, attendance, audit, auth, bank_templates, calendar, claims, delegations, documents,
+    employees, forms, goals, graphql, health, leave, loans, mcp, me, memory, notifications, oidc,
+    onboarding, ot, payroll, pdpa, performance, pf, plugins, privacy, recruitment, reports,
+    settings, settlement, setup, training, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -320,7 +320,16 @@ pub fn build(state: AppState) -> Router {
         )
         .route(
             "/api/v1/payroll/runs/:id/bank-payout.csv",
-            get(forms::export_bank_payout_csv),
+            get(bank_templates::export_bank_payout_csv_handler),
+        )
+        .route(
+            "/api/v1/payout/bank-templates",
+            get(bank_templates::list_bank_template_handlers)
+                .post(bank_templates::create_bank_template_handler),
+        )
+        .route(
+            "/api/v1/payout/bank-templates/:id",
+            get(bank_templates::get_bank_template_handler),
         )
         .route("/api/v1/reports/pnd1a.csv", get(forms::export_pnd1a_csv))
         .route(

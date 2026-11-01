@@ -5,6 +5,7 @@
 
 pub mod approval_rules;
 pub mod attendance;
+pub mod bank_templates;
 pub mod calendar;
 pub mod claims;
 pub mod delegations;
@@ -33,6 +34,10 @@ pub use approval_rules::{
 pub use attendance::{
     active_shift, assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError,
     DayView, PunchInput, ShiftInput, ShiftView,
+};
+pub use bank_templates::{
+    create_bank_template, get_bank_template, list_bank_templates, BankTemplate, BankTemplateError,
+    BankTemplateInput, PAYOUT_SOURCES,
 };
 pub use calendar::{
     calendar, CalendarDay, CalendarError, CalendarHoliday, CalendarLeave, CalendarOt,

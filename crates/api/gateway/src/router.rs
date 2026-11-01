@@ -51,6 +51,7 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/me/payslips/:id/render", get(me::render))
         .route("/api/v1/me/payslips/:id/50tawi", get(me::payslip_50tawi))
         .route("/api/v1/me/payslips/:id/pdf", get(me::pdf))
+        .route("/api/v1/me/payslips/:id/sign", post(me::sign_payslip))
         .route("/api/v1/me/attendance", get(me::my_attendance))
         .route("/api/v1/me/attendance/punch", post(me::punch))
         .route("/api/v1/me/privacy", get(privacy::status))
@@ -178,6 +179,7 @@ pub fn build(state: AppState) -> Router {
             patch(recruitment::update_offer).delete(recruitment::remove_offer),
         )
         .route("/api/v1/offers/:id/pdf", get(recruitment::offer_pdf))
+        .route("/api/v1/offers/:id/sign", post(recruitment::offer_sign))
         .route(
             "/api/v1/candidates/:id/interviews",
             get(recruitment::list_interviews).post(recruitment::schedule_interview),

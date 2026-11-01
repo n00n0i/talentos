@@ -44,6 +44,24 @@ export default function MyPayslipsPage() {
     }
   }
 
+  async function signPayslip(id: string) {
+    const name = window.prompt("กรอกชื่อบคุญเพื่อยืนยันลายมือชื่อ");
+    if (!name || !name.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/me/payslips/${id}/sign`, {
+        method: "POST",
+        body: JSON.stringify({ typed_name: name.trim() }),
+      });
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="page-head">
@@ -121,6 +139,15 @@ export default function MyPayslipsPage() {
                         ยืนยันรับสลิปแล้ว
                       </button>
                     )}
+                    <button
+                      className="btn btn-sm"
+                      data-testid="payslip-sign"
+                      disabled={busy}
+                      style={{ marginLeft: 6 }}
+                      onClick={() => signPayslip(p.id)}
+                    >
+                      ลายมือชื่อ
+                    </button>
                   </td>
                 </tr>
                 );

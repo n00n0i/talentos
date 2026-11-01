@@ -288,6 +288,61 @@ pub async fn remove_offer(
 }
 
 /// GET /api/v1/offers/:id/pdf
+pub async fn offer_sign(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<OfferSignBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    if let Some(name) = state.esign_provider() {
+        let _ = talentos_hr_runner::esign::external_provider(&name).await;
+    }
+    match talentos_hr_runner::esign::sign_document(
+        &state.pool,
+        ctx.tenant_id,
+        talentos_hr_runner::DocumentType::Offer,
+        id,
+        ctx.user_id.0,
+        &body.typed_name,
+    )
+    .await
+    {
+        Ok(sig) => (
+            StatusCode::OK,
+            Json(json!({
+                "id": sig.id,
+                "typed_name": sig.typed_name,
+                "doc_hash_sha256": sig.doc_hash_sha256,
+                "signed_at": sig.signed_at.to_rfc3339(),
+                "provider": sig.provider,
+            })),
+        )
+            .into_response(),
+        Err(talentos_hr_runner::EsignError::OfferNotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(envelope("not_found", "offer not found")),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "offer sign failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(envelope("internal_error", "An unexpected error occurred")),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OfferSignBody {
+    pub typed_name: String,
+}
+
+/// GET /api/v1/offers/:id/pdf
 pub async fn offer_pdf(
     State(state): State<AppState>,
     Authed(ctx): Authed,

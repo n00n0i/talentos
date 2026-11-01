@@ -10,6 +10,7 @@ pub mod claims;
 pub mod delegations;
 pub mod documents;
 pub mod escalation;
+pub mod esign;
 pub mod forms;
 pub mod goals;
 pub mod leave;
@@ -47,6 +48,10 @@ pub use delegations::{
     DelegateCandidate, DelegationError, DelegationInput, DelegationView,
 };
 pub use escalation::escalate_overdue;
+pub use esign::{
+    claim_employee_of_payslip, external_provider, sign_document, DocumentType, EsignError,
+    EsignResult, SignatureView,
+};
 pub use forms::{
     export_bank_payout_csv, export_pnd1_csv, export_pnd1a_csv, export_sso1_10_csv,
     load_active_template, render_50tawi, save_template, validate, FormColumn, FormConfig,

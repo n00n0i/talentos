@@ -30,6 +30,17 @@ pub struct AppState {
     pub started_at: std::time::Instant,
 }
 
+impl AppState {
+    /// E-signature provider name from `E_SIGNATURE_PROVIDER`; `None` means
+    /// the internal hash-based acknowledgement is used.
+    pub fn esign_provider(&self) -> Option<String> {
+        std::env::var("E_SIGNATURE_PROVIDER")
+            .ok()
+            .filter(|v| !v.trim().is_empty())
+            .map(|v| v.trim().to_string())
+    }
+}
+
 impl FromRef<AppState> for Arc<TenantPool> {
     fn from_ref(state: &AppState) -> Self {
         state.pool.clone()

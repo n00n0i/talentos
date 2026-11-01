@@ -216,6 +216,75 @@ pub async fn acknowledge(
     }
 }
 
+/// POST /api/v1/me/payslips/:id/sign — internal e-signature acknowledgement.
+pub async fn sign_payslip(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<SignBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "payslip", "view_self") {
+        return forbidden;
+    }
+    // Confirm the caller owns this payslip before signing it.
+    match talentos_hr_runner::esign::claim_employee_of_payslip(
+        &state.pool,
+        ctx.tenant_id,
+        id,
+        ctx.user_id.0,
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(talentos_hr_runner::EsignError::NotOwnPayslip) => return not_found(),
+        Err(e) => return internal_err(&e.to_string()),
+    }
+    match sign_internal(&state, &ctx, id, &body.typed_name).await {
+        Ok(sig) => (
+            StatusCode::OK,
+            Json(json!({
+                "id": sig.id,
+                "typed_name": sig.typed_name,
+                "doc_hash_sha256": sig.doc_hash_sha256,
+                "signed_at": sig.signed_at.to_rfc3339(),
+                "provider": sig.provider,
+            })),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "payslip sign failed");
+            internal_err(&e.to_string())
+        }
+    }
+}
+
+/// Shared internal-signature path: provider seam (stubbed) then internal ack.
+async fn sign_internal(
+    state: &AppState,
+    ctx: &talentos_kernel::TenantContext,
+    document_id: Uuid,
+    typed_name: &str,
+) -> Result<talentos_hr_runner::SignatureView, talentos_hr_runner::EsignError> {
+    if let Some(name) = state.esign_provider() {
+        talentos_hr_runner::esign::external_provider(&name).await;
+    }
+    talentos_hr_runner::esign::sign_document(
+        &state.pool,
+        ctx.tenant_id,
+        talentos_hr_runner::DocumentType::Payslip,
+        document_id,
+        ctx.user_id.0,
+        typed_name,
+    )
+    .await
+}
+
+/// Body for a payslip/offer sign.
+#[derive(Debug, Deserialize)]
+pub struct SignBody {
+    pub typed_name: String,
+}
+
 /// GET /api/v1/me/payslips/:id/render
 pub async fn render(
     State(state): State<AppState>,

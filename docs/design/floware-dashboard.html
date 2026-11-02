@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TalentOS — Floware-inspired Dashboard (full 3D prototype)</title>
+<style>
+:root{
+  --page:#eef1f4; --surface:#ffffff; --card:#ffffff;
+  --line:#e6eaef; --line-strong:#d5dce4;
+  --text:#243447; --text-2:#5d7086; --text-3:#9aa9bb;
+  --blue:#4a90d9; --blue-soft:#e8f1fb; --blue-mid:#a9cbef;
+  --green:#4caf6e; --green-soft:#e6f4ea;
+  --orange:#f0a13c; --orange-soft:#fdeedd;
+  --red:#e05b5b; --red-soft:#fbe4e4;
+  --radius:22px; --radius-sm:14px;
+  --shadow-float:0 14px 40px rgba(40,64,94,.10), 0 2px 6px rgba(40,64,94,.06);
+  --shadow-card:0 8px 24px rgba(40,64,94,.07);
+  --sans:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  font-family:var(--sans);color:var(--text);font-size:14px;line-height:1.45;
+  background:
+    radial-gradient(900px 480px at 85% 0%, #dbe7f5, transparent 70%),
+    radial-gradient(700px 420px at 0% 100%, #e3ede4, transparent 60%),
+    var(--page);
+  -webkit-font-smoothing:antialiased;
+}
+/* soft metallic wash like the reference photo backdrop */
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;opacity:.5;pointer-events:none;
+  background:
+    repeating-linear-gradient(115deg, rgba(255,255,255,.5) 0 2px, transparent 2px 14px),
+    linear-gradient(120deg,#e9edf2,#f4f6f8 55%,#e6ebf1);
+}
+
+/* ===== top nav (reference: logo + site pill + nav links + icons) ===== */
+.appbar{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;
+  padding:12px 22px;background:rgba(255,255,255,.82);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600}
+.brand-mark{
+  width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#5ea0e6,#3f7fd0);color:#fff;font-size:18px;
+  box-shadow:0 4px 10px rgba(63,127,208,.3);
+}
+.brand small{display:block;font-size:11px;color:var(--text-3);font-weight:500;margin-top:-2px}
+.site{
+  display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:12px;
+  background:var(--card);border:1px solid var(--line);font-size:12.5px;color:var(--text-2);
+  box-shadow:var(--shadow-card);
+}
+.site b{color:var(--text);font-weight:600}
+.nav{display:flex;gap:4px;margin-left:6px}
+.nav a{
+  padding:8px 15px;border-radius:99px;font-size:13px;color:var(--text-2);text-decoration:none;
+}
+.nav a.active{background:var(--blue-soft);color:var(--blue);font-weight:600}
+.right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.right .icon-btn{
+  width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--card);
+  display:grid;place-items:center;cursor:pointer;font-size:14px;box-shadow:var(--shadow-card);
+}
+.right .avatar{
+  width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#5ea0e6,#3f7fd0);
+  color:#fff;display:grid;place-items:center;font-size:12px;font-weight:600;
+}
+.zbtn{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.zbtn button{width:26px;height:26px;border:0;background:var(--card);cursor:pointer;font-size:13px}
+.zbtn button+button{border-left:1px solid var(--line)}
+
+/* ===== layout: left rail + 3D canvas + floating cards ===== */
+.wrap{display:grid;grid-template-columns:340px 1fr;gap:0;min-height:calc(100vh - 59px);position:relative}
+.rail{
+  border-right:1px solid var(--line);padding:16px 14px;overflow:auto;
+  background:rgba(255,255,255,.55);backdrop-filter:blur(6px);
+}
+.canvas{position:relative;overflow:hidden}
+.canvas svg.iso{position:absolute;inset:0;width:100%;height:100%}
+
+.panel{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-card);padding:14px 14px;margin-bottom:14px;position:relative;
+}
+.panel-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.panel-title h3{font-size:13.5px;font-weight:600}
+.panel-title .more{font-size:15px;color:var(--text-3);cursor:pointer}
+/* filter pills */
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.filter{
+  padding:5px 11px;border-radius:99px;font-size:11.5px;border:1px solid var(--line);
+  background:var(--card);color:var(--text-2);cursor:pointer;display:flex;align-items:center;gap:5px;
+}
+.filter.active{background:var(--blue-soft);color:var(--blue);border-color:transparent;font-weight:600}
+.dot{width:7px;height:7px;border-radius:50%}
+.dot.g{background:var(--green)} .dot.r{background:var(--red)}
+/* robot card */
+.robot{display:flex;gap:10px;align-items:flex-start}
+.robot .rmark{
+  width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#8fb8e8,#5ea0e6);
+  display:grid;place-items:center;font-size:19px;flex:0 0 auto;
+}
+.robot .rname{font-weight:600;font-size:13.5px}
+.robot .rstat{font-size:11.5px;color:var(--text-2);display:flex;align-items:center;gap:5px;margin-top:2px}
+/* stat grid */
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px}
+.stat{padding:8px 4px}
+.stat .lbl{font-size:11px;color:var(--text-2)}
+.stat .val{font-size:16px;font-weight:600;margin-top:1px}
+.stat .val small{font-size:11px;color:var(--text-3);font-weight:400}
+.stat .val.bar{position:relative}
+.vbar{height:5px;border-radius:99px;background:var(--line);margin-top:6px;overflow:hidden}
+.vbar i{display:block;height:100%;border-radius:99px;background:var(--green)}
+.vbar.blue i{background:var(--blue)} .vbar.orange i{background:var(--orange)}
+/* task execution */
+.task-label{font-size:12px;color:var(--text-2);margin-bottom:6px}
+.pbar-wrap{display:flex;align-items:center;gap:8px}
+.pbar{flex:1;height:9px;border-radius:99px;background:var(--line);overflow:hidden}
+.pbar i{display:block;height:100%;width:58%;background:var(--blue);border-radius:99px}
+.pct{font-size:12px;font-weight:600;color:var(--blue)}
+.task-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.task-grid .lbl{font-size:11px;color:var(--text-2)}
+.task-grid .val{font-size:13px;font-weight:600;margin-top:1px}
+.task-sub{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+/* actions */
+.actions{display:flex;gap:6px;margin-top:12px}
+.act{flex:1;text-align:center;font-size:11.5px;font-weight:600;padding:8px;border-radius:9px;
+  border:1px solid var(--line);background:var(--card);color:var(--text-2);cursor:pointer}
+.act.blue{background:var(--blue-soft);color:var(--blue);border-color:transparent}
+.act.red{background:var(--red-soft);color:var(--red);border-color:transparent}
+
+/* ===== floating cards on the 3D canvas ===== */
+.float{
+  position:absolute;background:var(--card);border:1px solid var(--line);
+  border-radius:var(--radius-sm);box-shadow:var(--shadow-float);padding:14px;
+}
+.kpi-strip{
+  position:absolute;top:14px;left:50%;transform:translateX(-50%);
+  display:flex;gap:0;width:min(680px,92%);
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow-float);overflow:hidden;
+}
+.kpi{flex:1;padding:16px 18px;position:relative}
+.kpi+.kpi{border-left:1px solid var(--line)}
+.kpi .lbl{font-size:12px;color:var(--text-2)}
+.kpi .val{font-size:26px;font-weight:600;letter-spacing:-.5px;margin:3px 0}
+.kpi .val small{font-size:12px;color:var(--text-3);font-weight:400}
+.kpi .hint{font-size:11.5px;color:var(--text-3)}
+.kpi .hint.up{color:var(--green)} .kpi .hint.down{color:var(--orange)}
+.kpi .spark{position:absolute;top:14px;right:14px;width:54px;height:30px}
+/* storage/transfer cards */
+.card-float{width:330px}
+.cf-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.cf-head .t{font-weight:600;font-size:14px}
+.cf-head .t small{display:block;font-weight:400;font-size:11px;color:var(--text-2);margin-top:1px}
+.cf-head .more{font-size:15px;color:var(--text-3)}
+.tri{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center;padding:6px 0 10px}
+.tri .lbl{font-size:11px;color:var(--text-2)}
+.tri .val{font-size:20px;font-weight:600}
+.tri .val small{font-size:11px;color:var(--text-3);font-weight:400}
+/* mini table */
+.mtable{width:100%;font-size:11.5px;border-collapse:collapse}
+.mtable th{text-align:left;font-size:10.5px;color:var(--text-3);font-weight:500;padding:5px 4px;text-transform:uppercase;letter-spacing:.03em}
+.mtable td{padding:6px 4px;border-top:1px solid var(--line)}
+.mtable td.c2,.mtable th.c2{text-align:center}
+.mtable td .st{display:inline-flex;align-items:center;gap:5px}
+/* chart */
+.chart-card{width:380px}
+.chart-card .cbody{padding:8px 6px 4px}
+.chart-card svg{width:100%;height:170px}
+.axis{font-size:9px;fill:var(--text-3)}
+/* storage bars card */
+.sbar{margin:8px 0}
+.sbar-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
+.sbar-top .st{display:inline-flex;align-items:center;gap:6px;color:var(--text-2);font-size:11.5px}
+.sbar-bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.sbar-bar i{position:absolute;inset:0 auto 0 0;border-radius:99px}
+.sbar-sub{display:flex;justify-content:space-between;font-size:11px;color:var(--text-3);margin-top:5px}
+/* status pill */
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:500;padding:3px 10px;border-radius:99px}
+.pill .dot{width:7px;height:7px;border-radius:50%}
+.pill.g{background:var(--green-soft);color:#2f7d4f} .pill.g .dot{background:var(--green)}
+.pill.b{background:var(--blue-soft);color:var(--blue)} .pill.b .dot{background:var(--blue)}
+.pill.o{background:var(--orange-soft);color:#b06f1c} .pill.o .dot{background:var(--orange)}
+.pill.r{background:var(--red-soft);color:var(--red)} .pill.r .dot{background:var(--red)}
+
+.pos-robot{top:38%;right:24px;width:300px}
+.pos-storage{bottom:18px;left:26px}
+.pos-chart{bottom:24px;left:50%;transform:translateX(-50%);width:400px}
+.pos-capacity{bottom:60px;right:30px;width:330px}
+@media(max-width:1080px){
+  .wrap{grid-template-columns:1fr}
+  .rail{border-right:0;border-bottom:1px solid var(--line)}
+  .canvas{min-height:760px}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ TOP NAV ============ -->
+<header class="appbar">
+  <div class="brand">
+    <span class="brand-mark">✚</span>
+    <span>TalentOS<small>Warehouse</small></span>
+  </div>
+  <div class="site"><b>Central Hub</b> · Berlin <span style="opacity:.5">▾</span></div>
+  <nav class="nav">
+    <a class="active" href="#">Dashboard</a>
+    <a href="#">Inventory</a>
+    <a href="#">Operations</a>
+    <a href="#">Robots</a>
+    <a href="#">Analytics</a>
+    <a href="#">Task</a>
+  </nav>
+  <div class="right">
+    <div class="zbtn"><button>−</button><button>+</button></div>
+    <button class="icon-btn" title="settings">⚙</button>
+    <button class="icon-btn" title="alerts">🔔</button>
+    <div class="avatar">ผด</div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- ============ LEFT RAIL ============ -->
+  <aside class="rail">
+
+    <div class="panel" style="margin-top:4px">
+      <div class="panel-title"><h3>Robot Reports</h3><span class="more">⋮</span></div>
+      <div class="filters">
+        <span class="filter active">All</span>
+        <span class="filter"><span class="dot g"></span>Online</span>
+        <span class="filter"><span class="dot r"></span>Offline</span>
+        <span class="filter" style="margin-left:auto">≡</span>
+        <span class="filter">🔍</span>
+      </div>
+
+      <!-- robot 1 -->
+      <div class="robot">
+        <div class="rmark">🤖</div>
+        <div style="flex:1">
+          <div class="rname">Robot FW-01</div>
+          <div class="rstat"><span class="dot g"></span>Online · Last Sync 12:35</div>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+      <div class="statgrid" style="margin-top:4px">
+        <div>
+          <div class="stat">
+            <div class="lbl">Battery Level</div>
+            <div class="val bar">85%<div class="vbar"><i style="width:85%"></i></div></div>
+          </div>
+        </div>
+        <div>
+          <div class="stat">
+            <div class="lbl">Temperature</div>
+            <div class="val">35°C</div>
+            <div style="font-size:11px;color:var(--text-3)">Normal</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat">
+            <div class="lbl">Signal</div>
+            <div class="val">Strong</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat">
+            <div class="lbl">Load Capacity</div>
+            <div class="val">150 <small>kg</small></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="border-top:1px dashed var(--line);margin:12px 0"></div>
+      <div class="task-label">Task Execution</div>
+      <div class="pbar-wrap">
+        <div class="lbl" style="font-size:11px;color:var(--text-2)">Progress</div>
+        <div class="pbar"><i style="width:58%"></i></div>
+        <div class="pct">58%</div>
+        <div style="font-size:11px;color:var(--text-3)">~45 min</div>
+      </div>
+      <div class="task-grid">
+        <div><div class="lbl">Current Task</div><div class="val">Putaway</div></div>
+        <div><div class="lbl">From</div><div class="val">Receiving</div></div>
+        <div><div class="lbl">To</div><div class="val">Storage A</div></div>
+      </div>
+      <div class="task-sub">
+        <div><div class="lbl">Items Assigned</div><div class="val">950</div></div>
+        <div><div class="lbl">In Progress</div><div class="val">450</div></div>
+      </div>
+      <div class="actions">
+        <button class="act">Pause Task</button>
+        <button class="act blue">Manual Control</button>
+        <button class="act red">Emergency</button>
+      </div>
+    </div>
+
+    <!-- robot 2 (partial, like reference) -->
+    <div class="panel">
+      <div class="robot">
+        <div class="rmark" style="background:linear-gradient(135deg,#9fd0a8,#4caf6e)">🤖</div>
+        <div style="flex:1">
+          <div class="rname">Robot FW-02</div>
+          <div class="rstat"><span class="dot g"></span>Online · Last Sync 12:55</div>
+        </div>
+      </div>
+      <div style="height:10px"></div>
+      <div class="statgrid">
+        <div><div class="stat"><div class="lbl">Battery Level</div><div class="val bar">92%<div class="vbar"><i style="width:92%"></i></div></div></div></div>
+        <div><div class="stat"><div class="lbl">Temperature</div><div class="val">33°C</div></div></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ 3D CANVAS + FLOATING CARDS ============ -->
+  <div class="canvas">
+    <!-- isometric warehouse scene (hand-built SVG, no library) -->
+    <svg class="iso" viewBox="0 0 900 620" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="floor" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f4f8fc"/><stop offset="1" stop-color="#dfe8f2"/>
+        </linearGradient>
+        <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d6e0ec"/>
+        </linearGradient>
+        <linearGradient id="wall2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f7fafd"/><stop offset="1" stop-color="#c7d5e6"/>
+        </linearGradient>
+        <linearGradient id="roof" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e6eef7"/>
+        </linearGradient>
+        <linearGradient id="door" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#4a90d9"/><stop offset="1" stop-color="#3f7fd0"/>
+        </linearGradient>
+        <linearGradient id="blue" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#7fb4ec"/><stop offset="1" stop-color="#4a90d9"/>
+        </linearGradient>
+        <linearGradient id="green" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#8fd6a8"/><stop offset="1" stop-color="#4caf6e"/>
+        </linearGradient>
+      </defs>
+
+      <!-- floor plane -->
+      <polygon points="180,430 470,560 770,430 470,300" fill="url(#floor)"/>
+      <!-- floor grid -->
+      <g stroke="#c7d5e4" stroke-width="1" opacity=".6">
+        <line x1="260" y1="398" x2="560" y2="528"/>
+        <line x1="350" y1="365" x2="650" y2="495"/>
+        <line x1="440" y1="333" x2="740" y2="463"/>
+        <line x1="350" y1="495" x2="650" y2="365"/>
+        <line x1="260" y1="463" x2="560" y2="333"/>
+        <line x1="180" y1="430" x2="470" y2="300"/>
+      </g>
+
+      <!-- back-left warehouse (big) -->
+      <g>
+        <polygon points="230,240 410,330 410,430 230,340" fill="url(#wall2)"/>
+        <polygon points="230,240 230,340 410,430 410,330" fill="url(#wall)"/>
+        <polygon points="230,240 410,330 330,285 230,240" fill="url(#roof)"/>
+        <!-- roof ridge -->
+        <polygon points="230,240 330,285 410,330 410,338 330,293 230,248" fill="#eef4fa" opacity=".8"/>
+        <!-- blue doors on left face -->
+        <g>
+          <rect x="252" y="330" width="26" height="44" rx="2" fill="url(#door)"/>
+          <rect x="290" y="348" width="26" height="44" rx="2" fill="url(#door)"/>
+          <rect x="328" y="366" width="26" height="44" rx="2" fill="url(#door)"/>
+          <rect x="366" y="384" width="26" height="44" rx="2" fill="url(#door)"/>
+          <!-- door slits -->
+          <g stroke="#ffffff" stroke-width="1" opacity=".5">
+            <line x1="252" y1="344" x2="278" y2="344"/><line x1="290" y1="362" x2="316" y2="362"/>
+            <line x1="328" y1="380" x2="354" y2="380"/><line x1="366" y1="398" x2="392" y2="398"/>
+          </g>
+        </g>
+        <!-- windows on front-right face -->
+        <g fill="#dcebf8" stroke="#b9cde4" stroke-width="1">
+          <polygon points="418,336 470,358 470,392 418,370"/>
+          <polygon points="480,362 532,384 532,418 480,396"/>
+        </g>
+      </g>
+
+      <!-- back-right small warehouse -->
+      <g>
+        <polygon points="600,250 730,310 730,372 600,312" fill="url(#wall2)"/>
+        <polygon points="600,250 600,312 730,372 730,310" fill="url(#wall)"/>
+        <polygon points="600,250 730,310 664,280 600,250" fill="url(#roof)"/>
+        <g fill="url(#door)">
+          <polygon points="610,300 640,314 640,344 610,330"/>
+        </g>
+        <g fill="#dcebf8" stroke="#b9cde4" stroke-width="1">
+          <polygon points="652,320 700,342 700,368 652,346"/>
+        </g>
+      </g>
+
+      <!-- storage racks (blue) front-left -->
+      <g>
+        <polygon points="470,470 540,500 540,430 470,400" fill="url(#blue)"/>
+        <polygon points="540,500 610,470 610,400 540,430" fill="#3f7fd0"/>
+        <g stroke="#ffffff" stroke-width="1" opacity=".55">
+          <line x1="470" y1="418" x2="540" y2="448"/><line x1="470" y1="436" x2="540" y2="466"/>
+          <line x1="540" y1="448" x2="610" y2="418"/><line x1="540" y1="466" x2="610" y2="436"/>
+        </g>
+      </g>
+      <!-- storage racks (green) front-right -->
+      <g>
+        <polygon points="640,480 700,505 700,445 640,420" fill="url(#green)"/>
+        <polygon points="700,505 760,480 760,420 700,445" fill="#3f9e5b"/>
+        <g stroke="#ffffff" stroke-width="1" opacity=".55">
+          <line x1="640" y1="438" x2="700" y2="463"/><line x1="640" y1="456" x2="700" y2="481"/>
+          <line x1="700" y1="463" x2="760" y2="438"/><line x1="700" y1="481" x2="760" y2="456"/>
+        </g>
+      </g>
+
+      <!-- conveyor route (green line like reference) -->
+      <g fill="none" stroke="var(--green)" stroke-width="3" opacity=".8" stroke-linecap="round">
+        <path d="M410 330 L470 470"/>
+        <path d="M470 470 L640 480"/>
+      </g>
+      <g fill="var(--blue)" stroke="#3f7fd0" stroke-width="1">
+        <circle cx="455" cy="440" r="7"/><circle cx="560" cy="478" r="7"/>
+      </g>
+
+      <!-- robots (simple isometric bodies) -->
+      <g>
+        <ellipse cx="455" cy="443" rx="12" ry="5" fill="#c7d5e4" opacity=".5"/>
+        <rect x="448" y="428" width="14" height="12" rx="3" fill="url(#blue)"/>
+        <circle cx="455" cy="428" r="4" fill="#3f7fd0"/>
+      </g>
+      <g>
+        <ellipse cx="560" cy="481" rx="12" ry="5" fill="#c7d5e4" opacity=".5"/>
+        <rect x="553" y="466" width="14" height="12" rx="3" fill="url(#green)"/>
+        <circle cx="560" cy="466" r="4" fill="#3f9e5b"/>
+      </g>
+
+      <!-- small pallets -->
+      <g fill="#d6e0ec" stroke="#b9cde4" stroke-width="1">
+        <polygon points="690,520 730,538 730,552 690,534"/>
+        <polygon points="730,538 760,524 760,538 730,552"/>
+      </g>
+    </svg>
+
+    <!-- KPI strip (top center) -->
+    <div class="kpi-strip">
+      <div class="kpi">
+        <div class="lbl">Total Relocated</div>
+        <div class="val">14,280 <small>Item</small></div>
+        <div class="hint up">↑ 12% from yesterday</div>
+        <svg class="spark" viewBox="0 0 54 30"><g stroke="var(--green)" stroke-width="2"><line x1="6" y1="22" x2="6" y2="12"/><line x1="14" y1="22" x2="14" y2="16"/><line x1="22" y1="22" x2="22" y2="8"/><line x1="30" y1="22" x2="30" y2="14"/><line x1="38" y1="22" x2="38" y2="6"/><line x1="46" y1="22" x2="46" y2="10"/></g><line x1="2" y1="24" x2="52" y2="24" stroke="var(--line)" stroke-width="1"/></svg>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Average Trip Time</div>
+        <div class="val">9.860 <small>min/trip</small></div>
+        <div class="hint">↓ 0.91m faster vs last hour</div>
+        <svg class="spark" viewBox="0 0 54 30"><g stroke="var(--blue)" stroke-width="2"><line x1="6" y1="12" x2="6" y2="18"/><line x1="14" y1="12" x2="14" y2="10"/><line x1="22" y1="12" x2="22" y2="20"/><line x1="30" y1="12" x2="30" y2="8"/><line x1="38" y1="12" x2="38" y2="16"/><line x1="46" y1="12" x2="46" y2="6"/></g><line x1="2" y1="24" x2="52" y2="24" stroke="var(--line)" stroke-width="1"/></svg>
+      </div>
+      <div class="kpi">
+        <div class="lbl">Total Robots</div>
+        <div class="val">24 <span class="pill g" style="margin-left:6px"><span class="dot"></span>Online</span></div>
+        <div class="hint">3 robots charging</div>
+        <svg class="spark" viewBox="0 0 54 30"><g stroke="var(--orange)" stroke-width="2"><line x1="6" y1="20" x2="6" y2="14"/><line x1="14" y1="20" x2="14" y2="18"/><line x1="22" y1="20" x2="22" y2="8"/><line x1="30" y1="20" x2="30" y2="12"/><line x1="38" y1="20" x2="38" y2="16"/><line x1="46" y1="20" x2="46" y2="6"/></g><line x1="2" y1="24" x2="52" y2="24" stroke="var(--line)" stroke-width="1"/></svg>
+      </div>
+    </div>
+
+    <!-- floating card: robot detail (top-right, like reference) -->
+    <div class="float card-float pos-robot">
+      <div class="cf-head">
+        <div class="t">Robot FW-01 <small><span class="dot g" style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px"></span>Online · Last Sync 12:35</small></div>
+        <span class="more">⋮</span>
+      </div>
+      <div class="tri">
+        <div><div class="lbl">Progress</div><div class="val">58% <small>~45 min</small></div></div>
+        <div><div class="lbl">Status</div><div class="val"><span class="pill b">In Progress</span></div></div>
+        <div><div class="lbl">Total Items</div><div class="val">450 <small>/ 950</small></div></div>
+      </div>
+      <div class="task-grid" style="margin-top:6px">
+        <div><div class="lbl">Current Task</div><div class="val">Putaway</div></div>
+        <div><div class="lbl">From</div><div class="val">Receiving</div></div>
+        <div><div class="lbl">To</div><div class="val">Storage A</div></div>
+      </div>
+      <div class="actions">
+        <button class="act">Pause Task</button>
+        <button class="act blue">Manual</button>
+        <button class="act red">Emergency</button>
+      </div>
+    </div>
+
+    <!-- floating card: storage zone (center, like reference) -->
+    <div class="float card-float" style="top:30%;left:50%;transform:translateX(-50%);width:340px">
+      <div class="cf-head">
+        <div class="t">Storage A <small><span class="dot g" style="display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:4px"></span>Operational · Last Sync 12:30</small></div>
+        <span class="more">!</span>
+      </div>
+      <div class="tri">
+        <div><div class="lbl">Capacity</div><div class="val">450 <small>/ 950</small></div></div>
+        <div><div class="lbl">Utilization</div><div class="val">6%</div></div>
+        <div><div class="lbl">Active Robots</div><div class="val">56</div></div>
+      </div>
+      <table class="mtable">
+        <thead><tr><th>Robot ID</th><th class="c2">Status</th><th class="c2">Current Task</th></tr></thead>
+        <tbody>
+          <tr><td>Robot FW-01</td><td class="c2"><span class="st"><span class="dot g"></span>Online</span></td><td class="c2">—</td></tr>
+          <tr><td>Robot FW-42</td><td class="c2"><span class="st"><span class="dot g"></span>Online</span></td><td class="c2">Referral</td></tr>
+          <tr><td>Robot FW-84</td><td class="c2"><span class="st"><span class="dot g"></span>Online</span></td><td class="c2">Relocation</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- floating card: transfer efficiency chart (bottom center) -->
+    <div class="float chart-card pos-chart">
+      <div class="cf-head">
+        <div class="t">Transfer Efficiency <small>Line · last 24h</small></div>
+        <div style="display:flex;gap:10px;font-size:12px;color:var(--text-3)"><span>≡</span><span>⋮</span></div>
+      </div>
+      <div class="tri" style="padding-top:2px">
+        <div><div class="lbl">Transfer Rate</div><div class="val">128 <small>item/min</small></div></div>
+        <div><div class="lbl">Avg Transfer Time</div><div class="val">2.4 <small>min</small></div></div>
+        <div><div class="lbl">Delay Rate</div><div class="val">4.2 <small>%</small></div></div>
+      </div>
+      <div class="cbody">
+        <svg viewBox="0 0 380 170" preserveAspectRatio="none">
+          <g stroke="var(--line)" stroke-width="1">
+            <line x1="40" y1="30" x2="370" y2="30"/>
+            <line x1="40" y1="70" x2="370" y2="70"/>
+            <line x1="40" y1="110" x2="370" y2="110"/>
+            <line x1="40" y1="150" x2="370" y2="150"/>
+          </g>
+          <g class="axis">
+            <text x="6" y="34">120</text><text x="6" y="74">80</text>
+            <text x="6" y="114">60</text><text x="6" y="154">0</text>
+          </g>
+          <!-- bars -->
+          <g fill="var(--blue-mid)">
+            <rect x="55"  y="120" width="16" height="30" rx="2"/>
+            <rect x="95"  y="100" width="16" height="50" rx="2"/>
+            <rect x="135" y="110" width="16" height="40" rx="2"/>
+            <rect x="175" y="70"  width="16" height="80" rx="2"/>
+            <rect x="215" y="85"  width="16" height="65" rx="2"/>
+            <rect x="255" y="50"  width="16" height="100" rx="2"/>
+            <rect x="295" y="65"  width="16" height="85" rx="2"/>
+            <rect x="335" y="95"  width="16" height="55" rx="2"/>
+          </g>
+          <!-- line over bars -->
+          <polyline fill="none" stroke="var(--blue)" stroke-width="2.5"
+            points="63,115 103,98 143,105 183,68 223,80 263,48 303,62 343,90"/>
+          <circle cx="263" cy="48" r="5" fill="#fff" stroke="var(--blue)" stroke-width="2.5"/>
+          <g class="axis" fill="var(--text-3)">
+            <text x="55" y="163">05:00</text><text x="135" y="163">11:00</text>
+            <text x="215" y="163">17:00</text><text x="295" y="163">23:00</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- floating card: storage utilization (bottom-right) -->
+    <div class="float card-float pos-capacity">
+      <div class="cf-head"><div class="t">Storage Utilization</div><span class="more">⋮</span></div>
+      <div class="tri">
+        <div><div class="lbl">Total Capacity</div><div class="val">1,550 <small>units</small></div></div>
+        <div><div class="lbl">Used Space</div><div class="val">1,128 <small>units</small></div></div>
+        <div><div class="lbl">Utilization</div><div class="val">78 <small>%</small></div></div>
+      </div>
+      <div class="sbar">
+        <div class="sbar-top"><span class="st"><span class="dot g"></span>Storage A · Operational</span></div>
+        <div class="sbar-bar"><i style="width:78%;background:linear-gradient(90deg,#7fb4ec,#4a90d9)"></i></div>
+        <div class="sbar-sub"><span>850 Item · 1200 Units</span><span>122 / 2000</span></div>
+      </div>
+      <div class="sbar">
+        <div class="sbar-top"><span class="st"><span class="dot g"></span>Storage B · Operational</span></div>
+        <div class="sbar-bar"><i style="width:62%;background:linear-gradient(90deg,#8fd6a8,#4caf6e)"></i></div>
+        <div class="sbar-sub"><span>278 Item · 550 Units</span><span>122 / 2000</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

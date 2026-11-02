@@ -6,11 +6,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use uuid::Uuid;
@@ -318,6 +319,93 @@ pub async fn test_settings(State(state): State<AppState>, Authed(ctx): Authed) -
         )
             .into_response(),
         Err(e) => unavailable(&format!("model request failed: {e}")),
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct KgCountsResponse {
+    pub nodes: std::collections::BTreeMap<talentos_hr_runner::kg::NodeClass, i64>,
+    pub edges: i64,
+    /// Derived from `max(kg_nodes.updated_at)`: no extra column or migration.
+    pub last_rebuilt_at: Option<DateTime<Utc>>,
+}
+
+/// GET /api/v1/ai/kg — class counts, edge count, last rebuild time.
+pub async fn get_kg(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "ai", "chat") {
+        return forbidden;
+    }
+    let nodes = match talentos_hr_runner::kg::counts(&state.pool, ctx.tenant_id).await {
+        Ok(nodes) => nodes,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
+        Ok(tx) => tx,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let stats = sqlx::query(
+        "SELECT (SELECT count(*) FROM kg_edges WHERE tenant_id = $1) AS edges,
+                (SELECT max(updated_at) FROM kg_nodes WHERE tenant_id = $1) AS last_rebuilt_at",
+    )
+    .bind(ctx.tenant_id.0)
+    .fetch_one(&mut *tx)
+    .await;
+    let _ = tx.rollback().await;
+    let stats = match stats {
+        Ok(row) => row,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    (
+        StatusCode::OK,
+        Json(KgCountsResponse {
+            nodes,
+            edges: stats.get("edges"),
+            last_rebuilt_at: stats.get("last_rebuilt_at"),
+        }),
+    )
+        .into_response()
+}
+
+/// POST /api/v1/ai/kg/rebuild — idempotent sync, capped by the service.
+pub async fn rebuild_kg(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
+    if let Err(forbidden) = require(&ctx, "ai.settings", "manage") {
+        return forbidden;
+    }
+    match talentos_hr_runner::kg_sync::rebuild(&state.pool, ctx.tenant_id).await {
+        Ok(report) => (StatusCode::OK, Json(report)).into_response(),
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct KgNeighborsQuery {
+    pub node_id: Uuid,
+    pub depth: Option<i32>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct KgNeighborsResponse {
+    pub nodes: Vec<talentos_hr_runner::kg::KgNode>,
+    pub edges: Vec<talentos_hr_runner::kg::KgEdge>,
+}
+
+/// GET /api/v1/ai/kg/neighbors?node_id=&depth= — the graph inspector's data.
+pub async fn kg_neighbors(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Query(query): Query<KgNeighborsQuery>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "ai", "chat") {
+        return forbidden;
+    }
+    // neighbors() clamps depth to 1..=5; 2 matches the agent's subgraph depth.
+    let depth = query.depth.unwrap_or(2);
+    match talentos_hr_runner::kg::neighbors(&state.pool, ctx.tenant_id, query.node_id, depth).await
+    {
+        Ok((nodes, edges)) => {
+            (StatusCode::OK, Json(KgNeighborsResponse { nodes, edges })).into_response()
+        }
+        Err(e) => internal_err(&e.to_string()),
     }
 }
 

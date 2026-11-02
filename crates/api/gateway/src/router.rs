@@ -439,6 +439,9 @@ pub fn build(state: AppState) -> Router {
             get(ai::get_settings).put(ai::put_settings),
         )
         .route("/api/v1/ai/settings/test", post(ai::test_settings))
+        .route("/api/v1/ai/kg", get(ai::get_kg))
+        .route("/api/v1/ai/kg/rebuild", post(ai::rebuild_kg))
+        .route("/api/v1/ai/kg/neighbors", get(ai::kg_neighbors))
         .route("/api/v1/graphql", post(graphql::execute))
         .route(
             "/api/v1/mcp",

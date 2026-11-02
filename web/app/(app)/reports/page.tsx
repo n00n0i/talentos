@@ -93,8 +93,9 @@ export default function ReportsPage() {
 
       {error && <p className="error">{error}</p>}
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 14 }}>จำนวนพนักงาน</h2>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-head"><h2>จำนวนพนักงาน</h2></div>
+        <div className="card-pad">
         {headcount === null ? (
           <div className="spinner">กำลังโหลด…</div>
         ) : (
@@ -107,21 +108,21 @@ export default function ReportsPage() {
                 marginBottom: 16,
               }}
             >
-              <div className="card" data-testid="headcount-active">
-                <div className="hint">ทำงานอยู่</div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>{headcount.active}</div>
+              <div className="mine-tile" data-testid="headcount-active">
+                <span className="mine-label">ทำงานอยู่</span>
+                <span className="mine-value">{headcount.active}</span>
               </div>
-              <div className="card" data-testid="headcount-probation">
-                <div className="hint">ทดลองงาน</div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>{headcount.probation}</div>
+              <div className="mine-tile" data-testid="headcount-probation">
+                <span className="mine-label">ทดลองงาน</span>
+                <span className="mine-value">{headcount.probation}</span>
               </div>
-              <div className="card" data-testid="headcount-leave">
-                <div className="hint">ลา</div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>{headcount.leave}</div>
+              <div className="mine-tile" data-testid="headcount-leave">
+                <span className="mine-label">ลา</span>
+                <span className="mine-value">{headcount.leave}</span>
               </div>
-              <div className="card" data-testid="headcount-terminated">
-                <div className="hint">พ้นสภาพ 12 เดือน</div>
-                <div style={{ fontSize: 24, fontWeight: 600 }}>{headcount.terminated_last_12m}</div>
+              <div className="mine-tile" data-testid="headcount-terminated">
+                <span className="mine-label">พ้นสภาพ 12 เดือน</span>
+                <span className="mine-value">{headcount.terminated_last_12m}</span>
               </div>
             </div>
 
@@ -143,10 +144,12 @@ export default function ReportsPage() {
             </table>
           </>
         )}
+        </div>
       </div>
 
-      <div className="card card-pad" style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 14 }}>ต้นทุนเงินเดือน</h2>
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div className="card-head"><h2>ต้นทุนเงินเดือน</h2></div>
+        <div className="card-pad">
         <form
           onSubmit={reloadCost}
           className="form-row"
@@ -160,7 +163,8 @@ export default function ReportsPage() {
             <label htmlFor="cost-to">ถึง</label>
             <input id="cost-to" type="date" data-testid="cost-to" value={to} onChange={(e) => setTo(e.target.value)} required />
           </div>
-          <div style={{ display: "flex", alignItems: "end" }}>
+          <div className="field">
+            <span aria-hidden="true">&nbsp;</span>
             <button className="btn btn-primary" data-testid="cost-load" type="submit" disabled={busy}>
               {busy ? "กำลังโหลด…" : "ดูรายงาน"}
             </button>
@@ -199,10 +203,12 @@ export default function ReportsPage() {
             </tbody>
           </table>
         )}
+        </div>
       </div>
 
-      <div className="card card-pad">
-        <h2 style={{ marginBottom: 14 }}>แนวโน้ม OT</h2>
+      <div className="card">
+        <div className="card-head"><h2>แนวโน้ม OT</h2></div>
+        <div className="card-pad">
         {otRows === null ? (
           <div className="spinner">กำลังโหลด…</div>
         ) : otRows.length === 0 ? (
@@ -227,6 +233,7 @@ export default function ReportsPage() {
             </tbody>
           </table>
         )}
+        </div>
       </div>
     </>
   );

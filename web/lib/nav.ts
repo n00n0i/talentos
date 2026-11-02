@@ -47,9 +47,15 @@ const EMPLOYEE_ONLY = ["/clock", "/leave", "/ot", "/claims", "/me/payslips", "/p
 const DIRECT_ONLY = ["/performance", "/goals"];
 const ATTENDANCE_ONLY = ["/attendance", "/calendar"];
 
+// Today's shell shows exactly these 19 hrefs while /api/v1/auth/me is still
+// loading (canReports defaults to false), so admin links never flash.
+const BASE_NAV = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href)).filter(
+  (h) => !["/loans", "/final-settlement", "/reports", "/users", "/settings", "/forms", "/audit"].includes(h),
+);
+
 export function visibleHrefs(me: Me | null): Set<string> {
+  if (!me) return new Set(BASE_NAV);
   const all = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
-  if (!me) return new Set(all);
   const isAdmin = me.roles.includes("hr_admin");
   const canHr = me.permissions.includes("employee.read_all");
   const canReports = me.roles.some((r) => ["hr_admin", "payroll_manager"].includes(r));

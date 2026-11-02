@@ -3,7 +3,7 @@
 - **Date:** 2026-11-02
 - **Status:** awaiting approval
 - **Spec authority:** `docs/design/phase-4-spec.md` (AI orchestrator) — this doc fills the two largest gaps: no `/api/v1/ai/chat`, no settings surface, and no organization model for the agent.
-- **Scope:** one new migration, one new service crate module, gateway endpoints, one settings page, one knowledge-graph page, the chat widget, tests.
+- **Scope:** one new migration, one new service crate module, gateway endpoints, an OpenBao secret backend, one settings page, one knowledge-graph page, the chat widget, tests.
 
 ## 1. Why
 
@@ -152,7 +152,7 @@ New agent tools (registered in `talentos-tools`): `kg_search(query, class?)`, `k
 
 | Endpoint | Method | Permission | Notes |
 |---|---|---|---|
-| `/api/v1/ai/settings` | GET/PUT | `ai.settings.manage` (hr_admin) | key never returned; `api_key_set: bool` |
+| `/api/v1/ai/settings` | GET/PUT | `ai.settings.manage` (hr_admin) | key never returned; `api_key_set: bool`; secrets in OpenBao |
 | `/api/v1/ai/settings/test` | POST | same | one cheap completion; returns ok/latency/model |
 | `/api/v1/ai/chat` | POST | `ai.chat` (hr_admin, payroll_manager, manager) | the widget's endpoint |
 | `/api/v1/ai/kg` | GET | `ai.chat` | counts by class + last rebuild |
@@ -182,8 +182,64 @@ RBAC additions: `ai.chat`, `ai.settings.manage` in `crates/core/authz/src/rbac.r
 - vitest: prompt builder (ontology + subgraph → text), citation mapper.
 - E2E: settings page saves without echoing the key; graph page shows counts; chat head opens, shows the "not configured" state when key absent, and answers when present (skipped if no key at runtime).
 
-## 13. Open decisions (need your answer)
+## 13. Decisions (answered)
 
-1. **Encryption key**: use a new `APP_ENCRYPTION_KEY` env var (recommended) or reuse `AUTH_JWT_SECRET` (worse: rotating auth rotates data)?
-2. **KG scope v1**: the 12 classes above, or trim to the ones you actually manage today (Organization, LegalEntity, Department, Position, Employee, Skill, Policy)?
-3. **Where do the key/base URL live**: per-tenant in `ai_settings` (recommended, multi-tenant safe) or one global env for the whole deployment?
+1. **Encryption key:** new `APP_ENCRYPTION_KEY` (AES-256-GCM) for anything that must be encrypted in the database.
+2. **KG scope:** all 12 classes.
+3. **Provider secrets:** stored in **OpenBao** (KV v2), not in Postgres, with **auto-unseal** so the service starts unattended.
+
+## 14. OpenBao integration
+
+OpenBao 2.7.1 CLI and the `openbao/openbao:2.6.0` image are already present on this host; no OpenBao instance is running yet.
+
+### 14.1 Storage layout
+
+```
+secret/data/talentos/tenants/<tenant_id>/ai
+  { provider, base_url, model, api_key }
+```
+
+- One KV entry per tenant; `ai_settings` keeps only non-secret fields (provider, base_url, model, mcp_enabled, skills) plus `secret_ref` and `api_key_set`.
+- The gateway reads the entry at request time through a 60-second in-process cache; writes go through the settings endpoint (PUT), never from the browser directly.
+- Removing a key = delete the KV entry + set `api_key_set = false`.
+
+### 14.2 Auto-unseal
+
+OpenBao starts sealed and must unseal before serving secrets. `seal "static"` gives unattended start from a key file:
+
+```hcl
+# /etc/openbao/openbao.hcl
+storage "file" { path = "/openbao/data" }
+listener "tcp" { address = "0.0.0.0:8200" tls_disable = 1 }
+seal "static" {
+  current_key_id = "2026-11"
+  current_key    = "file:///openbao/seal.key"   # 32-byte hex, 0600
+}
+api_addr = "http://127.0.0.1:8200"
+ui = false
+```
+
+- `seal.key` lives on the host (mode 0600) and is injected as a file, not an env var.
+- Production can swap `seal "static"` for `seal "awskms" | "gcpckms" | "transit"` with no application change — the gateway only talks to the OpenBao API.
+- Losing `seal.key` loses the stored provider keys (they must be re-entered). Document this in the runbook; it is the standard static-seal trade-off.
+
+### 14.3 Gateway configuration
+
+| Env | Meaning |
+|---|---|
+| `OPENBAO_ADDR` | e.g. `http://127.0.0.1:8200` |
+| `OPENBAO_TOKEN` | token with `read`/`create`/`update` on `secret/data/talentos/*` |
+| `OPENBAO_ENABLED` | `true` in deployment; unset in tests |
+
+When `OPENBAO_ENABLED` is unset the settings endpoint reports `secrets_backend: "none"` and chat returns `503 ai_unavailable` — never falls back to writing keys to Postgres.
+
+### 14.4 Bootstrap
+
+`scripts/openbao-bootstrap.sh`: start the container with the config above, wait for unsealed status, enable `kv-v2` at `secret/`, write a scoped policy + token, and print the values to export. Idempotent; safe to re-run.
+
+## 15. Deferred (explicitly out of v1)
+
+- Rotating provider keys automatically.
+- Per-user OpenBao identities (AppRole per tenant is a follow-up; v1 uses one scoped token).
+- Graph visualisation (the v1 page is a list + neighbours panel).
+- RAG over documents feeding the graph (documents are nodes only).

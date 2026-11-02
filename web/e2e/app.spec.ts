@@ -878,6 +878,21 @@ test("HR opens AI settings and sees the provider form", async ({ page }) => {
   await expect(page.getByTestId("ai-save")).toHaveText("บันทึก");
 });
 
+test("HR rebuilds the knowledge graph and sees all class counts", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/ai/graph");
+  await expect(page.getByTestId("kg-rebuild")).toBeVisible();
+  for (const cls of [
+    "Organization", "LegalEntity", "Department", "Position", "Employee", "Skill",
+    "Policy", "Benefit", "PayrollItem", "Cycle", "Document", "Process",
+  ]) {
+    await expect(page.getByTestId(`kg-count-${cls}`)).toBeVisible();
+  }
+  await page.getByTestId("kg-rebuild").click();
+  await expect(page.getByTestId("kg-rebuilt")).toContainText(/โหนด/);
+  await expect(page.getByTestId("kg-count-Organization")).toContainText(/[1-9]/);
+});
+
 async function switchUser(page: Page, email: string, password: string) {
   await page.getByLabel("ออกจากระบบ").click();
   await page.goto("/login");

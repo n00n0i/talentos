@@ -124,6 +124,11 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 ("approval_delegation", "view_self"),
                 &["hr_admin", "payroll_manager", "manager", "employee"][..],
             ),
+            (
+                ("ai", "chat"),
+                &["hr_admin", "payroll_manager", "manager"][..],
+            ),
+            (("ai.settings", "manage"), &["hr_admin"][..]),
         ])
     });
 
@@ -367,5 +372,27 @@ mod tests {
             "attendance",
             "approve"
         ));
+    }
+
+    #[test]
+    fn ai_permissions_follow_role_lists() {
+        assert!(!has_permission(&["employee".into()], "ai", "chat"));
+        for role in ["hr_admin", "payroll_manager", "manager"] {
+            assert!(
+                has_permission(&[role.into()], "ai", "chat"),
+                "{role} should chat"
+            );
+        }
+        assert!(has_permission(
+            &["hr_admin".into()],
+            "ai.settings",
+            "manage"
+        ));
+        for role in ["payroll_manager", "manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "ai.settings", "manage"),
+                "{role} must not manage AI settings"
+            );
+        }
     }
 }

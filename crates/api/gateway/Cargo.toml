@@ -25,7 +25,7 @@ talentos-tools = { path = "../../ai/talentos-tools" }
 talentos-rag = { path = "../../ai/talentos-rag" }
 talentos-model-gw = { path = "../../ai/talentos-model-gw" }
 axum = { workspace = true }
-tower = { workspace = true }
+tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true }
 fred = { workspace = true }
 serde = { workspace = true }

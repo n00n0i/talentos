@@ -871,6 +871,48 @@ test("HR opens settings and sees the notification summary without error", async 
   await expect(empty.or(rows.first())).toBeVisible();
 });
 
+test("HR opens AI settings and sees the provider form", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/ai");
+  await expect(page.getByTestId("ai-provider")).toBeVisible();
+  await expect(page.getByTestId("ai-save")).toHaveText("บันทึก");
+});
+
+test("chat head is on every page and links to AI settings when unconfigured", async ({ page }) => {
+  await login(page);
+  // Login lands on the dashboard, and the launcher is part of the app layout.
+  await expect(page.getByTestId("chat-launcher")).toBeVisible();
+  await page.goto("/employees");
+  await expect(page.getByTestId("chat-launcher")).toBeVisible();
+
+  await page.getByTestId("chat-launcher").click();
+  await expect(page.getByTestId("chat-panel")).toBeVisible();
+  await page.getByTestId("chat-input").fill("มีพนักงานกี่คน");
+  await page.getByTestId("chat-send").click();
+
+  // Local stack has OpenBao but no provider key: the gateway answers 503.
+  await expect(page.getByTestId("chat-unavailable")).toBeVisible();
+  await expect(page.getByTestId("chat-settings-link")).toHaveAttribute("href", "/settings/ai");
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("chat-panel")).toHaveCount(0);
+});
+
+test("HR rebuilds the knowledge graph and sees all class counts", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/ai/graph");
+  await expect(page.getByTestId("kg-rebuild")).toBeVisible();
+  for (const cls of [
+    "Organization", "LegalEntity", "Department", "Position", "Employee", "Skill",
+    "Policy", "Benefit", "PayrollItem", "Cycle", "Document", "Process",
+  ]) {
+    await expect(page.getByTestId(`kg-count-${cls}`)).toBeVisible();
+  }
+  await page.getByTestId("kg-rebuild").click();
+  await expect(page.getByTestId("kg-rebuilt")).toContainText(/โหนด/);
+  await expect(page.getByTestId("kg-count-Organization")).toContainText(/[1-9]/);
+});
+
 async function switchUser(page: Page, email: string, password: string) {
   await page.getByLabel("ออกจากระบบ").click();
   await page.goto("/login");

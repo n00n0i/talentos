@@ -1352,6 +1352,7 @@ mod tests {
             oidc_cache: std::sync::Arc::new(
                 std::sync::Mutex::new(std::collections::HashMap::new()),
             ),
+            secrets: None,
             started_at: std::time::Instant::now(),
         }
     }

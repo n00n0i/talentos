@@ -93,3 +93,25 @@ mod tests {
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
+
+/// PUT /api/v1/ai/settings — non-secret fields plus a write-only API key.
+#[derive(Debug, Deserialize)]
+pub struct AiSettingsUpdate {
+    pub provider: String,
+    pub base_url: Option<String>,
+    pub model: String,
+    #[serde(default = "default_true")]
+    pub mcp_enabled: bool,
+    #[serde(default = "empty_skills")]
+    pub skills: serde_json::Value,
+    /// Never returned; empty/absent leaves the stored secret untouched.
+    pub api_key: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn empty_skills() -> serde_json::Value {
+    serde_json::json!([])
+}

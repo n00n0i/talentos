@@ -27,6 +27,8 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Shared OIDC discovery cache, keyed by issuer.
     pub oidc_cache: oidc::DiscoveryCache,
+    /// `None` when OpenBao is disabled; there is no Postgres key fallback.
+    pub secrets: Option<Arc<crate::secrets::SecretsClient>>,
     pub started_at: std::time::Instant,
 }
 

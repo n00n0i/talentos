@@ -99,10 +99,10 @@ describe("visibleHrefs", () => {
     expect(hrefs.has("/audit")).toBe(false);
   });
 
-  it("employee sees only self-service, and not the overview", () => {
+  it("employee sees the overview plus self-service only", () => {
     const hrefs = visibleHrefs(EMPLOYEE);
     expect([...hrefs].sort()).toEqual(
-      ["/claims", "/clock", "/leave", "/me/payslips", "/me/reviews", "/ot", "/privacy"].sort(),
+      ["/", "/claims", "/clock", "/leave", "/me/payslips", "/me/reviews", "/ot", "/privacy"].sort(),
     );
   });
 
@@ -206,7 +206,8 @@ export function visibleHrefs(me: Me | null): Set<string> {
     if (!isAdmin) for (const h of ["/loans", "/final-settlement", "/users", "/settings", "/forms", "/audit", "/payslip"]) allowed.delete(h);
     return allowed;
   }
-  const allowed = new Set(EMPLOYEE_ONLY);
+  // Role-shaped dashboard (spec §14): everyone gets ภาพรวม.
+  const allowed = new Set(["/", ...EMPLOYEE_ONLY]);
   if (canDirect) DIRECT_ONLY.forEach((h) => allowed.add(h));
   if (canAttend) ATTENDANCE_ONLY.forEach((h) => allowed.add(h));
   return allowed;
@@ -308,7 +309,11 @@ In `web/app/globals.css` add `.app-shell` (grid `236px 1fr`, full viewport, no c
 
 ```bash
 cd web && npm run build
-# restart the standalone server on :3000 (same command this repo already uses)
+rm -rf .next/standalone/.next/static .next/standalone/public
+cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+for pid in $(ss -tlnp 2>/dev/null | grep ':3000' | grep -oP 'pid=\K[0-9]+' | sort -u); do kill "$pid"; done
+cd .next/standalone && setsid env TALENTOS_API_URL=http://127.0.0.1:18479 TALENTOS_COOKIE_SECURE=false PORT=3000 HOSTNAME=0.0.0.0 node server.js > /tmp/opencode/web-server.log 2>&1 < /dev/null &
+sleep 4 && curl -s -o /dev/null -w "web=%{http_code}\n" http://127.0.0.1:3000/login
 docker exec loans-postgres-1 psql -U talentos -d talentos -c "DELETE FROM tenants;"
 E2E_BASE_URL=http://127.0.0.1:3000 E2E_SETUP_TOKEN=e2e-setup-token npx playwright test
 ```
@@ -461,27 +466,22 @@ git commit -m "feat(web): dashboard role matrix and formatting helpers"
 - Consumes: `primaryRole`, `sectionsFor`, `compactThb`, `relativeTh`, `otTrendQuery` (Task 3); `gw`, `gql`, `handleApiError`, `Me`, `thDate`, `thbShort`; `Icon`.
 - Produces: `data-testid="dash-title"`, `data-testid="kpi-row"`, `data-testid="kpi-<id>"`, `data-testid="mine-grid"` — later tasks append sections to the same page.
 
-- [ ] **Step 1: Update the redirect-dependent assertion (deliberate, spec §14)**
+- [ ] **Step 1: Update the redirect-dependent assertion and add dashboard assertions (deliberate, spec §14)**
 
-In `web/e2e/app.spec.ts`, find the payslip test that logs in as `invitedEmail` and immediately asserts the heading `สลิปของฉัน`. Insert a navigation before the assertion:
-
-```ts
-await page.goto("/me/payslips");
-await expect(page.getByRole("heading", { name: "สลิปของฉัน" })).toBeVisible();
-```
-
-- [ ] **Step 2: Run that test to verify it now fails on the missing dashboard**
-
-Run: `cd web && E2E_BASE_URL=http://127.0.0.1:3000 E2E_SETUP_TOKEN=e2e-setup-token npx playwright test -g "payslip" -g "acknowledge"`
-Expected: FAIL — after the fix the employee reaches `/` and (with no dashboard change yet) is still redirected; the failing signal is the missing new testid asserted in Step 3.
-
-- [ ] **Step 3: Add dashboard assertions to the same spec file**
+In `web/e2e/app.spec.ts`, find the payslip test that logs in as `invitedEmail` and immediately asserts the heading `สลิปของฉัน`. Replace that with:
 
 ```ts
 // employee lands on the dashboard, not on /me/payslips
 await expect(page.getByTestId("dash-title")).toBeVisible();
 await expect(page.getByTestId("mine-grid")).toBeVisible();
+await page.goto("/me/payslips");
+await expect(page.getByRole("heading", { name: "สลิปของฉัน" })).toBeVisible();
 ```
+
+- [ ] **Step 2: Run that test to verify it fails**
+
+Run: `cd web && E2E_BASE_URL=http://127.0.0.1:3000 E2E_SETUP_TOKEN=e2e-setup-token npx playwright test -g "acknowledge"`
+Expected: FAIL — `dash-title` not found (the old page still redirects to `/me/payslips`).
 
 - [ ] **Step 4: Rewrite `page.tsx`**
 
@@ -509,7 +509,11 @@ Self-service card (`selfService`) for manager/employee: 4 tiles linking to `/me/
 
 ```bash
 cd web && npx tsc --noEmit && npm run build
-# restart standalone server on :3000
+rm -rf .next/standalone/.next/static .next/standalone/public
+cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+for pid in $(ss -tlnp 2>/dev/null | grep ':3000' | grep -oP 'pid=\K[0-9]+' | sort -u); do kill "$pid"; done
+cd .next/standalone && setsid env TALENTOS_API_URL=http://127.0.0.1:18479 TALENTOS_COOKIE_SECURE=false PORT=3000 HOSTNAME=0.0.0.0 node server.js > /tmp/opencode/web-server.log 2>&1 < /dev/null &
+sleep 4
 docker exec loans-postgres-1 psql -U talentos -d talentos -c "DELETE FROM tenants;"
 E2E_BASE_URL=http://127.0.0.1:3000 E2E_SETUP_TOKEN=e2e-setup-token npx playwright test
 ```
@@ -534,19 +538,22 @@ git commit -m "feat(web): role-shaped dashboard shell with KPI row and self-serv
 - Consumes: the three approval endpoints; `thDate`; `relativeTh` is **not** used here (no submission timestamp — spec §15.6).
 - Produces: `data-testid="approvals-grid"` and `data-testid="approval-card"` per item.
 
-- [ ] **Step 1: Add the failing E2E assertion**
+- [ ] **Step 1: Add a new standalone test (do not navigate mid-flow inside an existing test)**
 
-In the HR workflow test (after the leave request is created and before its approval), add:
+Append a new test after the existing leave-request test (the suite is `serial`, so a pending leave exists by then):
 
 ```ts
-await page.goto("/");
-await expect(page.getByTestId("approvals-grid")).toBeVisible();
-await expect(page.getByTestId("approval-card").first()).toBeVisible();
+test("dashboard shows the pending approvals", async ({ page }) => {
+  await login(page);
+  await expect(page.getByTestId("approvals-grid")).toBeVisible();
+  await expect(page.getByTestId("approval-card").first()).toBeVisible();
+  await expect(page.getByTestId("approval-card").first()).toContainText("E2E001");
+});
 ```
 
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `cd web && E2E_BASE_URL=http://127.0.0.1:3000 E2E_SETUP_TOKEN=e2e-setup-token npx playwright test -g "leave"`
+Run: `cd web && E2E_BASE_URL=http://127.0.0.1:3000 E2E_SETUP_TOKEN=e2e-setup-token npx playwright test -g "dashboard shows the pending approvals"`
 Expected: FAIL — `approvals-grid` not found.
 
 - [ ] **Step 3: Implement the section**

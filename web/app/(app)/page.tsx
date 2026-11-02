@@ -8,6 +8,7 @@ import {
   compactThb,
   otTrendQuery,
   primaryRole,
+  relativeTh,
   sectionsFor,
   type SectionId,
 } from "@/lib/dashboard";
@@ -17,15 +18,18 @@ type Headcount = {
   active: number;
   probation: number;
   leave: number;
-  by_department: { department: string; count: number }[];
+  by_department: { department: string | null; count: number }[];
 };
 
 type LatestRun = {
   periodStart: string;
   periodEnd: string;
   status: string;
+  totalGross: string;
   totalNet: string;
   totalTax: string;
+  totalSso: string;
+  totalPf: string;
 };
 
 type SelfPayslip = { net_pay: string; period_start: string };
@@ -56,7 +60,7 @@ type ClaimApproval = {
 type Approvals = { leave: LeaveApproval[]; ot: OtApproval[]; claims: ClaimApproval[] };
 
 const RUNS_QUERY =
-  "{ payrollRuns(limit: 1) { periodStart periodEnd status totalNet totalTax } }";
+  "{ payrollRuns(limit: 1) { periodStart periodEnd status totalGross totalNet totalTax totalSso totalPf } }";
 
 const DRAFT_RUNS_QUERY = "{ payrollRuns(limit: 24) { status } }";
 
@@ -397,6 +401,230 @@ function OtChart({ rows, failed }: { rows: OtRow[] | null; failed: boolean }) {
   );
 }
 
+function RunSummary({
+  run,
+  loaded,
+  failed,
+}: {
+  run: LatestRun | null;
+  loaded: boolean;
+  failed: boolean;
+}) {
+  const { t } = useI18N();
+  const rows = run
+    ? [
+        { key: "gross", label: t("dash.summary.gross"), value: compactThb(run.totalGross) },
+        { key: "tax", label: t("dash.summary.tax"), value: compactThb(run.totalTax) },
+        { key: "sso", label: t("dash.summary.sso"), value: compactThb(run.totalSso) },
+        { key: "pf", label: t("dash.summary.pf"), value: compactThb(run.totalPf) },
+        { key: "net", label: t("dash.summary.net"), value: compactThb(run.totalNet) },
+      ]
+    : [];
+
+  return (
+    <div className="card summary" data-testid="run-summary">
+      <div className="summary-head">
+        <h2>{t("dash.summary.title")}</h2>
+        {run ? <span className="summary-period">{`${thDate(run.periodStart)} – ${thDate(run.periodEnd)}`}</span> : null}
+      </div>
+      {failed ? (
+        <p className="summary-empty">{t("dash.cardError")}</p>
+      ) : !run ? (
+        loaded ? <p className="summary-empty">{t("dash.empty.summary")}</p> : null
+      ) : (
+        <>
+          <div className="summary-rows">
+            {rows.map((row) => (
+              <div className={`summary-row${row.key === "net" ? " net" : ""}`} key={row.key}>
+                <span>{row.label}</span>
+                <b>{row.value}</b>
+              </div>
+            ))}
+          </div>
+          <Link className="summary-cta" href="/payroll">
+            {t("dash.summary.cta")}
+          </Link>
+        </>
+      )}
+    </div>
+  );
+}
+
+const DONUT_COLORS = [
+  "var(--teal)",
+  "var(--sage-strong)",
+  "var(--sage)",
+  "var(--warning)",
+  "var(--text-3)",
+];
+const DONUT_RADIUS = 52;
+const DONUT_CIRCUMFERENCE = 2 * Math.PI * DONUT_RADIUS;
+
+type DeptSegment = { label: string; count: number; color: string };
+
+/** Top 4 departments plus an "other" roll-up; empty names share the unknown bucket. */
+function deptSegments(
+  rows: Headcount["by_department"],
+  unknown: string,
+  other: string,
+): DeptSegment[] {
+  const buckets = new Map<string, number>();
+  for (const row of rows) {
+    const label = row.department?.trim() ? row.department : unknown;
+    buckets.set(label, (buckets.get(label) ?? 0) + row.count);
+  }
+  const sorted = [...buckets.entries()].sort((a, b) => b[1] - a[1]);
+  const segments = sorted
+    .slice(0, 4)
+    .map(([label, count]) => ({ label, count }));
+  const rest = sorted.slice(4).reduce((sum, [, count]) => sum + count, 0);
+  if (rest > 0) segments.push({ label: other, count: rest });
+  return segments.map((segment, index) => ({
+    ...segment,
+    color: DONUT_COLORS[Math.min(index, DONUT_COLORS.length - 1)],
+  }));
+}
+
+function DeptDonut({ headcount, failed }: { headcount: Headcount | null; failed: boolean }) {
+  const { t } = useI18N();
+  const total = headcount ? headcount.active + headcount.probation + headcount.leave : 0;
+  const segments = headcount
+    ? deptSegments(headcount.by_department, t("dash.unknownDept"), t("dash.dept.other"))
+    : [];
+  const bucketTotal = segments.reduce((sum, segment) => sum + segment.count, 0);
+  let offset = 0;
+
+  return (
+    <div className="card donut" data-testid="dept-donut">
+      <div className="card-head">
+        <h2>{t("dash.dept.title")}</h2>
+      </div>
+      {failed ? (
+        <p className="donut-empty">{t("dash.cardError")}</p>
+      ) : headcount === null ? null : total === 0 || bucketTotal === 0 ? (
+        <p className="donut-empty">{t("dash.empty.dept")}</p>
+      ) : (
+        <div className="donut-body">
+          <svg viewBox="0 0 160 160" role="img" aria-label={t("dash.dept.title")}>
+            <circle
+              cx="80"
+              cy="80"
+              r={DONUT_RADIUS}
+              fill="none"
+              stroke="var(--line)"
+              strokeWidth="16"
+            />
+            {segments.map((segment, index) => {
+              const length = (segment.count / bucketTotal) * DONUT_CIRCUMFERENCE;
+              const dash = `${length} ${DONUT_CIRCUMFERENCE - length}`;
+              const dashOffset = -offset;
+              offset += length;
+              return (
+                <circle
+                  key={`${segment.label}-${index}`}
+                  cx="80"
+                  cy="80"
+                  r={DONUT_RADIUS}
+                  fill="none"
+                  stroke={segment.color}
+                  strokeWidth="16"
+                  strokeDasharray={dash}
+                  strokeDashoffset={dashOffset}
+                  transform="rotate(-90 80 80)"
+                >
+                  <title>{`${segment.label}: ${segment.count}`}</title>
+                </circle>
+              );
+            })}
+            <text className="donut-total" x="80" y="78" textAnchor="middle">
+              {total}
+            </text>
+            <text className="donut-total-label" x="80" y="94" textAnchor="middle">
+              {t("dash.kpi.headcount")}
+            </text>
+          </svg>
+          <ul className="donut-legend">
+            {segments.map((segment, index) => (
+              <li className="donut-legend-row" key={`${segment.label}-${index}`}>
+                <span className="donut-dot" style={{ background: segment.color }} />
+                <span className="donut-legend-label">{segment.label}</span>
+                <span className="donut-legend-count">{segment.count}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type ActivityEntry = { action: string; created_at: string };
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  "employee.create": "dash.activity.employeeCreate",
+  "payroll.run.approve": "dash.activity.payrollApprove",
+  "leave.decide": "dash.activity.leaveDecide",
+  "attendance.import": "dash.activity.attendanceImport",
+};
+
+function useActivity(enabled: boolean) {
+  const [entries, setEntries] = useState<ActivityEntry[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    gw<{ entries: ActivityEntry[] }>("api/v1/audit?limit=4")
+      .then((data) => {
+        if (alive) setEntries(data.entries ?? []);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [enabled]);
+
+  return { entries, failed };
+}
+
+function ActivityCard({
+  entries,
+  failed,
+}: {
+  entries: ActivityEntry[] | null;
+  failed: boolean;
+}) {
+  const { t } = useI18N();
+
+  return (
+    <div className="card" data-testid="activity">
+      <div className="card-head">
+        <h2>{t("dash.activity.title")}</h2>
+      </div>
+      {failed ? (
+        <p className="recent-empty">{t("dash.cardError")}</p>
+      ) : entries === null ? null : entries.length === 0 ? (
+        <p className="recent-empty">{t("dash.empty.activity")}</p>
+      ) : (
+        <ul className="recent">
+          {entries.map((entry, index) => (
+            <li className="recent-item" key={`${entry.action}-${entry.created_at}-${index}`}>
+              <span className="recent-label">
+                {ACTIVITY_LABELS[entry.action]
+                  ? t(ACTIVITY_LABELS[entry.action])
+                  : entry.action}
+              </span>
+              <span className="recent-when">{relativeTh(entry.created_at)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function OwnPayslipKpi() {
   const { t } = useI18N();
   const [payslip, setPayslip] = useState<SelfPayslip | null>(null);
@@ -541,6 +769,9 @@ export default function DashboardPage() {
     sections.includes("followUps"),
   );
   const { rows: otRows, failed: otFailed } = useOtTrend(sections.includes("otTrend"));
+  const { entries: activity, failed: activityFailed } = useActivity(
+    sections.includes("activity"),
+  );
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
@@ -641,14 +872,21 @@ export default function DashboardPage() {
             <ApprovalsGrid approvals={approvals} failed={approvalsFailed} />
           )}
           {sections.includes("otTrend") && <OtChart rows={otRows} failed={otFailed} />}
-          {/* Task 7 appends activity here. */}
+          {sections.includes("activity") && (
+            <ActivityCard entries={activity} failed={activityFailed} />
+          )}
           {sections.includes("selfService") && <SelfServiceCard />}
         </div>
         <div className="stack">
           {sections.includes("followUps") && (
             <FollowUpsCard data={followUps} failed={followUpsFailed} />
           )}
-          {/* Task 7 appends runSummary and departments here. */}
+          {sections.includes("runSummary") && (
+            <RunSummary run={run} loaded={runLoaded} failed={runFailed} />
+          )}
+          {sections.includes("departments") && (
+            <DeptDonut headcount={headcount} failed={headcountFailed} />
+          )}
         </div>
       </div>
     </>

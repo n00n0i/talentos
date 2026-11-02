@@ -118,6 +118,9 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   await page.goto("/");
   await expect(page.getByTestId("follow-ups")).toBeVisible();
   await expect(page.getByTestId("ot-chart")).toBeVisible();
+  await expect(page.getByTestId("run-summary")).toBeVisible();
+  await expect(page.getByTestId("dept-donut")).toBeVisible();
+  await expect(page.getByTestId("activity")).toBeVisible();
 
   await page.goto("/employees");
   // Re-runnable: on a repeat run E2E001 already exists, so skip the create

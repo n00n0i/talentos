@@ -66,6 +66,7 @@ test("switches to English via the lang-toggle and sees EN nav labels", async ({ 
   await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Payroll" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+  await expect(page.getByTestId("side-nav")).toBeVisible();
   // The toggle now shows "TH" (to switch back)
   await expect(page.getByTestId("lang-toggle")).toHaveText("TH");
   // Cookie is set to en

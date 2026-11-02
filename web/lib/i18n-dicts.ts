@@ -36,6 +36,8 @@ export const th: Dict = {
   "nav.group.admin": "ตั้งค่า",
   // Shell: common
   "shell.menu": "เมนูลักษณ์",
+  "shell.closeMenu": "ปิดเมนู",
+  "shell.searchPlaceholder": "ค้นหาเมนู",
   "shell.logout": "ออกจากระบบ",
   "shell.toggleLang": "สลับภาษา",
   "common.save": "บันทึก",
@@ -219,6 +221,8 @@ export const en: Dict = {
   "nav.group.mine": "Mine",
   "nav.group.admin": "Settings",
   "shell.menu": "Main menu",
+  "shell.closeMenu": "Close menu",
+  "shell.searchPlaceholder": "Search menu",
   "shell.logout": "Log out",
   "shell.toggleLang": "Switch language",
   "common.save": "Save",

@@ -34,7 +34,10 @@ CREATE TABLE ai_settings (
     provider     TEXT NOT NULL DEFAULT 'huakati',
     base_url     TEXT,
     model        TEXT NOT NULL DEFAULT 'qwen2.5-72b-instruct',
-    api_key_enc  BYTEA,
+    -- Provider credentials live in OpenBao (design §14), never in Postgres.
+    -- secret_ref points at the KV path; api_key_set mirrors its existence.
+    secret_ref   TEXT,
+    api_key_set  BOOLEAN NOT NULL DEFAULT false,
     mcp_enabled  BOOLEAN NOT NULL DEFAULT true,
     skills       JSONB NOT NULL DEFAULT '[]',
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()

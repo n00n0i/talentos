@@ -8,13 +8,6 @@ import { gw, Me } from "@/lib/api";
 import { useI18N } from "@/lib/i18n";
 import { visibleNav } from "@/lib/nav";
 
-const ROLE_LABEL: Record<string, string> = {
-  hr_admin: "ผู้ดูแล HR",
-  payroll_manager: "ผู้จัดการเงินเดือน",
-  manager: "หัวหน้างาน",
-  employee: "พนักงาน",
-};
-
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "T";
@@ -102,7 +95,14 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }, [me, pathname, router, isAdmin, canHr, canReports]);
 
   const displayName = me?.full_name_th || me?.email || "TalentOS";
-  const roleLabel = me?.roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ") || "";
+  const roleLabel =
+    me?.roles
+      .map((r) => {
+        const key = `role.${r}`;
+        const label = t(key);
+        return label === key ? r : label; // unknown role → show the raw role
+      })
+      .join(" · ") || "";
   const needle = q.trim().toLowerCase();
   const groups = visibleNav(me)
     .map((g) => ({

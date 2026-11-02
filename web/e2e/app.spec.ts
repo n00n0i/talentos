@@ -1411,7 +1411,7 @@ test("HR adds a goal and updates its progress", async ({ page }) => {
 
 test("manager workflow: reporting line, calibration, goal check-in", async ({ page }) => {
   // Runs after the manager role test above has created manager-e2e@example.com,
-  // and after HR has created the "รอบประเมืน E2E" cycle + "เพิ่่่มยอดขาย E2E" goal for E2E001.
+  // and after HR has created the "รอบประเมิน E2E" cycle + "เพิ่่่มยอดขาย E2E" goal for E2E001.
   await login(page);
 
   // 1. As HR, create a second employee that will be the manager's direct report.
@@ -1443,13 +1443,46 @@ test("manager workflow: reporting line, calibration, goal check-in", async ({ pa
   await page.getByTestId("save-employee").click();
   await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
 
-  // 3. Manager logs in and sees their direct report's review cycle.
+  // 3. start_cycle only creates review rows for employees that exist when it
+  // runs (test #47 started the cycle before E2E002 existed), so E2E002 has no
+  // review row and the manager's scoped list (which needs a submitted review
+  // of a direct report) is empty. Create a fresh cycle, start it, submit
+  // E2E002's review, then point the manager at that new cycle.
+  await page.goto("/performance");
+  await page.getByTestId("cycle-name").fill("รอบประเมิน E2E-2");
+  await page.getByTestId("cycle-start").fill("2026-01-01");
+  await page.getByTestId("cycle-end").fill("2026-12-31");
+  await page.getByTestId("create-cycle").click();
+  await expect(page.getByText("สร้างรอบประเมินแล้ว")).toBeVisible();
+  const newCycle = page.getByTestId("cycle-row").filter({ hasText: "รอบประเมิน E2E-2" });
+  await newCycle.getByTestId("start-cycle").click();
+  const reportReview = page.getByTestId("review-row").filter({ hasText: "E2E002" });
+  await reportReview.getByTestId("review-rating").selectOption("4");
+  await reportReview.getByTestId("submit-review").click();
+  await expect(page.getByText("บันทึกผลประเมินแล้ว")).toBeVisible();
+
+  // 4b. The check-in step scopes goals to the direct report (E2E002), but the
+  // goal from "HR adds a goal" is on E2E001, so the manager sees none. Create a
+  // goal for E2E002 as HR before logging in as the manager.
+  await page.goto("/goals");
+  const reportGoalEmployee = page
+    .getByTestId("goal-employee")
+    .locator("option")
+    .filter({ hasText: "E2E002" });
+  await reportGoalEmployee.waitFor({ state: "attached" });
+  await page.getByTestId("goal-employee").selectOption((await reportGoalEmployee.getAttribute("value"))!);
+  await page.getByTestId("goal-title").fill("เพิ่มยอดขาย E2E");
+  await page.getByTestId("goal-target").fill("10%");
+  await page.getByTestId("add-goal").click();
+  await expect(page.getByText("เพิ่มเป้าหมายแล้ว")).toBeVisible();
+
+    // 4. Manager logs in and sees their direct report's review cycle.
   await switchUser(page, managerEmail, "ManagerPass123!");
   await page.goto("/performance");
-  await expect(page.getByTestId("cycle-row").filter({ hasText: "รอบประเมืน E2E" })).toBeVisible();
+  await expect(page.getByTestId("cycle-row").filter({ hasText: "รอบประเมิน E2E-2" })).toBeVisible();
   await page
     .getByTestId("cycle-row")
-    .filter({ hasText: "รอบประเมืน E2E" })
+    .filter({ hasText: "รอบประเมิน E2E-2" })
     .getByTestId("select-cycle")
     .click();
   await expect(page.getByTestId("calibration-employee")).toBeVisible();
@@ -1472,7 +1505,7 @@ test("manager workflow: reporting line, calibration, goal check-in", async ({ pa
   const checkinGoalOption = page
     .getByTestId("checkin-goal")
     .locator("option")
-    .filter({ hasText: "เพิ่่่่่มยอดขาย E2E" });
+    .filter({ hasText: "เพิ่มยอดขาย E2E" });
   await checkinGoalOption.waitFor({ state: "attached" });
   await page
     .getByTestId("checkin-goal")
@@ -1487,6 +1520,13 @@ test("manager workflow: reporting line, calibration, goal check-in", async ({ pa
 
 test("employee acknowledges their performance review", async ({ page }) => {
   await login(page);
+  // #49 re-linked E2E001 to the manager user, so the invited user no longer owns a
+  // review. Re-link E2E001 to the invited user (as HR) so their own review shows.
+  await page.goto("/employees");
+  await page.locator("table").first().getByRole("cell", { name: "E2E001", exact: true }).locator("xpath=..").getByRole("button", { name: "แก้ไข" }).click();
+  await page.getByTestId("employee-user").selectOption({ label: `${invitedEmail} · ผู้ถูกเชิญ` });
+  await page.getByTestId("save-employee").click();
+  await expect(page.getByText("บันทึกการแก้ไขแล้ว")).toBeVisible();
   await page.getByLabel("ออกจากระบบ").click();
   await page.getByLabel("องค์กร").fill("e2e");
   await page.getByLabel("อีเมล").fill(invitedEmail);
@@ -1495,11 +1535,11 @@ test("employee acknowledges their performance review", async ({ page }) => {
   await expect(page.getByLabel("ออกจากระบบ")).toBeVisible();
 
   await page.goto("/me/reviews");
-  const review = page.getByTestId("my-review").filter({ hasText: "รอบประเมิน E2E" });
+  const review = page.getByTestId("my-review").filter({ hasText: /(?:รอบประเมิน E2E)(?!-)/ });
   await expect(review).toContainText("4/5");
   await review.getByTestId("acknowledge-review").click();
   await expect(page.getByText("รับทราบผลประเมินแล้ว")).toBeVisible();
   await expect(
-    page.getByTestId("my-review").filter({ hasText: "รอบประเมิน E2E" }),
+    page.getByTestId("my-review").filter({ hasText: /(?:รอบประเมิน E2E)(?!-)/ }),
   ).toContainText("รับทราบแล้ว");
 });

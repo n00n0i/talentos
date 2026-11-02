@@ -40,7 +40,7 @@ New in this cycle (handoff-execution branch, 2026-11-01):
 - gateway business metrics 8 tests (outbox backlog, payroll run status, stuck-run age)
 - gateway alert webhook 7 tests (thresholds, payload shape, sweep)
 - bank template 4 tests (RLS isolation, create audit, unverified default, invalid field 422)
-- OIDC 8 tests (discovery cache, PKCE S256, state sign/verify round-trip + tamper, callback user-link DB tests: link existing active, create new in empty tenant, reject inactive)
+- OIDC 8 tests (discovery cache, PKCE S256, state sign/verify round-trip + tamper, callback user-link DB tests: link existing active, create new in empty tenant, reject inactive). id_token signature is now verified via the provider JWKS (RS256, kid match, iss/aud/exp) — the unverified claim-decode path is gone; a mock JWKS endpoint + signed token drives the callback test.
 - esign 4 tests (payslip hash + audit, idempotent per-signer, not-owned rejected, empty name rejected)
 - PDPA 6 tests (PII wiped, payslips retained, ops data purged per cutoff, audit row, tenant isolation, retention purge only expired)
 - performance manager 4 tests (manager assignment + audit, self/cross-tenant rejection, manager-scoped cycles/direct reports, calibration upsert + not-manager rejection)
@@ -125,6 +125,9 @@ holiday OT, user invite, password reset, self-service payslips, employee clock
 punch with GPS, HR shift creation and day correction/approval, and employee leave
 request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LINE id save, OT request → HR approval (plus approved history), a two-step manager→HR leave chain, opening leave-balance CSV import, the reports/GL page, a loan/advance with payroll installment, an expense claim with receipt approval, a final-settlement draft, a privacy-notice acceptance plus personal-data export, an expiring employee document with a downloadable file, a standard onboarding checklist, a recruitment job with a candidate moved to interview, an expiring training certificate, a performance cycle with a submitted review, a goal with updated progress, a candidate CV upload/download, its stage history, an interview, and an offer letter with status/PDF link, and employee acknowledgement of a review. Payroll load test: 500 employees in ~0.38 s locally
 (~1,300/s).
+
+- E2E re-runnable: `first-run setup` tolerates the already-initialized 409 (`setup-error` testid); `creates an employee` skips the create when E2E001 is still active, keeps the shift name unique per run, and targets the current payroll period (advancing to a free month on repeat) so the OT + run + payslip chain stays green without a clean DB. Two new `data-testid` hooks: `setup-error` and `run-row` / `create-start` / `create-end`.
+- Performance-page fix: `loadCycles` now uses the full cycle list for write-capable roles (`hr_admin`) and only the manager-scoped `me/performance/cycles` for pure direct-managers — a freshly created cycle no longer vanishes from an HR admin's list (was the blocker on the clean-DB run).
 
 New in this cycle (2026-11-01):
 - EN i18n layer: `lang-toggle` TH/EN switcher; 11 vitest unit tests + 1 Playwright case
@@ -253,4 +256,5 @@ phase boundary is already isolated, so the Temporal swap is a wiring change, not
 - PDFs are cached on local disk (`PAYSLIP_STORE_DIR`), not MinIO yet.
 - Only one default template per tenant is editable through the API (no per-entity or multiple named templates in the UI).
 - In-process rate limiting in the model gateway; the distributed limiter lives in the API gateway.
-- Single static HS256 signing key (no JWKS rotation yet).
+- Single static HS256 signing key (no JWKS rotation yet). OIDC `id_token` is signature-verified against the provider JWKS (no key rotation config needed on our side; we fetch the provider's `jwks_uri`).
+- Known E2E limitation (pre-existing, out of scope): `manager workflow` (app.spec.ts #49) expects the HR-created performance cycle to appear in a pure manager's `me/performance/cycles`, but that scoped list only surfaces cycles that already hold a submitted review of one of the manager's *direct reports* — a brand-new cycle with no review of the direct report is not yet visible to the manager path. The suite otherwise passes 54/55 on a clean DB; the 55th is this coupling, documented here rather than rewritten.

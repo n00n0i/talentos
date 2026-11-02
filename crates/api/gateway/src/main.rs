@@ -7,6 +7,7 @@ mod middleware;
 mod notify_worker;
 mod ratelimit;
 mod router;
+mod secrets;
 mod state;
 
 use std::net::SocketAddr;

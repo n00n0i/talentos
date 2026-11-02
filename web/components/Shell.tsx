@@ -132,7 +132,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           <span className="side-brand-mark">
             <Icon name="clover" size={18} />
           </span>
-          <span className="side-brand-name">TalentOS</span>
+          <span className="side-brand-name">
+            TalentOS
+            {me?.tenant_name ? <span className="side-brand-sub">{me.tenant_name}</span> : null}
+          </span>
         </Link>
         <nav className="side-nav" id="side-nav-menu" aria-label={t("shell.menu")}>
           {groups.map((g) => (
@@ -141,7 +144,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               {g.items.map((i) => (
                 <Link key={i.href} href={i.href} className={pathname === i.href ? "active" : undefined}>
                   <span className="ico">
-                    <Icon name={i.icon} size={15} />
+                    <Icon name={i.icon} size={10} />
                   </span>
                   {t(i.labelKey)}
                 </Link>

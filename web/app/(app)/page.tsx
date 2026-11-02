@@ -169,6 +169,11 @@ const APPROVAL_KIND: Record<ApprovalCard["kind"], string> = {
   ot: "dash.approvals.ot",
   claim: "dash.approvals.claim",
 };
+const APPROVAL_ICON: Record<ApprovalCard["kind"], "clock" | "wallet"> = {
+  leave: "clock",
+  ot: "clock",
+  claim: "wallet",
+};
 
 function approvalCards(approvals: Approvals): ApprovalCard[] {
   const range = (start: string, end: string) =>
@@ -232,6 +237,9 @@ function ApprovalsGrid({
                 data-testid="approval-card"
               >
                 <span className="appr-head">
+                  <span className="appr-ico">
+                    <Icon name={APPROVAL_ICON[card.kind]} size={12} />
+                  </span>
                   <span className="chip">{t(APPROVAL_KIND[card.kind])}</span>
                   <span className="appr-when">{card.date}</span>
                 </span>
@@ -304,6 +312,9 @@ function FollowUpsCard({ data, failed }: { data: FollowUpData | null; failed: bo
         ) : (
           rows.map((row) => (
             <Link className="follow-row" href={row.href} key={row.key}>
+              <span className="follow-ico">
+                <Icon name={row.key === "drafts" ? "wallet" : row.key === "cycles" ? "clock" : "file"} size={12} />
+              </span>
               <span>{row.label}</span>
               <span className="follow-count">{data[row.key]}</span>
             </Link>
@@ -561,6 +572,10 @@ function DeptDonut({ headcount, failed }: { headcount: Headcount | null; failed:
 type ActivityEntry = { action: string; created_at: string };
 
 const ACTIVITY_LABELS: Record<string, string> = {
+  "auth.login": "dash.activity.login",
+  "auth.logout": "dash.activity.logout",
+  "employee.update": "dash.activity.employeeUpdate",
+  "payroll.run.create": "dash.activity.payrollCreate",
   "employee.create": "dash.activity.employeeCreate",
   "payroll.run.approve": "dash.activity.payrollApprove",
   "leave.decide": "dash.activity.leaveDecide",
@@ -611,10 +626,13 @@ function ActivityCard({
         <ul className="recent">
           {entries.map((entry, index) => (
             <li className="recent-item" key={`${entry.action}-${entry.created_at}-${index}`}>
+              <span className="recent-ico">
+                <Icon name="clock" size={12} />
+              </span>
               <span className="recent-label">
                 {ACTIVITY_LABELS[entry.action]
                   ? t(ACTIVITY_LABELS[entry.action])
-                  : entry.action}
+                  : t("dash.activity.other")}
               </span>
               <span className="recent-when">{relativeTh(entry.created_at)}</span>
             </li>

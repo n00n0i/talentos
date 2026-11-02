@@ -66,6 +66,7 @@ test("switches to English via the lang-toggle and sees EN nav labels", async ({ 
   await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Payroll" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
+  await expect(page.getByTestId("side-nav")).toBeVisible();
   // The toggle now shows "TH" (to switch back)
   await expect(page.getByTestId("lang-toggle")).toHaveText("TH");
   // Cookie is set to en
@@ -114,6 +115,12 @@ test("settings persist across reload", async ({ page }) => {
 
 test("creates an employee, records OT, runs and approves payroll", async ({ page }) => {
   await login(page);
+  await page.goto("/");
+  await expect(page.getByTestId("follow-ups")).toBeVisible();
+  await expect(page.getByTestId("ot-chart")).toBeVisible();
+  await expect(page.getByTestId("run-summary")).toBeVisible();
+  await expect(page.getByTestId("dept-donut")).toBeVisible();
+  await expect(page.getByTestId("activity")).toBeVisible();
 
   await page.goto("/employees");
   // Re-runnable: on a repeat run E2E001 already exists, so skip the create
@@ -345,6 +352,10 @@ test("links an employee account and shows self-service payslips", async ({ page 
   await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
 
+  // employee lands on the dashboard, not on /me/payslips
+  await expect(page.getByTestId("dash-title")).toBeVisible();
+  await expect(page.getByTestId("mine-grid")).toBeVisible();
+  await page.goto("/me/payslips");
   await expect(page.getByRole("heading", { name: "สลิปของฉัน" })).toBeVisible();
   await expect(page.getByRole("link", { name: "PDF" }).first()).toBeVisible();
 
@@ -475,6 +486,28 @@ test("employee requests leave, HR approves it", async ({ page }) => {
   await loginAs(invitedEmail, "ResetPass123!");
   await page.goto("/leave");
   await expect(page.getByTestId("leave-row").filter({ hasText: "ธ.ค. 2569" })).toContainText("อนุมัติแล้ว");
+});
+
+test("dashboard shows the pending approvals", async ({ page }) => {
+  await login(page);
+  // The leave test above approves its own request, so seed a fresh pending one
+  // (HR may submit on behalf of an employee with leave_request.view_team).
+  const found = await apiGet(page, "/api/gw/api/v1/employees?q=E2E001");
+  const created = await apiPost(page, "/api/gw/api/v1/leave/requests", {
+    employee_id: found.json.employees[0].id,
+    leave_type: "annual",
+    start_date: "2026-12-22",
+    end_date: "2026-12-23",
+    reason: "E2E dashboard",
+  });
+  // A re-run without a DB reset finds the previous request still pending (409);
+  // either way a pending leave for E2E001 exists.
+  expect([201, 409]).toContain(created.status);
+
+  await page.goto("/");
+  await expect(page.getByTestId("approvals-grid")).toBeVisible();
+  await expect(page.getByTestId("approval-card").first()).toBeVisible();
+  await expect(page.getByTestId("approval-card").first()).toContainText("E2E001");
 });
 
 test("HR bulk-imports employees from a CSV", async ({ page }) => {

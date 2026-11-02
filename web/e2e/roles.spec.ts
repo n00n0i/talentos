@@ -110,6 +110,10 @@ test("payroll manager is limited to payroll, reports, people", async ({ page }) 
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
   }
+  await page.goto("/");
+  await expect(page.getByTestId("dash-title")).toBeVisible();
+  await expect(page.getByTestId("run-summary")).toBeVisible();
+  await expect(page.getByTestId("approvals-grid")).toHaveCount(0);
 });
 
 test("manager is limited to team and self-service areas", async ({ page }) => {
@@ -146,6 +150,9 @@ test("manager is limited to team and self-service areas", async ({ page }) => {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
   }
+  await page.goto("/");
+  await expect(page.getByTestId("approvals-grid")).toBeVisible();
+  await expect(page.getByTestId("run-summary")).toHaveCount(0);
 });
 
 test("employee is limited to self-service areas", async ({ page }) => {
@@ -176,6 +183,9 @@ test("employee is limited to self-service areas", async ({ page }) => {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
   }
+  await page.goto("/");
+  await expect(page.getByTestId("mine-grid")).toBeVisible();
+  await expect(page.getByTestId("approvals-grid")).toHaveCount(0);
 });
 
 test("employee cannot open calendar; manager can", async ({ page }) => {

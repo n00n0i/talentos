@@ -38,6 +38,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: "admin", labelKey: "nav.group.admin", items: [
     { href: "/users", labelKey: "nav.users", icon: "user" },
     { href: "/settings", labelKey: "nav.settings", icon: "settings" },
+    { href: "/settings/ai", labelKey: "nav.ai", icon: "settings" },
     { href: "/forms", labelKey: "nav.forms", icon: "file" },
     { href: "/audit", labelKey: "nav.audit", icon: "file" },
   ]},
@@ -50,7 +51,8 @@ const ATTENDANCE_ONLY = ["/attendance", "/calendar"];
 // Today's shell shows exactly these 19 hrefs while /api/v1/auth/me is still
 // loading (canReports defaults to false), so admin links never flash.
 const BASE_NAV = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href)).filter(
-  (h) => !["/loans", "/final-settlement", "/reports", "/users", "/settings", "/forms", "/audit"].includes(h),
+  (h) =>
+    !["/loans", "/final-settlement", "/reports", "/users", "/settings", "/settings/ai", "/forms", "/audit"].includes(h),
 );
 
 export function visibleHrefs(me: Me | null): Set<string> {
@@ -65,7 +67,7 @@ export function visibleHrefs(me: Me | null): Set<string> {
   if (canHr) {
     const allowed = new Set(all);
     if (!canReports) for (const h of ["/loans", "/final-settlement", "/reports"]) allowed.delete(h);
-    if (!isAdmin) for (const h of ["/loans", "/final-settlement", "/users", "/settings", "/forms", "/audit", "/payslip"]) allowed.delete(h);
+    if (!isAdmin) for (const h of ["/loans", "/final-settlement", "/users", "/settings", "/settings/ai", "/forms", "/audit", "/payslip"]) allowed.delete(h);
     return allowed;
   }
   // Role-shaped dashboard (spec §14): everyone gets ภาพรวม.

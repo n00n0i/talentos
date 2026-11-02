@@ -871,6 +871,13 @@ test("HR opens settings and sees the notification summary without error", async 
   await expect(empty.or(rows.first())).toBeVisible();
 });
 
+test("HR opens AI settings and sees the provider form", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/ai");
+  await expect(page.getByTestId("ai-provider")).toBeVisible();
+  await expect(page.getByTestId("ai-save")).toHaveText("บันทึก");
+});
+
 async function switchUser(page: Page, email: string, password: string) {
   await page.getByLabel("ออกจากระบบ").click();
   await page.goto("/login");

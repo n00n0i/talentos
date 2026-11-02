@@ -193,6 +193,7 @@ export const th: Dict = {
   // Dashboard
   "dash.title": "ภาพรวม",
   "dash.subtitle": "ภาพรวมทีมและรอบเงินเดือนล่าสุดของคุณ",
+  "dash.cardError": "โหลดข้อมูลไม่สำเร็จ",
   "dash.kpi.headcount": "พนักงานที่ใช้งาน",
   "dash.kpi.net": "ยอดจ่ายสุทธิรอบล่าสุด",
   "dash.kpi.tax": "ภาษีหัก ณ ที่จ่าย",
@@ -205,6 +206,7 @@ export const th: Dict = {
   "dash.dept.title": "พนักงานตามแผนก",
   "dash.activity.title": "กิจกรรมล่าสุด",
   "dash.mine.title": "ของฉัน",
+  "dash.mine.leave": "ใบลาของฉัน",
   "dash.unknownDept": "ไม่ระบุ",
   "dash.empty.headcount": "ยังไม่มีข้อมูลพนักงาน",
   "dash.empty.net": "ยังไม่มีรอบเงินเดือน",
@@ -406,6 +408,7 @@ export const en: Dict = {
   // Dashboard
   "dash.title": "Overview",
   "dash.subtitle": "Your team and latest payroll run at a glance",
+  "dash.cardError": "Could not load this card",
   "dash.kpi.headcount": "Active employees",
   "dash.kpi.net": "Latest net pay",
   "dash.kpi.tax": "Withheld tax (PND.1)",
@@ -418,6 +421,7 @@ export const en: Dict = {
   "dash.dept.title": "Employees by department",
   "dash.activity.title": "Recent activity",
   "dash.mine.title": "Mine",
+  "dash.mine.leave": "My leave",
   "dash.unknownDept": "Unassigned",
   "dash.empty.headcount": "No employee data yet",
   "dash.empty.net": "No payroll run yet",

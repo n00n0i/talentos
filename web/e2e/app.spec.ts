@@ -346,6 +346,10 @@ test("links an employee account and shows self-service payslips", async ({ page 
   await page.getByLabel("รหัสผ่าน").fill("ResetPass123!");
   await page.getByRole("button", { name: "เข้าสู่ระบบ" }).click();
 
+  // employee lands on the dashboard, not on /me/payslips
+  await expect(page.getByTestId("dash-title")).toBeVisible();
+  await expect(page.getByTestId("mine-grid")).toBeVisible();
+  await page.goto("/me/payslips");
   await expect(page.getByRole("heading", { name: "สลิปของฉัน" })).toBeVisible();
   await expect(page.getByRole("link", { name: "PDF" }).first()).toBeVisible();
 

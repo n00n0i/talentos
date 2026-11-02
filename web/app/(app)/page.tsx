@@ -1,267 +1,351 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
+import { gql, gw, handleApiError, Me, thDate } from "@/lib/api";
 import {
-  gw,
-  gql,
-  handleApiError,
-  Me,
-  PayrollRun,
-  Payslip,
-  RUN_STATUS,
-  thb,
-  thbShort,
-  thDate,
-} from "@/lib/api";
+  compactThb,
+  primaryRole,
+  sectionsFor,
+  type SectionId,
+} from "@/lib/dashboard";
+import { useI18N } from "@/lib/i18n";
 
-type Employee = { employeeCode: string };
+type Headcount = {
+  active: number;
+  probation: number;
+  leave: number;
+  by_department: { department: string; count: number }[];
+};
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "T";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+type LatestRun = {
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  totalNet: string;
+  totalTax: string;
+};
+
+type SelfPayslip = { net_pay: string; period_start: string };
+type SelfReview = { id: string };
+type SelfBalance = { remaining_days: string };
+type SelfOt = { id: string };
+
+const RUNS_QUERY =
+  "{ payrollRuns(limit: 1) { periodStart periodEnd status totalNet totalTax } }";
+
+const KPI_IDS: SectionId[] = ["headcount", "net", "tax", "approvals", "ownPayslip"];
+
+function Kpi({
+  id,
+  label,
+  value,
+  hint,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="card kpi" data-testid={`kpi-${id}`}>
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value">{value}</div>
+      {hint ? <div className="kpi-hint">{hint}</div> : null}
+    </div>
+  );
+}
+
+function ApprovalsKpi() {
+  const { t } = useI18N();
+  const [counts, setCounts] = useState<{ leave: number; ot: number; claims: number } | null>(
+    null,
+  );
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.allSettled([
+      gw<{ requests: unknown[] }>("api/v1/leave/approvals"),
+      gw<{ requests: unknown[] }>("api/v1/ot/approvals"),
+      gw<{ claims: unknown[] }>("api/v1/claims/approvals"),
+    ]).then(([leave, ot, claims]) => {
+      if (!alive) return;
+      if (leave.status === "rejected" && ot.status === "rejected" && claims.status === "rejected") {
+        setFailed(true);
+        return;
+      }
+      setCounts({
+        leave: leave.status === "fulfilled" ? leave.value.requests.length : 0,
+        ot: ot.status === "fulfilled" ? ot.value.requests.length : 0,
+        claims: claims.status === "fulfilled" ? claims.value.claims.length : 0,
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const total = counts ? counts.leave + counts.ot + counts.claims : 0;
+  const hint = failed
+    ? t("dash.cardError")
+    : counts && total === 0
+      ? t("dash.empty.approvals")
+      : counts
+        ? `${t("nav.leave")} ${counts.leave} · ${t("nav.ot")} ${counts.ot} · ${t("nav.claims")} ${counts.claims}`
+        : undefined;
+
+  return (
+    <Kpi
+      id="approvals"
+      label={t("dash.kpi.approvals")}
+      value={counts ? String(total) : "—"}
+      hint={hint}
+    />
+  );
+}
+
+function OwnPayslipKpi() {
+  const { t } = useI18N();
+  const [payslip, setPayslip] = useState<SelfPayslip | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    gw<{ payslips: SelfPayslip[] }>("api/v1/me/payslips")
+      .then((data) => {
+        if (alive) setPayslip(data.payslips[0] ?? null);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      })
+      .finally(() => {
+        if (alive) setLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const hint = failed
+    ? t("dash.cardError")
+    : loaded && !payslip
+      ? t("dash.empty.ownPayslip")
+      : payslip
+        ? thDate(payslip.period_start)
+        : undefined;
+
+  return (
+    <Kpi
+      id="ownPayslip"
+      label={t("dash.kpi.ownPayslip")}
+      value={payslip ? compactThb(payslip.net_pay) : "—"}
+      hint={hint}
+    />
+  );
+}
+
+type MineKey = "payslip" | "review" | "leave" | "ot";
+
+function SelfServiceCard() {
+  const { t } = useI18N();
+  // undefined = still loading, null = endpoint answered with nothing
+  const [values, setValues] = useState<Partial<Record<MineKey, string | null>>>({});
+  const [failed, setFailed] = useState<Partial<Record<MineKey, boolean>>>({});
+
+  useEffect(() => {
+    let alive = true;
+    const put = (key: MineKey, value: string | null) => {
+      if (alive) setValues((current) => ({ ...current, [key]: value }));
+    };
+    const fail = (key: MineKey) => {
+      if (alive) setFailed((current) => ({ ...current, [key]: true }));
+    };
+
+    gw<{ payslips: SelfPayslip[] }>("api/v1/me/payslips")
+      .then((data) => put("payslip", data.payslips[0] ? compactThb(data.payslips[0].net_pay) : null))
+      .catch(() => fail("payslip"));
+    gw<{ reviews: SelfReview[] }>("api/v1/me/reviews")
+      .then((data) => put("review", data.reviews.length ? String(data.reviews.length) : null))
+      .catch(() => fail("review"));
+    gw<{ balances: SelfBalance[] }>("api/v1/me/leave")
+      .then((data) =>
+        put(
+          "leave",
+          data.balances.length
+            ? String(
+                Math.round(
+                  data.balances.reduce((sum, row) => sum + Number(row.remaining_days), 0),
+                ),
+              )
+            : null,
+        ),
+      )
+      .catch(() => fail("leave"));
+    gw<{ requests: SelfOt[] }>("api/v1/me/ot")
+      .then((data) => put("ot", data.requests.length ? String(data.requests.length) : null))
+      .catch(() => fail("ot"));
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const tiles: { key: MineKey; href: string; label: string; empty: string; icon: "file" | "clock" }[] = [
+    { key: "payslip", href: "/me/payslips", label: t("nav.myPayslips"), empty: t("dash.empty.ownPayslip"), icon: "file" },
+    { key: "review", href: "/me/reviews", label: t("nav.myReviews"), empty: t("dash.empty.selfService"), icon: "file" },
+    { key: "leave", href: "/leave", label: t("dash.mine.leave"), empty: t("dash.empty.selfService"), icon: "clock" },
+    { key: "ot", href: "/ot", label: t("nav.ot"), empty: t("dash.empty.selfService"), icon: "clock" },
+  ];
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <h2>{t("dash.mine.title")}</h2>
+      </div>
+      <div className="mine-body">
+        <div className="mine-grid" data-testid="mine-grid">
+          {tiles.map((tile) => {
+            const value = values[tile.key];
+            const hint = failed[tile.key]
+              ? t("dash.cardError")
+              : value === null
+                ? tile.empty
+                : undefined;
+            return (
+              <Link className="mine-tile" href={tile.href} key={tile.key}>
+                <span className="mine-label">
+                  <Icon name={tile.icon} size={13} />
+                  {tile.label}
+                </span>
+                <span className="mine-value">{value ?? "—"}</span>
+                {hint ? <span className="mine-hint">{hint}</span> : null}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
+  const { t } = useI18N();
   const [me, setMe] = useState<Me | null>(null);
-  const [runs, setRuns] = useState<PayrollRun[] | null>(null);
-  const [headcount, setHeadcount] = useState<number | null>(null);
-  const [payslips, setPayslips] = useState<Payslip[]>([]);
-  const [greeting, setGreeting] = useState("สวัสดี");
-  const [error, setError] = useState("");
-  const router = useRouter();
+  const [meFailed, setMeFailed] = useState(false);
+  const [headcount, setHeadcount] = useState<Headcount | null>(null);
+  const [headcountFailed, setHeadcountFailed] = useState(false);
+  const [run, setRun] = useState<LatestRun | null>(null);
+  const [runLoaded, setRunLoaded] = useState(false);
+  const [runFailed, setRunFailed] = useState(false);
 
-  useEffect(() => {
-    const hour = new Date().getHours();
-    setGreeting(hour < 12 ? "สวัสดีตอนเช้า" : hour < 17 ? "สวัสดีตอนบ่าย" : "สวัสดีตอนเย็น");
-  }, []);
+  const role = me ? primaryRole(me) : null;
+  const sections = role ? sectionsFor(role) : [];
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
-      .then((profile) => {
-        setMe(profile);
-        if (!profile.permissions.includes("employee.read_all")) {
-          router.replace("/me/payslips");
-        }
-      })
-      .catch((e) => handleApiError(e, setError));
-  }, [router]);
+      .then(setMe)
+      .catch((e) => handleApiError(e, () => setMeFailed(true)));
+  }, []);
 
   useEffect(() => {
-    if (!me?.permissions.includes("employee.read_all")) return;
-    (async () => {
-      const [runData, employees] = await Promise.all([
-        gql<{ payrollRuns: PayrollRun[] }>(
-          "{ payrollRuns(limit: 6) { id periodStart periodEnd paymentDate status totalEmployees totalGross totalNet totalTax totalSso totalPf } }",
-        ),
-        gql<{ employees: Employee[] }>("{ employees(limit: 200) { employeeCode } }"),
-      ]);
-      setRuns(runData.payrollRuns);
-      setHeadcount(employees.employees.length);
+    if (!role) return;
+    const visible = sectionsFor(role);
+    if (visible.includes("headcount")) {
+      gw<Headcount>("api/v1/reports/headcount")
+        .then(setHeadcount)
+        .catch(() => setHeadcountFailed(true));
+    }
+    if (visible.includes("net") || visible.includes("tax")) {
+      gql<{ payrollRuns: LatestRun[] }>(RUNS_QUERY)
+        .then((data) => setRun(data.payrollRuns[0] ?? null))
+        .catch(() => setRunFailed(true))
+        .finally(() => setRunLoaded(true));
+    }
+  }, [role]);
 
-      const latest = runData.payrollRuns[0];
-      if (latest) {
-        try {
-          const slips = await gw<{ payslips: Payslip[] }>(
-            `api/v1/payroll/runs/${latest.id}/payslips`,
-          );
-          setPayslips(slips.payslips);
-        } catch {
-          // a run without payslips is normal right after creation
-        }
-      }
-    })().catch((e) => handleApiError(e, setError));
-  }, [me]);
-
-  const latest = runs?.[0];
-  const firstName = me?.full_name_th?.split(/\s+/)[0] || "";
-  const status = latest ? RUN_STATUS[latest.status] ?? { label: latest.status, tone: "" } : null;
+  const headcountTotal = headcount
+    ? headcount.active + headcount.probation + headcount.leave
+    : 0;
+  const runPeriod = run ? `${thDate(run.periodStart)} – ${thDate(run.periodEnd)}` : undefined;
 
   return (
     <>
-      <div className="greeting">
+      <div className="page-head">
         <div>
-          <h1>
-            {greeting}
-            {firstName ? ` ${firstName}` : ""}
-          </h1>
-          <p className="page-sub">ภาพรวมทีมและรอบเงินเดือนล่าสุดของคุณ</p>
+          <h1 data-testid="dash-title">{t("dash.title")}</h1>
+          <p className="page-sub">{t("dash.subtitle")}</p>
         </div>
-        <Link className="btn btn-primary" href="/payroll">
-          <Icon name="wallet" size={15} />
-          ไปที่รอบเงินเดือน
-        </Link>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {meFailed && <p className="hint">{t("dash.cardError")}</p>}
+
+      {sections.some((section) => KPI_IDS.includes(section)) && (
+        <div className="kpi-grid" data-testid="kpi-row">
+          {sections.includes("headcount") && (
+            <Kpi
+              id="headcount"
+              label={t("dash.kpi.headcount")}
+              value={headcount ? String(headcountTotal) : "—"}
+              hint={
+                headcountFailed
+                  ? t("dash.cardError")
+                  : headcount && headcountTotal === 0
+                    ? t("dash.empty.headcount")
+                    : undefined
+              }
+            />
+          )}
+          {sections.includes("net") && (
+            <Kpi
+              id="net"
+              label={t("dash.kpi.net")}
+              value={run ? compactThb(run.totalNet) : "—"}
+              hint={
+                runFailed
+                  ? t("dash.cardError")
+                  : run
+                    ? runPeriod
+                    : runLoaded
+                      ? t("dash.empty.net")
+                      : undefined
+              }
+            />
+          )}
+          {sections.includes("tax") && (
+            <Kpi
+              id="tax"
+              label={t("dash.kpi.tax")}
+              value={run ? compactThb(run.totalTax) : "—"}
+              hint={
+                runFailed
+                  ? t("dash.cardError")
+                  : run
+                    ? runPeriod
+                    : runLoaded
+                      ? t("dash.empty.tax")
+                      : undefined
+              }
+            />
+          )}
+          {sections.includes("approvals") && <ApprovalsKpi />}
+          {sections.includes("ownPayslip") && <OwnPayslipKpi />}
+        </div>
+      )}
 
       <div className="dash-grid">
-        <div className="dash-main">
-          <div className="stats">
-            <div className="card card-pad tone-sage">
-              <div className="stat-top">
-                <span className="stat-label">พนักงานที่ใช้งาน</span>
-                <span className="stat-icon">
-                  <Icon name="users" size={16} />
-                </span>
-              </div>
-              <div className="stat-value">{headcount ?? "—"}</div>
-              <div className="stat-hint">คนในองค์กร</div>
-            </div>
-
-            <div className="card card-pad tone-teal">
-              <div className="stat-top">
-                <span className="stat-label">ยอดจ่ายสุทธิรอบล่าสุด</span>
-                <span className="stat-icon">
-                  <Icon name="wallet" size={16} />
-                </span>
-              </div>
-              <div className="stat-value">฿{latest ? thbShort(latest.totalNet) : "—"}</div>
-              <div className="stat-hint">{latest ? `${latest.totalEmployees} คน` : "ยังไม่มีรอบ"}</div>
-            </div>
-
-            <div className="card card-pad tone-mint">
-              <div className="stat-top">
-                <span className="stat-label">ภาษีหัก ณ ที่จ่าย</span>
-                <span className="stat-icon">
-                  <Icon name="file" size={16} />
-                </span>
-              </div>
-              <div className="stat-value">฿{latest ? thbShort(latest.totalTax) : "—"}</div>
-              <div className="stat-hint">PND.1 รอบล่าสุด</div>
-            </div>
-
-            <div className="card card-pad tone-plain">
-              <div className="stat-top">
-                <span className="stat-label">ประกันสังคม (ลูกจ้าง)</span>
-                <span className="stat-icon">
-                  <Icon name="clock" size={16} />
-                </span>
-              </div>
-              <div className="stat-value">฿{latest ? thbShort(latest.totalSso) : "—"}</div>
-              <div className="stat-hint">มาตรา 33</div>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-head">
-              <h2>รอบเงินเดือนล่าสุด</h2>
-              <Link href="/payroll" className="hint">
-                ดูทั้งหมด
-              </Link>
-            </div>
-            {runs === null ? (
-              <div className="spinner">กำลังโหลด…</div>
-            ) : runs.length === 0 ? (
-              <div className="empty">ยังไม่มีรอบเงินเดือน — เริ่มสร้างรอบแรกได้ที่หน้า “รอบเงินเดือน”</div>
-            ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>งวด</th>
-                    <th>สถานะ</th>
-                    <th className="num">คน</th>
-                    <th className="num">ยอดรวม</th>
-                    <th className="num">สุทธิ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runs.slice(0, 5).map((run) => {
-                    const s = RUN_STATUS[run.status] ?? { label: run.status, tone: "" };
-                    return (
-                      <tr key={run.id} className="clickable">
-                        <td>
-                          <Link href={`/payroll?run=${run.id}`}>
-                            {thDate(run.periodStart)} – {thDate(run.periodEnd)}
-                          </Link>
-                        </td>
-                        <td>
-                          <span className={`badge ${s.tone}`}>
-                            <span className="dot" />
-                            {s.label}
-                          </span>
-                        </td>
-                        <td className="num">{run.totalEmployees}</td>
-                        <td className="num">฿{thb(run.totalGross)}</td>
-                        <td className="num">฿{thb(run.totalNet)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
+        <div className="stack">
+          {/* Task 5 appends approvalsGrid here. */}
+          {/* Task 6 appends otTrend here. */}
+          {/* Task 7 appends activity here. */}
+          {sections.includes("selfService") && <SelfServiceCard />}
         </div>
-
-        <aside className="rail">
-          <div className="card rail-card">
-            <div className="card-head">
-              <h2>จ่ายเงินเดือนรอบล่าสุด</h2>
-              <Link href="/payroll" className="hint">
-                ทั้งหมด
-              </Link>
-            </div>
-            {payslips.length === 0 ? (
-              <div className="empty" style={{ padding: "28px 18px" }}>
-                ยังไม่มีสลิปในรอบนี้
-              </div>
-            ) : (
-              <div className="pay-list">
-                {payslips.slice(0, 6).map((p) => (
-                  <div className="pay-item" key={p.payslip_id}>
-                    <div className="avatar avatar-sm">{initials(p.employee_name)}</div>
-                    <div className="pay-meta">
-                      <div className="pay-name">{p.employee_name}</div>
-                      <div className="pay-sub">
-                        {p.employee_code}
-                        {status ? ` · ${status.label}` : ""}
-                      </div>
-                    </div>
-                    <div className="pay-amount">฿{thbShort(p.net_pay)}</div>
-                  </div>
-                ))}
-                {payslips.length > 6 && (
-                  <div className="pay-more">และอีก {payslips.length - 6} คน</div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {latest && (
-            <div className="pay-summary">
-              <div className="pay-summary-top">
-                <span>สรุปการจ่าย</span>
-                {status && <span className="pay-chip">{status.label}</span>}
-              </div>
-              <div className="pay-rows">
-                <div className="pay-row">
-                  <span>เงินเดือนรวม</span>
-                  <b>฿{thbShort(latest.totalGross)}</b>
-                </div>
-                <div className="pay-row">
-                  <span>ภาษี</span>
-                  <b>฿{thbShort(latest.totalTax)}</b>
-                </div>
-                <div className="pay-row">
-                  <span>ประกันสังคม</span>
-                  <b>฿{thbShort(latest.totalSso)}</b>
-                </div>
-                <div className="pay-row">
-                  <span>กองทุนสำรองฯ</span>
-                  <b>฿{thbShort(latest.totalPf)}</b>
-                </div>
-              </div>
-              <div className="pay-total">
-                <span>ยอดจ่ายสุทธิ</span>
-                <b>฿{thb(latest.totalNet)}</b>
-              </div>
-            </div>
-          )}
-        </aside>
+        <div className="stack">
+          {/* Task 6 appends followUps here. */}
+          {/* Task 7 appends runSummary and departments here. */}
+        </div>
       </div>
     </>
   );

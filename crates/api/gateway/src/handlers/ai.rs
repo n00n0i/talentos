@@ -2,6 +2,7 @@
 //!
 //! The agent runs in-process; see `docs/BUILD_STATUS.md` for the Temporal swap.
 
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -17,7 +18,9 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use talentos_agent::{AgentRunner, RunReport};
+use talentos_hr_runner::kg::{KgEdge, KgError, KgNode};
 use talentos_kernel::shared::{AgentContext, AgentResult};
+use talentos_kernel::TenantId;
 use talentos_model_gw::{ChatRequest, GatewayConfig, HuakatiClient, Message};
 use talentos_rag::HybridSearch;
 
@@ -409,6 +412,384 @@ pub async fn kg_neighbors(
     }
 }
 
+/// Ontology summary from the design (§4 classes, §5 relations). Lives in the
+/// system prompt so the model can name classes and relations it sees in triples.
+pub const ONTOLOGY_HEADER: &str = "\
+You are the TalentOS HR assistant for one tenant.
+
+Ontology classes (12):
+Organization (องค์กร), LegalEntity (นิติบุคคล/สาขา), Department (แผนก),
+Position (ตำแหน่ง), Employee (พนักงาน), Skill (ทักษะ), Policy (นโยบาย),
+Benefit (สวัสดิการ), PayrollItem (รายการเงินเดือน), Cycle (รอบ/งวด),
+Document (เอกสาร), Process (กระบวนการ).
+
+Relations:
+Organization --has_entity--> LegalEntity
+LegalEntity --has_department--> Department
+Department --has_position--> Position
+Position --held_by--> Employee (inverse: Employee --holds--> Position)
+Employee --member_of--> Department
+Employee --has_skill--> Skill
+Policy --applies_to--> Organization | LegalEntity | Department | Position
+Benefit --granted_by--> Policy
+PayrollItem --derived_from--> Policy | Benefit
+Cycle --contains--> PayrollItem
+Document --belongs_to--> Employee | Department
+Process --step_of--> Process
+
+Rules: an Employee belongs to exactly one Department and one Position, under one
+LegalEntity, inside the Organization.
+
+Answer in Thai (ตอบเป็นภาษาไทย). Use only the knowledge-graph facts below and the tenant's real data.
+Never invent policy numbers, rates, thresholds or dates; if a fact is absent, say
+you do not have it and point to the relevant Policy or document.";
+
+/// System prompt: ontology + retrieved triples + tool names + Thai instruction.
+/// Triples are rendered once each, in the order given.
+pub fn build_chat_prompt(triples: &[String], tool_names: &[&str]) -> String {
+    let mut prompt = String::from(ONTOLOGY_HEADER);
+    prompt.push_str("\n\nKnowledge graph facts:\n");
+    if triples.is_empty() {
+        prompt.push_str("- (no matching facts)\n");
+    } else {
+        for triple in triples {
+            prompt.push_str("- ");
+            prompt.push_str(triple);
+            prompt.push('\n');
+        }
+    }
+    prompt.push_str("\nAvailable tools: ");
+    prompt.push_str(&tool_names.join(", "));
+    prompt.push('\n');
+    prompt
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ChatBody {
+    pub message: String,
+    #[serde(default)]
+    pub agent: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Citation {
+    pub class: String,
+    pub label: String,
+    pub relation: String,
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct ChatUsage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ChatReply {
+    pub reply: String,
+    pub citations: Vec<Citation>,
+    pub usage: ChatUsage,
+}
+
+/// POST /api/v1/ai/chat — answer grounded in the tenant's knowledge graph.
+pub async fn chat(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Json(body): Json<ChatBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "ai", "chat") {
+        return forbidden;
+    }
+    let message = body.message.trim();
+    if message.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "invalid_request".into(),
+                message: "message must not be empty".into(),
+                details: vec![],
+                request_id: Uuid::new_v4().to_string(),
+                retry_after_seconds: None,
+            }),
+        )
+            .into_response();
+    }
+
+    // 1. Settings (existence check) + provider secret. Both must be configured.
+    let Some(secrets) = &state.secrets else {
+        return unavailable("ยังไม่ได้ตั้งค่า AI กรุณาตั้งค่า provider และ API key ที่หน้าตั้งค่า AI");
+    };
+    let secret = match secrets.read_ai_secret(ctx.tenant_id.0).await {
+        Ok(Some(secret)) => secret,
+        Ok(None) => return unavailable("ยังไม่ได้ตั้งค่า AI กรุณาตั้งค่า provider และ API key ที่หน้าตั้งค่า AI"),
+        Err(e) => {
+            tracing::warn!(error = %e, "chat secret read failed");
+            return unavailable("ไม่สามารถอ่านการตั้งค่า AI ได้ กรุณาลองใหม่ภายหลัง");
+        }
+    };
+    let settings_configured = match state
+        .pool
+        .begin_tenant(ctx.tenant_id)
+        .await
+        .map_err(|e| e.to_string())
+    {
+        Ok(mut tx) => {
+            let row = sqlx::query("SELECT 1 FROM ai_settings WHERE tenant_id = $1")
+                .bind(ctx.tenant_id.0)
+                .fetch_optional(&mut *tx)
+                .await;
+            let _ = tx.rollback().await;
+            match row {
+                Ok(row) => row.is_some(),
+                Err(e) => return internal_err(&e.to_string()),
+            }
+        }
+        Err(e) => return internal_err(&e),
+    };
+    if !settings_configured {
+        return unavailable("ยังไม่ได้ตั้งค่า AI กรุณาตั้งค่า provider และ API key ที่หน้าตั้งค่า AI");
+    }
+
+    // 2. Retrieve the subgraph around nodes mentioned in the message.
+    let candidates = match candidate_nodes(&state.pool, ctx.tenant_id, message).await {
+        Ok(nodes) => nodes,
+        Err(e) => return internal_err(&e.to_string()),
+    };
+    let mut nodes: BTreeMap<Uuid, KgNode> = BTreeMap::new();
+    let mut edges: BTreeMap<Uuid, KgEdge> = BTreeMap::new();
+    for candidate in &candidates {
+        match talentos_hr_runner::kg::neighbors(&state.pool, ctx.tenant_id, candidate.id, 2).await {
+            Ok((ns, es)) => {
+                for node in ns {
+                    nodes.entry(node.id).or_insert(node);
+                }
+                for edge in es {
+                    edges.entry(edge.id).or_insert(edge);
+                }
+            }
+            Err(e) => return internal_err(&e.to_string()),
+        }
+    }
+
+    // 3. Prompt: each triple once, citations map to the triple's object.
+    let index: HashMap<Uuid, &KgNode> = nodes.values().map(|n| (n.id, n)).collect();
+    let mut triples = BTreeSet::new();
+    let mut seen_citations = BTreeSet::new();
+    let mut citations = Vec::new();
+    for edge in edges.values() {
+        let (Some(from), Some(to)) = (index.get(&edge.from_id), index.get(&edge.to_id)) else {
+            continue;
+        };
+        triples.insert(format!(
+            "{} --{}--> {}",
+            from.label_th, edge.relation, to.label_th
+        ));
+        let citation = (
+            to.class.as_str(),
+            to.label_th.as_str(),
+            edge.relation.as_str(),
+        );
+        if seen_citations.insert(citation) {
+            citations.push(Citation {
+                class: to.class.as_str().to_string(),
+                label: to.label_th.clone(),
+                relation: edge.relation.clone(),
+            });
+        }
+    }
+    let triples: Vec<String> = triples.into_iter().collect();
+
+    // 4. Call the tenant's provider. Errors never echo the prompt or the key.
+    let defaults = GatewayConfig::default();
+    let config = GatewayConfig {
+        base_url: secret.base_url.clone().unwrap_or(defaults.base_url.clone()),
+        api_key: secret.api_key.clone(),
+        primary_model: secret.model.clone(),
+        ..defaults
+    };
+    let client = match HuakatiClient::with_config(config) {
+        Ok(client) => client,
+        Err(_) => return unavailable("การตั้งค่า AI ไม่สมบูรณ์ กรุณาตรวจสอบที่หน้าตั้งค่า AI"),
+    };
+    let request = ChatRequest {
+        model: secret.model.clone(),
+        messages: vec![
+            Message {
+                role: "system".into(),
+                content: build_chat_prompt(&triples, talentos_tools::tools::TOOL_NAMES),
+                tool_calls: None,
+            },
+            Message {
+                role: "user".into(),
+                content: message.to_string(),
+                tool_calls: None,
+            },
+        ],
+        tools: None,
+        stream: Some(false),
+        temperature: Some(0.3),
+        max_tokens: Some(1024),
+    };
+    let response = match client
+        .chat_with_request(&ctx.tenant_id.0.to_string(), request)
+        .await
+    {
+        Ok(response) => response,
+        Err(e) => {
+            tracing::warn!(error = %e, "chat provider request failed");
+            return unavailable("ไม่สามารถเชื่อมต่อผู้ให้บริการ AI ได้ กรุณาลองใหม่ภายหลัง");
+        }
+    };
+    let reply = response
+        .choices
+        .first()
+        .map(|c| c.message.content.trim().to_string())
+        .unwrap_or_default();
+    if reply.is_empty() {
+        return unavailable("ผู้ให้บริการ AI ส่งคำตอบว่างเปล่า กรุณาลองใหม่ภายหลัง");
+    }
+
+    // 5. Persist the conversation, plus usage/cost when the provider reported it.
+    persist_chat(
+        &state,
+        ctx.tenant_id,
+        ctx.entity_id.map(|e| e.0),
+        body.agent.as_deref().unwrap_or("chat"),
+        message,
+        &reply,
+        &secret.model,
+        response.usage.as_ref(),
+    )
+    .await;
+
+    let usage = ChatUsage {
+        input_tokens: response.usage.as_ref().map(|u| u.prompt_tokens),
+        output_tokens: response.usage.as_ref().map(|u| u.completion_tokens),
+    };
+    (
+        StatusCode::OK,
+        Json(ChatReply {
+            reply,
+            citations,
+            usage,
+        }),
+    )
+        .into_response()
+}
+
+/// Candidate nodes whose label/key matches a message token (or whose label the
+/// message mentions), capped so a long question cannot fan out the graph walk.
+async fn candidate_nodes(
+    pool: &talentos_db::TenantPool,
+    tenant_id: TenantId,
+    message: &str,
+) -> Result<Vec<KgNode>, KgError> {
+    let patterns: Vec<String> = message
+        .split_whitespace()
+        .filter(|token| token.chars().count() >= 2)
+        .take(8)
+        .map(|token| format!("%{token}%"))
+        .collect();
+
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let rows = sqlx::query(
+        r#"SELECT id, class, key, label_th, label_en, properties
+             FROM kg_nodes
+            WHERE tenant_id = $1
+              AND (
+                   label_th ILIKE ANY($2)
+                   OR key ILIKE ANY($2)
+                   OR coalesce(label_en, '') ILIKE ANY($2)
+                   OR (char_length(label_th) >= 2 AND $3 ILIKE '%' || label_th || '%')
+              )
+            ORDER BY class, key
+            LIMIT 5"#,
+    )
+    .bind(tenant_id.0)
+    .bind(&patterns)
+    .bind(message)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    rows.iter()
+        .map(|row| {
+            let class: String = row.try_get("class")?;
+            Ok(KgNode {
+                id: row.try_get("id")?,
+                class: class.parse()?,
+                key: row.try_get("key")?,
+                label_th: row.try_get("label_th")?,
+                label_en: row.try_get("label_en")?,
+                properties: row.try_get("properties")?,
+            })
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn persist_chat(
+    state: &AppState,
+    tenant_id: TenantId,
+    entity_id: Option<Uuid>,
+    agent: &str,
+    message: &str,
+    reply: &str,
+    model: &str,
+    usage: Option<&talentos_model_gw::TokenUsage>,
+) {
+    let messages = serde_json::json!([
+        {"role": "user", "content": message},
+        {"role": "assistant", "content": reply},
+    ]);
+    let persisted = async {
+        let mut tx = state.pool.begin_tenant(tenant_id).await?;
+        sqlx::query(
+            r#"INSERT INTO ai_conversations (agent_id, tenant_id, entity_id, messages, state)
+               VALUES ($1, $2, $3, $4, 'completed')"#,
+        )
+        .bind(agent)
+        .bind(tenant_id.0)
+        .bind(entity_id)
+        .bind(&messages)
+        .execute(&mut *tx)
+        .await?;
+
+        // Cost is only recorded when the provider reported token usage.
+        if let Some(usage) = usage {
+            let cost = rust_decimal::Decimal::try_from(usage.estimated_cost_usd(model))
+                .unwrap_or_default();
+            sqlx::query(
+                r#"INSERT INTO ai_cost_tracking
+                     (tenant_id, model, input_tokens, output_tokens, cached_tokens, cost_usd)
+                   VALUES ($1, $2, $3, $4, $5, $6)
+                   ON CONFLICT (tenant_id, model, date) DO UPDATE SET
+                       input_tokens = ai_cost_tracking.input_tokens + EXCLUDED.input_tokens,
+                       output_tokens = ai_cost_tracking.output_tokens + EXCLUDED.output_tokens,
+                       cached_tokens = ai_cost_tracking.cached_tokens + EXCLUDED.cached_tokens,
+                       cost_usd = ai_cost_tracking.cost_usd + EXCLUDED.cost_usd"#,
+            )
+            .bind(tenant_id.0)
+            .bind(model)
+            .bind(usage.prompt_tokens as i64)
+            .bind(usage.completion_tokens as i64)
+            .bind(usage.cached_tokens as i64)
+            .bind(cost)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok::<(), sqlx::Error>(())
+    }
+    .await;
+    // A reply the user already has must not be lost to an analytics write.
+    if let Err(e) = persisted {
+        tracing::error!(error = %e, "failed to persist ai chat");
+    }
+}
+
 fn secrets_backend(state: &AppState) -> &'static str {
     if state.secrets.is_some() {
         "openbao"
@@ -444,4 +825,59 @@ fn unavailable(message: &str) -> Response {
         }),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prompt_has_ontology_header_and_each_triple_once() {
+        let triples = vec![
+            "ฝ่ายขาย --member_of--> ฝ่ายขาย".to_string(),
+            "สมชาย --held_by--> วิศวกร".to_string(),
+            "นโยบายลาพักร้อน --applies_to--> องค์กร".to_string(),
+        ];
+        let prompt = build_chat_prompt(&triples, &["calculate_tax", "query_employee"]);
+
+        for class in [
+            "Organization",
+            "LegalEntity",
+            "Department",
+            "Position",
+            "Employee",
+            "Skill",
+            "Policy",
+            "Benefit",
+            "PayrollItem",
+            "Cycle",
+            "Document",
+            "Process",
+        ] {
+            assert!(prompt.contains(class), "missing class {class}");
+        }
+        for relation in [
+            "has_entity",
+            "has_department",
+            "has_position",
+            "held_by",
+            "member_of",
+            "has_skill",
+            "applies_to",
+            "granted_by",
+            "derived_from",
+            "contains",
+            "belongs_to",
+            "step_of",
+        ] {
+            assert!(prompt.contains(relation), "missing relation {relation}");
+        }
+        for triple in &triples {
+            assert_eq!(prompt.matches(triple).count(), 1, "triple once: {triple}");
+        }
+        assert!(prompt.contains("ภาษาไทย"));
+        assert!(prompt.contains("Never invent policy numbers"));
+        assert!(prompt.contains("calculate_tax"));
+        assert!(prompt.contains("query_employee"));
+    }
 }

@@ -434,6 +434,11 @@ pub fn build(state: AppState) -> Router {
             get(claims::hr_download_receipt),
         )
         .route("/api/v1/ai/tools", get(ai::list_tools))
+        .route(
+            "/api/v1/ai/settings",
+            get(ai::get_settings).put(ai::put_settings),
+        )
+        .route("/api/v1/ai/settings/test", post(ai::test_settings))
         .route("/api/v1/graphql", post(graphql::execute))
         .route(
             "/api/v1/mcp",

@@ -1,23 +1,13 @@
-mod cli;
-mod dto;
-mod handlers;
-mod metrics;
-mod metrics_alert;
-mod middleware;
-mod notify_worker;
-mod ratelimit;
-mod router;
-mod secrets;
-mod state;
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use fred::prelude::*;
 
-use state::AppState;
 use talentos_db::TenantPool;
+use talentos_gateway::secrets::SecretsClient;
+use talentos_gateway::state::AppState;
+use talentos_gateway::{cli, metrics, metrics_alert, notify_worker, router};
 
 #[tokio::main]
 async fn main() {
@@ -136,6 +126,16 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // Fail closed: enabled but missing address/token must not start silently.
+    let secrets = match SecretsClient::from_env() {
+        Ok(Some(client)) => Some(Arc::new(client)),
+        Ok(None) => None,
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let state = AppState {
         pool: pool.clone(),
         auth_pool: auth_pool.clone(),
@@ -155,6 +155,7 @@ async fn main() {
             .filter(|s| !s.trim().is_empty()),
         http: reqwest::Client::new(),
         oidc_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        secrets,
         started_at: std::time::Instant::now(),
     };
 

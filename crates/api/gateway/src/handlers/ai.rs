@@ -381,6 +381,40 @@ pub async fn rebuild_kg(State(state): State<AppState>, Authed(ctx): Authed) -> R
 }
 
 #[derive(Debug, Deserialize)]
+pub struct KgNodesQuery {
+    pub q: Option<String>,
+    pub class: Option<String>,
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct KgNodesResponse {
+    pub nodes: Vec<talentos_hr_runner::kg::KgNode>,
+}
+
+/// GET /api/v1/ai/kg/nodes?q=&class=&limit= — search or list graph nodes.
+pub async fn kg_nodes(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Query(query): Query<KgNodesQuery>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "ai", "chat") {
+        return forbidden;
+    }
+    let q = query.q.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let class = query
+        .class
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let limit = query.limit.unwrap_or(50);
+    match talentos_hr_runner::kg::list_nodes(&state.pool, ctx.tenant_id, q, class, limit).await {
+        Ok(nodes) => (StatusCode::OK, Json(KgNodesResponse { nodes })).into_response(),
+        Err(e) => internal_err(&e.to_string()),
+    }
+}
+
+#[derive(Debug, Deserialize)]
 pub struct KgNeighborsQuery {
     pub node_id: Uuid,
     pub depth: Option<i32>,

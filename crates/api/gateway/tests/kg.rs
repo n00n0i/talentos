@@ -224,3 +224,80 @@ async fn kg_rebuild_and_read_endpoints() {
         .execute(&raw)
         .await;
 }
+
+#[tokio::test]
+async fn kg_node_listing_search_and_class_filter() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let raw = pool.pool().clone();
+    let tenant_id = seed(&raw).await;
+
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    for (class, key, label_th) in [
+        ("Employee", "KG-LIST-1", "สมชาย ใจดี"),
+        ("Employee", "KG-LIST-2", "สมหญิง ใจดี"),
+        ("Department", "KG-LIST-3", "ฝ่ายขาย"),
+    ] {
+        sqlx::query(
+            "INSERT INTO kg_nodes (tenant_id, class, key, label_th) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(tenant_id)
+        .bind(class)
+        .bind(key)
+        .bind(label_th)
+        .execute(&mut *tx)
+        .await
+        .expect("node");
+    }
+    tx.commit().await.expect("commit");
+
+    let app = router::build(app_state(pool));
+    let manager = bearer(tenant_id, &["manager"]);
+    let employee = bearer(tenant_id, &["employee"]);
+
+    // Label substring: two "ใจดี" employees.
+    let (status, body) = call(
+        &app,
+        Method::GET,
+        "/api/v1/ai/kg/nodes?q=%E0%B9%83%E0%B8%88%E0%B8%94%E0%B8%B5",
+        &manager,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "node list failed: {body}");
+    let nodes = body["nodes"].as_array().expect("nodes array");
+    assert_eq!(nodes.len(), 2);
+    assert!(nodes
+        .iter()
+        .all(|n| n["class"] == json!("Employee") && n["label_th"].is_string()));
+
+    // Class filter narrows to the department, and `q` composes with it.
+    let (status, body) = call(
+        &app,
+        Method::GET,
+        "/api/v1/ai/kg/nodes?q=%E0%B8%9D%E0%B9%88%E0%B8%B2%E0%B8%A2&class=Department",
+        &manager,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "class filter failed: {body}");
+    assert_eq!(body["nodes"].as_array().expect("nodes").len(), 1);
+    assert_eq!(body["nodes"][0]["key"], json!("KG-LIST-3"));
+
+    // Employees lack ai.chat.
+    let (status, _) = call(&app, Method::GET, "/api/v1/ai/kg/nodes", &employee, None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let _ = sqlx::query("DELETE FROM tenants WHERE id = $1")
+        .bind(tenant_id)
+        .execute(&raw)
+        .await;
+}

@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  filledCounts,
-  KG_CLASSES,
-  matchesNode,
-  mergeNodes,
-  totalNodes,
-  triples,
-  UUID_RE,
-} from "@/lib/kg";
+import { filledCounts, KG_CLASSES, totalNodes, triples } from "@/lib/kg";
 import type { KgNode } from "@/lib/kg";
 
 const node = (id: string, cls: KgNode["class"], label: string): KgNode => ({
@@ -32,29 +24,6 @@ describe("filledCounts", () => {
   });
 });
 
-describe("matchesNode", () => {
-  it("filters by label, key, class and id, case-insensitively", () => {
-    expect(matchesNode(employee, "สมชาย")).toBe(true);
-    expect(matchesNode(employee, "employee")).toBe(true);
-    expect(matchesNode(employee, employee.id.toUpperCase().slice(0, 8))).toBe(true);
-    expect(matchesNode(employee, "ฝ่ายขาย")).toBe(false);
-  });
-
-  it("applies the class filter and an empty query matches everything", () => {
-    expect(matchesNode(employee, "", "Employee")).toBe(true);
-    expect(matchesNode(employee, "", "Department")).toBe(false);
-  });
-});
-
-describe("mergeNodes", () => {
-  it("deduplicates by id and keeps the newer copy", () => {
-    const updated = { ...employee, label_th: "สมชาย (ใหม่)" };
-    const merged = mergeNodes([employee, department], [updated]);
-    expect(merged).toHaveLength(2);
-    expect(merged.find((n) => n.id === employee.id)?.label_th).toBe("สมชาย (ใหม่)");
-  });
-});
-
 describe("triples", () => {
   it("renders subject → relation → object and drops dangling edges", () => {
     const result = triples({
@@ -68,12 +37,5 @@ describe("triples", () => {
     expect(result[0].from.label_th).toBe("สมชาย ใจดี");
     expect(result[0].relation).toBe("member_of");
     expect(result[0].to.label_th).toBe("ฝ่ายขาย");
-  });
-});
-
-describe("UUID_RE", () => {
-  it("accepts a node id and rejects labels", () => {
-    expect(UUID_RE.test(employee.id)).toBe(true);
-    expect(UUID_RE.test("ฝ่ายขาย")).toBe(false);
   });
 });

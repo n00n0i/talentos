@@ -48,10 +48,9 @@ export type KgRebuild = {
 
 export type KgNeighbors = { nodes: KgNode[]; edges: KgEdge[] };
 
-export type Triple = { id: string; from: KgNode; relation: string; to: KgNode };
+export type KgNodeList = { nodes: KgNode[] };
 
-export const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export type Triple = { id: string; from: KgNode; relation: string; to: KgNode };
 
 /** Every class card is rendered, including classes with zero nodes. */
 export function filledCounts(
@@ -64,21 +63,6 @@ export function filledCounts(
 
 export function totalNodes(nodes: Partial<Record<KgClass, number>> | undefined): number {
   return Object.values(filledCounts(nodes)).reduce((a, b) => a + b, 0);
-}
-
-export function mergeNodes(current: KgNode[], incoming: KgNode[]): KgNode[] {
-  const byId = new Map(current.map((n) => [n.id, n]));
-  for (const node of incoming) byId.set(node.id, node);
-  return [...byId.values()];
-}
-
-export function matchesNode(node: KgNode, query: string, cls?: KgClass | null): boolean {
-  if (cls && node.class !== cls) return false;
-  const q = query.trim().toLowerCase();
-  if (!q) return true;
-  return [node.id, node.label_th, node.label_en ?? "", node.key, node.class].some((value) =>
-    value.toLowerCase().includes(q),
-  );
 }
 
 /** Edge endpoints missing from the response are dropped rather than rendered blank. */

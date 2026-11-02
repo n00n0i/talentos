@@ -256,6 +256,40 @@ pub async fn neighbors(
     Ok((nodes, edges))
 }
 
+/// Nodes matching a label/key substring and optional class, newest first.
+pub async fn list_nodes(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    q: Option<&str>,
+    class: Option<&str>,
+    limit: i64,
+) -> Result<Vec<KgNode>, KgError> {
+    // shortcut: fixed 200-row cap, add paging if the inspector ever needs more.
+    let limit = limit.clamp(1, 200);
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let rows = sqlx::query(
+        r#"SELECT id, class, key, label_th, label_en, properties
+             FROM kg_nodes
+            WHERE tenant_id = $1
+              AND ($2::text IS NULL
+                   OR label_th ILIKE '%' || $2 || '%'
+                   OR label_en ILIKE '%' || $2 || '%'
+                   OR key ILIKE '%' || $2 || '%')
+              AND ($3::text IS NULL OR class = $3)
+            ORDER BY updated_at DESC
+            LIMIT $4"#,
+    )
+    .bind(tenant_id.0)
+    .bind(q)
+    .bind(class)
+    .bind(limit)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    rows.iter().map(map_node).collect()
+}
+
 /// Node count per class, with classes that have no rows reported as 0.
 pub async fn counts(
     pool: &TenantPool,

@@ -442,6 +442,7 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/ai/chat", post(ai::chat))
         .route("/api/v1/ai/kg", get(ai::get_kg))
         .route("/api/v1/ai/kg/rebuild", post(ai::rebuild_kg))
+        .route("/api/v1/ai/kg/nodes", get(ai::kg_nodes))
         .route("/api/v1/ai/kg/neighbors", get(ai::kg_neighbors))
         .route("/api/v1/graphql", post(graphql::execute))
         .route(

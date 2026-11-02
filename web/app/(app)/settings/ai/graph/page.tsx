@@ -7,13 +7,17 @@ import { useI18N } from "@/lib/i18n";
 import {
   filledCounts,
   KG_CLASSES,
-  matchesNode,
-  mergeNodes,
   totalNodes,
   triples,
-  UUID_RE,
 } from "@/lib/kg";
-import type { KgClass, KgCounts, KgNeighbors, KgNode, KgRebuild } from "@/lib/kg";
+import type {
+  KgClass,
+  KgCounts,
+  KgNeighbors,
+  KgNode,
+  KgNodeList,
+  KgRebuild,
+} from "@/lib/kg";
 
 export default function KnowledgeGraphPage() {
   const { t } = useI18N();
@@ -30,6 +34,8 @@ export default function KnowledgeGraphPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [subgraph, setSubgraph] = useState<KgNeighbors | null>(null);
   const [loadingGraph, setLoadingGraph] = useState(false);
+  const [loadingList, setLoadingList] = useState(true);
+  const [listVersion, setListVersion] = useState(0);
 
   useEffect(() => {
     gw<KgCounts>("api/v1/ai/kg")
@@ -37,6 +43,28 @@ export default function KnowledgeGraphPage() {
       .catch((e) => handleApiError(e, setError))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams();
+    const q = query.trim();
+    if (q) params.set("q", q);
+    if (cls) params.set("class", cls);
+    setLoadingList(true);
+    gw<KgNodeList>(`api/v1/ai/kg/nodes?${params.toString()}`)
+      .then((res) => {
+        if (active) setNodes(res.nodes);
+      })
+      .catch((e) => {
+        if (active) handleApiError(e, setError);
+      })
+      .finally(() => {
+        if (active) setLoadingList(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [query, cls, listVersion]);
 
   async function openNode(id: string) {
     setSelected(id);
@@ -50,20 +78,12 @@ export default function KnowledgeGraphPage() {
         return;
       }
       setSubgraph(res);
-      setNodes((list) => mergeNodes(list, res.nodes));
     } catch (e) {
       setSubgraph(null);
       handleApiError(e, setError);
     } finally {
       setLoadingGraph(false);
     }
-  }
-
-  function search(e: React.FormEvent) {
-    e.preventDefault();
-    const q = query.trim();
-    // Non-UUID text filters the known nodes live; a UUID opens that node.
-    if (UUID_RE.test(q)) void openNode(q);
   }
 
   async function rebuild() {
@@ -89,6 +109,7 @@ export default function KnowledgeGraphPage() {
       gw<KgCounts>("api/v1/ai/kg")
         .then(setCounts)
         .catch(() => {});
+      setListVersion((v) => v + 1);
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -97,10 +118,6 @@ export default function KnowledgeGraphPage() {
   }
 
   const perClass = useMemo(() => filledCounts(counts?.nodes), [counts]);
-  const visible = useMemo(
-    () => nodes.filter((node) => matchesNode(node, query, cls)),
-    [nodes, query, cls],
-  );
   const edges = useMemo(() => (subgraph ? triples(subgraph) : []), [subgraph]);
   const selectedNode =
     nodes.find((node) => node.id === selected) ??
@@ -211,10 +228,10 @@ export default function KnowledgeGraphPage() {
           <div className="card">
             <div className="card-head">
               <h2>{t("kg.nodes")}</h2>
-              <span className="badge">{visible.length}</span>
+              <span className="badge">{nodes.length}</span>
             </div>
             <form
-              onSubmit={search}
+              onSubmit={(e) => e.preventDefault()}
               style={{ display: "flex", gap: 8, padding: "12px 20px", borderBottom: "1px solid #e7eae3" }}
             >
               <input
@@ -225,21 +242,16 @@ export default function KnowledgeGraphPage() {
                 placeholder={t("kg.searchPlaceholder")}
                 style={{ flex: 1, minWidth: 0 }}
               />
-              <button className="btn" type="submit">
-                {t("kg.search")}
-              </button>
             </form>
-            {nodes.length === 0 ? (
-              <p className="recent-empty hint" data-testid="kg-node-hint">
-                {t("kg.nodeIdHint")}
-              </p>
-            ) : visible.length === 0 ? (
+            {loadingList ? (
+              <p className="recent-empty">{t("common.loading")}</p>
+            ) : nodes.length === 0 ? (
               <p className="recent-empty" data-testid="kg-no-results">
                 {t("kg.noResults")}
               </p>
             ) : (
               <ul className="recent" data-testid="kg-nodes">
-                {visible.map((node) => (
+                {nodes.map((node) => (
                   <li key={node.id}>
                     <button
                       type="button"

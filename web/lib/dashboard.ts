@@ -79,11 +79,14 @@ export function relativeTh(iso: string, now: Date = new Date()): string {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** "from=2025-12-01&to=2026-11-15" — UTC so the range never shifts by timezone. */
+/**
+ * "from=2025-12-01&to=2026-11-15" — local date parts, so today's rows are not
+ * dropped between 00:00 and 07:00 Bangkok time (UTC is still yesterday).
+ */
 export function otTrendQuery(months = 12, now: Date = new Date()): string {
-  const y = now.getUTCFullYear();
-  const m = now.getUTCMonth();
-  const from = new Date(Date.UTC(y, m - (months - 1), 1));
-  const to = new Date(Date.UTC(y, m, now.getUTCDate()));
-  return `from=${from.getUTCFullYear()}-${pad(from.getUTCMonth() + 1)}-01&to=${to.getUTCFullYear()}-${pad(to.getUTCMonth() + 1)}-${pad(to.getUTCDate())}`;
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  const from = new Date(y, m - (months - 1), 1);
+  const to = new Date(y, m, now.getDate());
+  return `from=${from.getFullYear()}-${pad(from.getMonth() + 1)}-01&to=${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`;
 }

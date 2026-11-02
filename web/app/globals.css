@@ -627,6 +627,61 @@ h3 {
   color: var(--text-3);
   font-size: 12.5px;
 }
+.follow {
+  display: grid;
+  padding: 8px 0;
+}
+.follow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 20px;
+  color: var(--text);
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+.follow-row:last-child {
+  border-bottom: none;
+}
+.follow-count {
+  flex: none;
+  min-width: 26px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.follow-empty {
+  margin: 0;
+  padding: 4px 20px 10px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.chart {
+  padding: 16px 20px 12px;
+}
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.chart .bar {
+  fill: var(--sage-strong);
+}
+.chart .bar-label {
+  fill: var(--text-3);
+  font-size: 10px;
+}
+.chart-empty {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;

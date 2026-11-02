@@ -115,6 +115,9 @@ test("settings persist across reload", async ({ page }) => {
 
 test("creates an employee, records OT, runs and approves payroll", async ({ page }) => {
   await login(page);
+  await page.goto("/");
+  await expect(page.getByTestId("follow-ups")).toBeVisible();
+  await expect(page.getByTestId("ot-chart")).toBeVisible();
 
   await page.goto("/employees");
   // Re-runnable: on a repeat run E2E001 already exists, so skip the create

@@ -6,6 +6,7 @@ import Icon from "@/components/Icon";
 import { gql, gw, handleApiError, Me, thDate } from "@/lib/api";
 import {
   compactThb,
+  otTrendQuery,
   primaryRole,
   sectionsFor,
   type SectionId,
@@ -56,6 +57,8 @@ type Approvals = { leave: LeaveApproval[]; ot: OtApproval[]; claims: ClaimApprov
 
 const RUNS_QUERY =
   "{ payrollRuns(limit: 1) { periodStart periodEnd status totalNet totalTax } }";
+
+const DRAFT_RUNS_QUERY = "{ payrollRuns(limit: 24) { status } }";
 
 const KPI_IDS: SectionId[] = ["headcount", "net", "tax", "approvals", "ownPayslip"];
 
@@ -241,6 +244,159 @@ function ApprovalsGrid({
   );
 }
 
+type FollowUpData = { docs: number; drafts: number; cycles: number };
+
+/** One fetch for all three counters; any failed call fails the whole card. */
+function useFollowUps(enabled: boolean) {
+  const [data, setData] = useState<FollowUpData | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    Promise.all([
+      gw<{ documents: unknown[] }>("api/v1/documents/expiring"),
+      gql<{ payrollRuns: { status: string }[] }>(DRAFT_RUNS_QUERY),
+      gw<{ cycles: { status: string }[] }>("api/v1/performance/cycles"),
+    ])
+      .then(([docs, runs, cycles]) => {
+        if (!alive) return;
+        setData({
+          docs: docs.documents?.length ?? 0,
+          drafts: runs.payrollRuns.filter((r) => r.status === "draft").length,
+          cycles: cycles.cycles.filter((c) => c.status === "active").length,
+        });
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [enabled]);
+
+  return { data, failed };
+}
+
+function FollowUpsCard({ data, failed }: { data: FollowUpData | null; failed: boolean }) {
+  const { t } = useI18N();
+  const rows = [
+    { key: "docs", label: t("dash.followUps.docs"), href: "/documents" },
+    { key: "drafts", label: t("dash.followUps.drafts"), href: "/payroll" },
+    { key: "cycles", label: t("dash.followUps.cycles"), href: "/performance" },
+  ] as const;
+  const total = data ? data.docs + data.drafts + data.cycles : 0;
+
+  return (
+    <div className="card" data-testid="follow-ups">
+      <div className="card-head">
+        <h2>{t("dash.followUps.title")}</h2>
+      </div>
+      <div className="follow">
+        {failed ? (
+          <p className="follow-empty">{t("dash.cardError")}</p>
+        ) : data === null ? null : total === 0 ? (
+          <p className="follow-empty">{t("dash.empty.followUps")}</p>
+        ) : (
+          rows.map((row) => (
+            <Link className="follow-row" href={row.href} key={row.key}>
+              <span>{row.label}</span>
+              <span className="follow-count">{data[row.key]}</span>
+            </Link>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+type OtRow = { month: string; ot_minutes: number };
+
+function useOtTrend(enabled: boolean) {
+  const [rows, setRows] = useState<OtRow[] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    gw<{ rows: OtRow[] }>(`api/v1/reports/ot-trend?${otTrendQuery()}`)
+      .then((data) => {
+        if (alive) setRows(data.rows ?? []);
+      })
+      .catch(() => {
+        if (alive) setFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [enabled]);
+
+  return { rows, failed };
+}
+
+const CHART_W = 480;
+const CHART_H = 170;
+const CHART_PAD = 10;
+const CHART_LABEL_H = 22;
+
+function monthLabel(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  if (!year || !monthIndex) return month;
+  return new Date(year, monthIndex - 1, 1).toLocaleDateString("th-TH", { month: "short" });
+}
+
+function OtChart({ rows, failed }: { rows: OtRow[] | null; failed: boolean }) {
+  const { t } = useI18N();
+  const max = rows?.length ? Math.max(...rows.map((row) => row.ot_minutes)) : 0;
+  const hasOt = max > 0;
+  const slot = rows?.length ? (CHART_W - CHART_PAD * 2) / rows.length : 0;
+  const barWidth = Math.min(28, slot * 0.6);
+
+  return (
+    <div className="card" data-testid="ot-chart">
+      <div className="card-head">
+        <h2>{t("dash.ot.title")}</h2>
+      </div>
+      <div className="chart">
+        {failed ? (
+          <p className="chart-empty">{t("dash.cardError")}</p>
+        ) : rows === null ? null : !hasOt ? (
+          <p className="chart-empty">{t("dash.empty.ot")}</p>
+        ) : (
+          <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} role="img" aria-label={t("dash.ot.title")}>
+            {rows.map((row, index) => {
+              const height = (row.ot_minutes / max) * (CHART_H - CHART_PAD - CHART_LABEL_H);
+              const x = CHART_PAD + index * slot + (slot - barWidth) / 2;
+              return (
+                <g key={row.month}>
+                  <rect
+                    className="bar"
+                    x={x}
+                    y={CHART_H - CHART_LABEL_H - height}
+                    width={barWidth}
+                    height={height}
+                    rx={3}
+                  >
+                    <title>{`${monthLabel(row.month)} · ${row.ot_minutes} ${t("dash.ot.minutes")}`}</title>
+                  </rect>
+                  <text
+                    className="bar-label"
+                    x={x + barWidth / 2}
+                    y={CHART_H - 4}
+                    textAnchor="middle"
+                  >
+                    {monthLabel(row.month)}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OwnPayslipKpi() {
   const { t } = useI18N();
   const [payslip, setPayslip] = useState<SelfPayslip | null>(null);
@@ -381,6 +537,10 @@ export default function DashboardPage() {
   const { approvals, failed: approvalsFailed } = useApprovals(
     sections.includes("approvals") || sections.includes("approvalsGrid"),
   );
+  const { data: followUps, failed: followUpsFailed } = useFollowUps(
+    sections.includes("followUps"),
+  );
+  const { rows: otRows, failed: otFailed } = useOtTrend(sections.includes("otTrend"));
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
@@ -480,12 +640,14 @@ export default function DashboardPage() {
           {sections.includes("approvalsGrid") && (
             <ApprovalsGrid approvals={approvals} failed={approvalsFailed} />
           )}
-          {/* Task 6 appends otTrend here. */}
+          {sections.includes("otTrend") && <OtChart rows={otRows} failed={otFailed} />}
           {/* Task 7 appends activity here. */}
           {sections.includes("selfService") && <SelfServiceCard />}
         </div>
         <div className="stack">
-          {/* Task 6 appends followUps here. */}
+          {sections.includes("followUps") && (
+            <FollowUpsCard data={followUps} failed={followUpsFailed} />
+          )}
           {/* Task 7 appends runSummary and departments here. */}
         </div>
       </div>

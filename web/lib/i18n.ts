@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { en, th, translate } from "@/lib/i18n-dicts";
 
 export type Lang = "th" | "en";
+
+const LANG_EVENT = "talentos-lang";
 
 function readCookie(): Lang {
   if (typeof document === "undefined") return "th";
@@ -15,10 +17,19 @@ function readCookie(): Lang {
 
 function setLangCookie(lang: Lang) {
   document.cookie = `talentos_lang=${lang}; path=/; max-age=31536000; SameSite=Lax`;
+  // Long-lived client components (ChatHead lives in the app layout) need to
+  // re-read the cookie when another component toggles the language.
+  window.dispatchEvent(new Event(LANG_EVENT));
 }
 
 export function useI18N() {
   const [lang, setLangState] = useState<Lang>(readCookie);
+
+  useEffect(() => {
+    const sync = () => setLangState(readCookie());
+    window.addEventListener(LANG_EVENT, sync);
+    return () => window.removeEventListener(LANG_EVENT, sync);
+  }, []);
 
   const setLang = useCallback((next: Lang) => {
     setLangCookie(next);

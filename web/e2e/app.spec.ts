@@ -878,6 +878,26 @@ test("HR opens AI settings and sees the provider form", async ({ page }) => {
   await expect(page.getByTestId("ai-save")).toHaveText("บันทึก");
 });
 
+test("chat head is on every page and links to AI settings when unconfigured", async ({ page }) => {
+  await login(page);
+  // Login lands on the dashboard, and the launcher is part of the app layout.
+  await expect(page.getByTestId("chat-launcher")).toBeVisible();
+  await page.goto("/employees");
+  await expect(page.getByTestId("chat-launcher")).toBeVisible();
+
+  await page.getByTestId("chat-launcher").click();
+  await expect(page.getByTestId("chat-panel")).toBeVisible();
+  await page.getByTestId("chat-input").fill("มีพนักงานกี่คน");
+  await page.getByTestId("chat-send").click();
+
+  // Local stack has OpenBao but no provider key: the gateway answers 503.
+  await expect(page.getByTestId("chat-unavailable")).toBeVisible();
+  await expect(page.getByTestId("chat-settings-link")).toHaveAttribute("href", "/settings/ai");
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("chat-panel")).toHaveCount(0);
+});
+
 test("HR rebuilds the knowledge graph and sees all class counts", async ({ page }) => {
   await login(page);
   await page.goto("/settings/ai/graph");

@@ -8,6 +8,11 @@ import { gw, Me } from "@/lib/api";
 import { useI18N } from "@/lib/i18n";
 import { visibleNav } from "@/lib/nav";
 
+/** Case- and diacritic-insensitive fold: "Käse" → "kase", Thai marks stripped too. */
+function fold(value: string) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "T";
@@ -51,6 +56,15 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => setOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
   async function logout() {
     await fetch("/api/session/logout", { method: "POST" });
@@ -103,11 +117,11 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         return label === key ? r : label; // unknown role → show the raw role
       })
       .join(" · ") || "";
-  const needle = q.trim().toLowerCase();
+  const needle = fold(q.trim());
   const groups = visibleNav(me)
     .map((g) => ({
       ...g,
-      items: g.items.filter((i) => t(i.labelKey).toLowerCase().includes(needle)),
+      items: g.items.filter((i) => fold(t(i.labelKey)).includes(needle)),
     }))
     .filter((g) => g.items.length > 0);
 
@@ -120,7 +134,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           </span>
           <span className="side-brand-name">TalentOS</span>
         </Link>
-        <nav className="side-nav" aria-label={t("shell.menu")}>
+        <nav className="side-nav" id="side-nav-menu" aria-label={t("shell.menu")}>
           {groups.map((g) => (
             <div className="side-group" key={g.id}>
               {g.labelKey && <span className="side-group-label">{t(g.labelKey)}</span>}
@@ -134,6 +148,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               ))}
             </div>
           ))}
+          {groups.length === 0 && <p className="side-empty">{t("shell.noResults")}</p>}
         </nav>
         <div className="side-user">
           <div className="avatar">{initials(displayName)}</div>
@@ -157,6 +172,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             className="menu-btn"
             data-testid="menu-toggle"
             aria-label={t("shell.menu")}
+            aria-expanded={open}
+            aria-controls="side-nav-menu"
             onClick={() => setOpen((v) => !v)}
           >
             ☰

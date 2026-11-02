@@ -625,28 +625,39 @@ function ActivityCard({
   );
 }
 
-function OwnPayslipKpi() {
-  const { t } = useI18N();
-  const [payslip, setPayslip] = useState<SelfPayslip | null>(null);
-  const [loaded, setLoaded] = useState(false);
+/** One fetch shared by the own-payslip KPI and the self-service tile. */
+function useSelfPayslip(enabled: boolean) {
+  const [payslips, setPayslips] = useState<SelfPayslip[] | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     gw<{ payslips: SelfPayslip[] }>("api/v1/me/payslips")
       .then((data) => {
-        if (alive) setPayslip(data.payslips[0] ?? null);
+        if (alive) setPayslips(data.payslips ?? []);
       })
       .catch(() => {
         if (alive) setFailed(true);
-      })
-      .finally(() => {
-        if (alive) setLoaded(true);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [enabled]);
+
+  return { payslips, failed };
+}
+
+function OwnPayslipKpi({
+  payslips,
+  failed,
+}: {
+  payslips: SelfPayslip[] | null;
+  failed: boolean;
+}) {
+  const { t } = useI18N();
+  const payslip = payslips?.[0] ?? null;
+  const loaded = payslips !== null;
 
   const hint = failed
     ? t("dash.cardError")
@@ -668,7 +679,13 @@ function OwnPayslipKpi() {
 
 type MineKey = "payslip" | "review" | "leave" | "ot";
 
-function SelfServiceCard() {
+function SelfServiceCard({
+  payslips,
+  payslipsFailed,
+}: {
+  payslips: SelfPayslip[] | null;
+  payslipsFailed: boolean;
+}) {
   const { t } = useI18N();
   // undefined = still loading, null = endpoint answered with nothing
   const [values, setValues] = useState<Partial<Record<MineKey, string | null>>>({});
@@ -683,9 +700,6 @@ function SelfServiceCard() {
       if (alive) setFailed((current) => ({ ...current, [key]: true }));
     };
 
-    gw<{ payslips: SelfPayslip[] }>("api/v1/me/payslips")
-      .then((data) => put("payslip", data.payslips[0] ? compactThb(data.payslips[0].net_pay) : null))
-      .catch(() => fail("payslip"));
     gw<{ reviews: SelfReview[] }>("api/v1/me/reviews")
       .then((data) => put("review", data.reviews.length ? String(data.reviews.length) : null))
       .catch(() => fail("review"));
@@ -727,8 +741,16 @@ function SelfServiceCard() {
       <div className="mine-body">
         <div className="mine-grid" data-testid="mine-grid">
           {tiles.map((tile) => {
-            const value = values[tile.key];
-            const hint = failed[tile.key]
+            const value =
+              tile.key === "payslip"
+                ? payslips === null
+                  ? undefined
+                  : payslips[0]
+                    ? compactThb(payslips[0].net_pay)
+                    : null
+                : values[tile.key];
+            const tileFailed = tile.key === "payslip" ? payslipsFailed : failed[tile.key];
+            const hint = tileFailed
               ? t("dash.cardError")
               : value === null
                 ? tile.empty
@@ -739,7 +761,13 @@ function SelfServiceCard() {
                   <Icon name={tile.icon} size={13} />
                   {tile.label}
                 </span>
-                <span className="mine-value">{value ?? "—"}</span>
+                <span className="mine-value">
+                  {value == null
+                    ? "—"
+                    : tile.key === "leave"
+                      ? `${value} ${t("dash.mine.days")}`
+                      : value}
+                </span>
                 {hint ? <span className="mine-hint">{hint}</span> : null}
               </Link>
             );
@@ -771,6 +799,9 @@ export default function DashboardPage() {
   const { rows: otRows, failed: otFailed } = useOtTrend(sections.includes("otTrend"));
   const { entries: activity, failed: activityFailed } = useActivity(
     sections.includes("activity"),
+  );
+  const { payslips: selfPayslips, failed: selfPayslipsFailed } = useSelfPayslip(
+    sections.includes("ownPayslip") || sections.includes("selfService"),
   );
 
   useEffect(() => {
@@ -862,7 +893,9 @@ export default function DashboardPage() {
           {sections.includes("approvals") && (
             <ApprovalsKpi approvals={approvals} failed={approvalsFailed} />
           )}
-          {sections.includes("ownPayslip") && <OwnPayslipKpi />}
+          {sections.includes("ownPayslip") && (
+            <OwnPayslipKpi payslips={selfPayslips} failed={selfPayslipsFailed} />
+          )}
         </div>
       )}
 
@@ -875,7 +908,9 @@ export default function DashboardPage() {
           {sections.includes("activity") && (
             <ActivityCard entries={activity} failed={activityFailed} />
           )}
-          {sections.includes("selfService") && <SelfServiceCard />}
+          {sections.includes("selfService") && (
+            <SelfServiceCard payslips={selfPayslips} payslipsFailed={selfPayslipsFailed} />
+          )}
         </div>
         <div className="stack">
           {sections.includes("followUps") && (

@@ -14,6 +14,7 @@ pub mod escalation;
 pub mod esign;
 pub mod forms;
 pub mod goals;
+pub mod kg;
 pub mod leave;
 pub mod loans;
 pub mod notify;

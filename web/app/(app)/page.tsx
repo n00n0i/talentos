@@ -66,22 +66,23 @@ function ApprovalsKpi() {
 
   useEffect(() => {
     let alive = true;
-    Promise.allSettled([
-      gw<{ requests: unknown[] }>("api/v1/leave/approvals"),
-      gw<{ requests: unknown[] }>("api/v1/ot/approvals"),
-      gw<{ claims: unknown[] }>("api/v1/claims/approvals"),
-    ]).then(([leave, ot, claims]) => {
-      if (!alive) return;
-      if (leave.status === "rejected" && ot.status === "rejected" && claims.status === "rejected") {
-        setFailed(true);
-        return;
+    (async () => {
+      try {
+        const [leave, ot, claims] = await Promise.all([
+          gw<{ requests: unknown[] }>("api/v1/leave/approvals"),
+          gw<{ requests: unknown[] }>("api/v1/ot/approvals"),
+          gw<{ claims: unknown[] }>("api/v1/claims/approvals"),
+        ]);
+        if (!alive) return;
+        setCounts({
+          leave: (leave.requests ?? []).length,
+          ot: (ot.requests ?? []).length,
+          claims: (claims.claims ?? []).length,
+        });
+      } catch {
+        if (alive) setFailed(true);
       }
-      setCounts({
-        leave: leave.status === "fulfilled" ? leave.value.requests.length : 0,
-        ot: ot.status === "fulfilled" ? ot.value.requests.length : 0,
-        claims: claims.status === "fulfilled" ? claims.value.claims.length : 0,
-      });
-    });
+    })();
     return () => {
       alive = false;
     };

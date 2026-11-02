@@ -1075,11 +1075,13 @@ h3 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
+  align-items: start;
 }
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  align-items: start;
 }
 
 /* ---------- Tables ---------- */
@@ -1200,6 +1202,52 @@ h3 {
 .btn-danger {
   color: var(--danger);
 }
+/* One shape for every form control, including pages that render a bare
+   <label>ข้อความ <select/></label> instead of using .field. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]),
+select,
+textarea {
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background-color: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+  max-width: 100%;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 30px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236f7f7b' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+textarea {
+  height: auto;
+  min-height: 78px;
+  padding: 9px 12px;
+  line-height: 1.45;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="color"]):not([type="range"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--sage-strong);
+  box-shadow: 0 0 0 3px rgba(124, 196, 126, 0.18);
+}
+label > select,
+label > input:not([type="checkbox"]):not([type="radio"]),
+label > textarea {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+}
+
 .field {
   display: grid;
   gap: 6px;
@@ -1235,7 +1283,7 @@ h3 {
 }
 .form-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 .hint {
@@ -1498,4 +1546,31 @@ input[type="file"]::file-selector-button {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal);
+  cursor: pointer;
+  flex: none;
+}
+input[type="color"] {
+  width: 46px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }

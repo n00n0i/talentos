@@ -86,7 +86,7 @@ export default function SetupPage() {
             <label htmlFor="setup-confirm">ยืนยันรหัสผ่าน</label>
             <input id="setup-confirm" data-testid="setup-confirm" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
           </div>
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error" data-testid="setup-error">{error}</p>}
           <button className="btn btn-primary" data-testid="setup-submit" type="submit" disabled={busy}>
             {busy ? "กำลังติดตั้ง…" : "สร้างองค์กร"}
           </button>

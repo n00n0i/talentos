@@ -63,12 +63,18 @@ export default function PerformancePage() {
   const [notice, setNotice] = useState("");
 
   const loadCycles = useCallback(async () => {
+    // The manager-scoped list only surfaces cycles that already hold a review of a
+    // direct report, so it hides freshly created cycles. Users who can write
+    // cycles (hr_admin) must see the full list; only pure direct-managers fall
+    // back to the scoped endpoint.
     const res = await gw<{ cycles: Cycle[] }>(
-      canDirect ? "api/v1/me/performance/cycles" : "api/v1/performance/cycles",
+      canDirect && !canWrite
+        ? "api/v1/me/performance/cycles"
+        : "api/v1/performance/cycles",
     );
     setCycles(res.cycles);
     setSelected((current) => res.cycles.find((c) => c.id === current?.id) ?? null);
-  }, [canDirect]);
+  }, [canDirect, canWrite]);
 
   const loadReviews = useCallback(async (cycleId: string) => {
     const res = await gw<{ reviews: Review[] }>(

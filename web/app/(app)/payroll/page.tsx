@@ -192,12 +192,12 @@ export default function PayrollPage() {
         <h2 style={{ marginBottom: 14 }}>{t("payroll.createTitle")}</h2>
         <div className="form-row">
           <div className="field">
-            <label htmlFor="start">{t("payroll.periodStart")}</label>
-            <input id="start" type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} required />
+            <label htmlFor="start" data-testid="create-start-label">{t("payroll.periodStart")}</label>
+            <input id="start" data-testid="create-start" type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} required />
           </div>
           <div className="field">
             <label htmlFor="end">{t("payroll.periodEnd")}</label>
-            <input id="end" type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} required />
+            <input id="end" data-testid="create-end" type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} required />
           </div>
           <div className="field">
             <label htmlFor="pay">{t("payroll.paymentDate")}</label>
@@ -306,7 +306,7 @@ function RunRow({
   const needsReview = anomalyCount > 0 && !anomalies?.reviewed_at;
   return (
     <>
-      <tr className="clickable" onClick={onToggle}>
+      <tr className="clickable" data-testid="run-row" onClick={onToggle}>
         <td>
           {thDate(run.periodStart)} – {thDate(run.periodEnd)}
         </td>

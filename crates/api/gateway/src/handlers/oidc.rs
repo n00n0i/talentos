@@ -13,6 +13,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use jsonwebtoken::jwk::{AlgorithmParameters, JwkSet};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -41,6 +42,9 @@ pub struct OidcDiscovery {
     pub authorization_endpoint: String,
     pub token_endpoint: String,
     pub userinfo_endpoint: Option<String>,
+    pub issuer: String,
+    #[serde(default)]
+    pub jwks_uri: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -373,11 +377,12 @@ pub async fn callback(State(state): State<AppState>, Query(q): Query<CallbackQue
         Err(resp) => return resp,
     };
 
-    // Resolve user info (userinfo endpoint if present, else decode id_token claims)
-    let user_info = match resolve_user_info(&state.http, &discovery, &token_resp).await {
-        Ok(u) => u,
-        Err(resp) => return resp,
-    };
+    // Resolve user info (userinfo endpoint if present, else verify id_token claims)
+    let user_info =
+        match resolve_user_info(&state.http, &discovery, &cfg.client_id, &token_resp).await {
+            Ok(u) => u,
+            Err(resp) => return resp,
+        };
 
     let Some(email) = user_info.email else {
         return error_redirect("oidc_no_email");
@@ -507,7 +512,7 @@ async fn discovery(
         "{}/.well-known/openid-configuration",
         issuer.trim_end_matches('/')
     );
-    let cfg: OidcDiscovery = http
+    let mut cfg: OidcDiscovery = http
         .get(&well_known)
         .send()
         .await
@@ -526,6 +531,8 @@ async fn discovery(
             tracing::error!(error = %e, "OIDC discovery JSON parse failed");
             service_unavailable("OIDC provider returned malformed data")
         })?;
+    // Trust only the tenant-configured issuer, whatever the document claims.
+    cfg.issuer = issuer.to_string();
 
     if let Ok(mut map) = cache.try_lock() {
         map.insert(
@@ -628,11 +635,12 @@ async fn exchange_token(
     Ok(token)
 }
 
-/// Resolve user info from the userinfo endpoint, or fall back to id_token claims.
+/// Resolve user info from the userinfo endpoint, or verify id_token claims.
 #[allow(clippy::result_large_err)]
 async fn resolve_user_info(
     http: &reqwest::Client,
     discovery: &OidcDiscovery,
+    client_id: &str,
     token: &OidcTokenResponse,
 ) -> Result<OidcUserInfo, Response> {
     if let Some(userinfo_endpoint) = &discovery.userinfo_endpoint {
@@ -661,35 +669,96 @@ async fn resolve_user_info(
         }
     }
 
-    // No userinfo endpoint: decode the id_token as a JWT (unverified — the token
-    // was just issued by the provider over TLS, so this is acceptable for
-    // claim extraction in a skeleton; full verification is a follow-up).
-    // TODO: verify id_token signature via JWKS before enabling in production
-    if let Some(id_token) = &token.id_token {
-        let payload = id_token
-            .split('.')
-            .nth(1)
-            .ok_or_else(|| service_unavailable("id_token malformed"))?;
-        let bytes = URL_SAFE_NO_PAD
-            .decode(payload)
-            .map_err(|_| service_unavailable("id_token claims not base64url"))?;
-        let claims: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| {
-            tracing::error!(error = %e, "id_token JSON parse failed");
-            service_unavailable("OIDC provider returned malformed id_token")
-        })?;
-        let ui = OidcUserInfo {
-            email: claims
-                .get("email")
-                .and_then(|v| v.as_str())
-                .map(String::from),
-            email_verified: claims.get("email_verified").and_then(|v| v.as_bool()),
-        };
-        return Ok(ui);
-    }
+    // No usable userinfo endpoint: the id_token claims are only trusted after
+    // signature verification via the provider's JWKS.
+    let id_token = token
+        .id_token
+        .as_deref()
+        .ok_or_else(|| service_unavailable("OIDC provider returned no user identity"))?;
 
-    Err(service_unavailable(
-        "OIDC provider returned no user identity",
-    ))
+    let claims = verify_id_token(http, discovery, client_id, id_token).await?;
+    Ok(OidcUserInfo {
+        email: claims
+            .get("email")
+            .and_then(|v| v.as_str())
+            .map(String::from),
+        email_verified: claims.get("email_verified").and_then(|v| v.as_bool()),
+    })
+}
+
+/// Verify an id_token's RS256 signature against the provider's JWKS, plus
+/// issuer, audience, and expiry checks. On ANY failure: 503, never
+/// unverified claims.
+#[allow(clippy::result_large_err)]
+async fn verify_id_token(
+    http: &reqwest::Client,
+    discovery: &OidcDiscovery,
+    client_id: &str,
+    id_token: &str,
+) -> Result<serde_json::Value, Response> {
+    let fail = |msg: &str| -> Response {
+        tracing::error!(error = msg, "OIDC id_token verification failed");
+        service_unavailable(msg)
+    };
+
+    let Some(jwks_uri) = discovery.jwks_uri.as_deref().filter(|u| !u.is_empty()) else {
+        return Err(fail(
+            "OIDC provider exposes no JWKS and no usable userinfo endpoint",
+        ));
+    };
+
+    // No cache: one HTTPS call per OIDC callback is negligible.
+    let jwks: JwkSet = http
+        .get(jwks_uri)
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "OIDC JWKS fetch failed");
+            service_unavailable("OIDC provider unreachable")
+        })?
+        .error_for_status()
+        .map_err(|_| fail("OIDC JWKS endpoint returned an error"))?
+        .json()
+        .await
+        .map_err(|_| fail("OIDC JWKS endpoint returned malformed data"))?;
+
+    // Select the JWK whose kid matches the id_token header; if the token has
+    // no kid, use the key only when the set has exactly one key.
+    let kid = jsonwebtoken::decode_header(id_token)
+        .ok()
+        .as_ref()
+        .and_then(|h| h.kid.clone());
+    let jwk = match &kid {
+        Some(k) => jwks.find(k),
+        None if jwks.keys.len() == 1 => jwks.keys.first(),
+        _ => None,
+    };
+    let Some(jwk) = jwk else {
+        return Err(fail("no matching JWKS key for id_token"));
+    };
+
+    let rsa = match &jwk.algorithm {
+        AlgorithmParameters::RSA(params) => Some(params),
+        _ => None,
+    };
+    let Some(params) = rsa else {
+        return Err(fail("JWKS key is not an RSA key"));
+    };
+    let key = DecodingKey::from_rsa_components(&params.n, &params.e).map_err(|e| {
+        tracing::error!(error = %e, "JWKS RSA key is malformed");
+        service_unavailable(&format!("JWKS RSA key is malformed: {e}"))
+    })?;
+
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_issuer(&[&discovery.issuer]);
+    validation.set_audience(&[client_id]);
+    validation.leeway = 10;
+
+    let data = decode::<serde_json::Value>(id_token, &key, &validation).map_err(|e| {
+        tracing::error!(error = %e, "OIDC id_token validation failed");
+        service_unavailable(&format!("OIDC id_token failed validation: {e}"))
+    })?;
+    Ok(data.claims)
 }
 
 /// Link an existing user by email, or create a new one. Returns the linked
@@ -910,7 +979,8 @@ mod tests {
                     Json(json!({
                         "authorization_endpoint": "http://provider.local/authorize",
                         "token_endpoint": "http://provider.local/token",
-                        "userinfo_endpoint": "http://provider.local/userinfo"
+                        "userinfo_endpoint": "http://provider.local/userinfo",
+                        "issuer": "http://provider.local"
                     }))
                 }),
             )
@@ -943,6 +1013,183 @@ mod tests {
         (format!("http://{}", addr), app)
     }
 
+    // ------------------------------------------------------------------
+    // JWKS verification tests.
+    //
+    // Pre-computed 2048-bit RSA fixtures:
+    //   - KEY_A_N / KEY_B_N: JWKS modulus values (base64url)
+    //   - TOKEN_*: static RS256-signed id_tokens (exp=2100 so they never
+    //     expire; TOKEN_EXPIRED has exp=1000 i.e. 1970)
+    //
+    // The mock provider serves TOKEN_OK from its /token route and exposes
+    // KEY_A_N at /jwks. Tests call resolve_user_info (the production code
+    // path) which fetches the JWKS and verifies the signature.
+    // ------------------------------------------------------------------
+    const KEY_A_N: &str = "7zP0np_846vQ7TiC3p_BA4E9nGvBT3TSPU541UMrSEZ1w4TwQDjR62kZ5oqHkCfFnUpfexo_s_dJtC4AfK7IT5VIIDZ92yKBG4qC3k4cmoDF0JOAPS9E2ZArzH8xMQKADVM9TvvdkWaVq6CFUWxaEAqJdyAvhVtxR1lNf6QreA8BGZEENIVYz62RtIXt6dIsWJp16uW_ucaVTDDoXVPHdpwO4LDSq1h9qV87L0jNJ_1gS47bhV6BeHanLLd0Q5HYx1NliVrCUTf3vNXrABmURXTpYVCJEPxRxGwI9hnvNOVReT8jM-44S0LAj8XIPtgPb-41_4q6bfu1KUq_J9AMnQ";
+
+    // Signed by the key whose modulus is KEY_A_N; aud=client-e2e; exp=2100.
+    const TOKEN_OK: &str = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImsxIn0.eyJpc3MiOiJodHRwOi8vcHJvdmlkZXIubG9jYWwiLCJhdWQiOiJjbGllbnQtZTJlIiwic3ViIjoidXNlci0xMjMiLCJlbWFpbCI6Imp3a3MtdXNlckBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJpYXQiOjAsImV4cCI6NDEwMjQ0NDgwMH0.UolfI-CblPeweWJOA4VyFlVIJYmff5SDBYNFigJ072iw8qtOpX1uMVuu9J3vRlxEEWqIkeDOgyCVQA4F6gonA6ATqVwq9CEGWDM00TbkaJJNvX9Gx5W2-bOKJ3eTRwJszDRb8em7339YkRniitmgk85YzPmQoiDW3K6bFnoz7S-UbjCDBxiQLz97ozIgIr6Km7Zt4iC9j02LgdHyKtMkAOQuJ0KWaqgCELndYdJ7qFjKI9xTeirubjjRS-DEIcdvWTVy5fIJC1aNbbyxPSRXRKfgxA1NN7J71W-nhjJVzC4VynORrQmH_EYVb-hRTVYsN3pNuAm1RcKSxApU2uM5WA";
+    // Same claims, signed by a DIFFERENT key (modulus KEY_B_N) — signature
+    // will not match when the JWKS publishes KEY_A_N.
+    const TOKEN_WRONG_SIG: &str = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImsxIn0.eyJpc3MiOiJodHRwOi8vcHJvdmlkZXIubG9jYWwiLCJhdWQiOiJjbGllbnQtZTJlIiwic3ViIjoidXNlci0xMjMiLCJlbWFpbCI6Imp3a3MtdXNlckBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJpYXQiOjAsImV4cCI6NDEwMjQ0NDgwMH0.T0VFhfbDJExUd4GI-p4YwPBIyQzRhmLiVLsmX6aq4A_cpjZqbNuRQkYczrXXe7-XabVw2E_DWDuNWyPaM2sCKYsBWSqIbR3wsilt6P6WKf6qLyJajJTTjDyvlMdGFAbbYl-fvCH8_rW5Z85BToO1w3ZG0fjqVuMcmkdbx2RJv89lgn8jQn0klG26SrXB_to8mUzx4279s9kyxr0DBWk80xmN7sLQlyTDDFQK-GBwLor6w7yyXciofWymEZRJa_6wMhNA7KTSYroLir2-2cjIv98GsahEMalmrsCdBBS8me6hLmgVuvrFc195PMX1bQ-fasSQefg95KMbfkBGPoeQzg";
+    // Signed by KEY_A but aud=some-other-client (not in the expected list).
+    const TOKEN_BAD_AUD: &str = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImsxIn0.eyJpc3MiOiJodHRwOi8vcHJvdmlkZXIubG9jYWwiLCJhdWQiOiJzb21lLW90aGVyLWNsaWVudCIsInN1YiI6InVzZXItMTIzIiwiZW1haWwiOiJqd2tzLXVzZXJAZXhhbXBsZS5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiaWF0IjowLCJleHAiOjQxMDI0NDQ4MDB9.a89I13AHz0Tttg45m3if-Fuj6vWcgHPR_UinLLdYImjAKO20U4uaMukXBPx1gcbOyEqC7jFToXeqmJif8Rgmg_kzeKPr-WuG85gQTKYm9r1jep1OaITjaKETp_g_sPQEvSSpsf2U7GlCL7KbYqSPFHOBYPB8tcCVfYINTlH8G_vEHkNznJvkpWzBucKjcdAsVrY0-HXML7vWVnS1rFJJ8PyMjy6YuNKlex-0x4_xgCMip8ZEiZ9vP5y3FsgiBVleRfhiuhliMQ84SNWXoVLUcKkfdRyxcFQyoERiKWUtRzDiSwDjtsnl1EvioELFwSnfkGVgLOnUez4fAsAhpQofXg";
+    // Signed by KEY_A, aud=client-e2e, but exp=1000 (1970) — expired.
+    const TOKEN_EXPIRED: &str = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6ImsxIn0.eyJpc3MiOiJodHRwOi8vcHJvdmlkZXIubG9jYWwiLCJhdWQiOiJjbGllbnQtZTJlIiwic3ViIjoidXNlci0xMjMiLCJlbWFpbCI6Imp3a3MtdXNlckBleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJpYXQiOjAsImV4cCI6MTAwMH0.HfQpa26KdhCqCMiiEuH_Sl3fbJ9pIA-b9h6DnFROmqSWRmItgbyNH8R-x3HFUxp9gBciDTj6GxR0j4bBZCExyMZDEpv6jgym3JxrpaLtzZX5QqQoLMd86vWqPm_WEOJBfMAYVCOHkjTqktAZ2lsBfazBefr4ZvYuOoN0kLFRkatYsxfRb5dmvge9Jff1mU03-9tdmAnQg3jee_u6useQUzd50lTamLYSDDIJH8ze0vxMJNugVnyn9zsMtwmjUNjSTVwRTEaZAXU0X8Kk_gdRqBS5cwACLbYj1MDQOani_busOBZgemG8tUG46nYLLrJa2mAuYnNcsFp-HEwWRit_nA";
+
+    /// Mock OIDC provider (no userinfo endpoint): discovery + token + JWKS
+    /// routes. `served_token` is the static id_token the token route returns;
+    /// `jwks_n` is the modulus the JWKS route publishes.
+    async fn mock_provider_token_and_jwks(served_token: &str, jwks_n: &str) -> String {
+        let served_token = served_token.to_string();
+        let jwks_n = jwks_n.to_string();
+        let app = Router::new()
+            .route(
+                "/.well-known/openid-configuration",
+                get(|| async {
+                    Json(json!({
+                        "authorization_endpoint": "http://provider.local/authorize",
+                        "token_endpoint": "http://provider.local/token",
+                        "jwks_uri": "http://provider.local/jwks",
+                        "issuer": "http://provider.local"
+                    }))
+                }),
+            )
+            .route(
+                "/token",
+                axum::routing::post(move || {
+                    let served_token = served_token.clone();
+                    async move {
+                        Json(json!({
+                            "access_token": "mock-access-token",
+                            "id_token": served_token
+                        }))
+                    }
+                }),
+            )
+            .route(
+                "/jwks",
+                get(move || {
+                    let jwks_n = jwks_n.clone();
+                    async move {
+                        Json(json!({
+                            "keys": [{
+                                "kty": "RSA", "alg": "RS256", "use": "sig",
+                                "kid": "k1", "n": jwks_n, "e": "AQAB"
+                            }]
+                        }))
+                    }
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        base
+    }
+
+    /// End-to-end helper: fetch discovery, then run resolve_user_info.
+    /// All URLs in the mock provider's discovery doc are rewritten to point
+    /// at the actual bound base.
+    #[allow(clippy::result_large_err)]
+    async fn resolve_via_jwks_provider(
+        base: &str,
+        client_id: &str,
+    ) -> Result<OidcUserInfo, Response> {
+        let http = reqwest::Client::new();
+        let cache: DiscoveryCache = Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let mut discovery = discovery(&http, &cache, base).await.unwrap();
+        // The mock provider's discovery doc hardcodes http://provider.local URLs;
+        // rewrite the endpoints to the actual bound base so token + JWKS routes
+        // are hit. The static tokens use iss=http://provider.local, so pin the
+        // issuer field to match (discovery() normally pins it to the cache key).
+        discovery.issuer = "http://provider.local".into();
+        discovery.token_endpoint = format!("{}/token", base);
+        if discovery.jwks_uri.is_some() {
+            discovery.jwks_uri = Some(format!("{}/jwks", base));
+        }
+        let token: OidcTokenResponse = http
+            .post(&discovery.token_endpoint)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        resolve_user_info(&http, &discovery, client_id, &token).await
+    }
+
+    /// Happy path: valid token signed by KEY_A, JWKS publishes KEY_A_N.
+    #[tokio::test]
+    async fn id_token_verified_via_jwks() {
+        let base = mock_provider_token_and_jwks(TOKEN_OK, KEY_A_N).await;
+        let ui = resolve_via_jwks_provider(&base, "client-e2e")
+            .await
+            .expect("signed id_token must verify against the JWKS");
+        assert_eq!(ui.email.as_deref(), Some("jwks-user@example.com"));
+        assert_eq!(ui.email_verified, Some(true));
+    }
+
+    /// Token signed with KEY_B but JWKS publishes KEY_A_N: mismatch.
+    #[tokio::test]
+    async fn id_token_rejected_when_signature_mismatch() {
+        let base = mock_provider_token_and_jwks(TOKEN_WRONG_SIG, KEY_A_N).await;
+        let err = resolve_via_jwks_provider(&base, "client-e2e")
+            .await
+            .expect_err("a token signed with the wrong key must fail");
+        assert_eq!(
+            err.status(),
+            StatusCode::SERVICE_UNAVAILABLE,
+            "signature mismatch must yield 503"
+        );
+    }
+
+    /// Token with aud=some-other-client; expected client is client-e2e.
+    #[tokio::test]
+    async fn id_token_rejected_when_aud_missing() {
+        let base = mock_provider_token_and_jwks(TOKEN_BAD_AUD, KEY_A_N).await;
+        let err = resolve_via_jwks_provider(&base, "client-e2e")
+            .await
+            .expect_err("aud not containing client-e2e must fail");
+        assert_eq!(
+            err.status(),
+            StatusCode::SERVICE_UNAVAILABLE,
+            "aud mismatch must yield 503"
+        );
+    }
+
+    /// Token with exp=1000 (1970): expired even though signature is valid.
+    #[tokio::test]
+    async fn id_token_rejected_when_expired() {
+        let base = mock_provider_token_and_jwks(TOKEN_EXPIRED, KEY_A_N).await;
+        let err = resolve_via_jwks_provider(&base, "client-e2e")
+            .await
+            .expect_err("an expired id_token must fail");
+        assert_eq!(err.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    /// No JWKS and no userinfo endpoint: must be 503, never unverified claims.
+    #[tokio::test]
+    async fn resolve_user_info_503_when_no_jwks_and_no_userinfo() {
+        let http = reqwest::Client::new();
+        let discovery = OidcDiscovery {
+            authorization_endpoint: "http://provider.local/authorize".into(),
+            token_endpoint: "http://provider.local/token".into(),
+            userinfo_endpoint: None,
+            issuer: "http://provider.local".into(),
+            jwks_uri: None,
+        };
+        let token_resp = OidcTokenResponse {
+            access_token: "mock-access-token".into(),
+            id_token: Some(TOKEN_OK.to_string()),
+        };
+        let err = resolve_user_info(&http, &discovery, "client-e2e", &token_resp)
+            .await
+            .expect_err("no JWKS and no userinfo must yield an error");
+        assert_eq!(err.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
     #[tokio::test]
     async fn discovery_fetch_and_cache() {
         let (base, _) = mock_provider().await;
@@ -973,6 +1220,8 @@ mod tests {
                         authorization_endpoint: "https://example.com/auth".into(),
                         token_endpoint: "https://example.com/token".into(),
                         userinfo_endpoint: None,
+                        issuer: "https://example.com".into(),
+                        jwks_uri: None,
                     },
                     tokio::time::Instant::now(),
                 ),

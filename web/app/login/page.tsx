@@ -9,7 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [tenant, setTenant] = useState("smoke");
+  const [tenant, setTenant] = useState("e2e");
   const [totp, setTotp] = useState("");
   const [errorCode, setErrorCode] = useState("");
   const [error, setError] = useState("");
@@ -33,7 +33,9 @@ export default function LoginPage() {
           setError(body.error === "invalid_totp" ? "รหัสยืนยันไม่ถูกต้อง ลองอีกครั้ง" : "");
           return;
         }
-        throw new Error(body.message || "เข้าสู่ระบบไม่สำเร็จ");
+        throw new Error(
+          [body.message, ...((body.details ?? []) as Array<{ field: string; message: string }>)
+            .map((d) => `${d.field}: ${d.message}`)].join(" — ") || "เข้าสู่ระบบไม่สำเร็จ");
       }
       router.replace("/");
       router.refresh();

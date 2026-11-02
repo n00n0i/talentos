@@ -567,6 +567,66 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.appr-body {
+  padding: 16px;
+}
+.appr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.appr {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #fff;
+}
+.appr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.chip {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.appr-when {
+  min-width: 0;
+  color: var(--text-3);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.appr-name {
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.appr-code {
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.appr-empty {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1051,6 +1111,9 @@ h3 {
 }
 @media (max-width: 760px) {
   .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .appr-grid {
     grid-template-columns: 1fr;
   }
 }

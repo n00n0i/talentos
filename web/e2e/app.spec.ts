@@ -482,6 +482,28 @@ test("employee requests leave, HR approves it", async ({ page }) => {
   await expect(page.getByTestId("leave-row").filter({ hasText: "ธ.ค. 2569" })).toContainText("อนุมัติแล้ว");
 });
 
+test("dashboard shows the pending approvals", async ({ page }) => {
+  await login(page);
+  // The leave test above approves its own request, so seed a fresh pending one
+  // (HR may submit on behalf of an employee with leave_request.view_team).
+  const found = await apiGet(page, "/api/gw/api/v1/employees?q=E2E001");
+  const created = await apiPost(page, "/api/gw/api/v1/leave/requests", {
+    employee_id: found.json.employees[0].id,
+    leave_type: "annual",
+    start_date: "2026-12-22",
+    end_date: "2026-12-23",
+    reason: "E2E dashboard",
+  });
+  // A re-run without a DB reset finds the previous request still pending (409);
+  // either way a pending leave for E2E001 exists.
+  expect([201, 409]).toContain(created.status);
+
+  await page.goto("/");
+  await expect(page.getByTestId("approvals-grid")).toBeVisible();
+  await expect(page.getByTestId("approval-card").first()).toBeVisible();
+  await expect(page.getByTestId("approval-card").first()).toContainText("E2E001");
+});
+
 test("HR bulk-imports employees from a CSV", async ({ page }) => {
   await login(page);
   await page.goto("/employees");

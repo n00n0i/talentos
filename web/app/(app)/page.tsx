@@ -32,6 +32,28 @@ type SelfReview = { id: string };
 type SelfBalance = { remaining_days: string };
 type SelfOt = { id: string };
 
+type LeaveApproval = {
+  id: string;
+  employee_name: string;
+  employee_code: string;
+  label_th: string;
+  start_date: string;
+  end_date: string;
+};
+type OtApproval = {
+  id: string;
+  employee_name: string;
+  employee_code: string;
+  work_date: string;
+};
+type ClaimApproval = {
+  id: string;
+  employee_name: string;
+  employee_code: string;
+  expense_date: string;
+};
+type Approvals = { leave: LeaveApproval[]; ot: OtApproval[]; claims: ClaimApproval[] };
+
 const RUNS_QUERY =
   "{ payrollRuns(limit: 1) { periodStart periodEnd status totalNet totalTax } }";
 
@@ -57,27 +79,26 @@ function Kpi({
   );
 }
 
-function ApprovalsKpi() {
-  const { t } = useI18N();
-  const [counts, setCounts] = useState<{ leave: number; ot: number; claims: number } | null>(
-    null,
-  );
+/** One fetch for the KPI and the card grid; any failed queue fails the whole card. */
+function useApprovals(enabled: boolean) {
+  const [approvals, setApprovals] = useState<Approvals | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     (async () => {
       try {
         const [leave, ot, claims] = await Promise.all([
-          gw<{ requests: unknown[] }>("api/v1/leave/approvals"),
-          gw<{ requests: unknown[] }>("api/v1/ot/approvals"),
-          gw<{ claims: unknown[] }>("api/v1/claims/approvals"),
+          gw<{ requests: LeaveApproval[] }>("api/v1/leave/approvals"),
+          gw<{ requests: OtApproval[] }>("api/v1/ot/approvals"),
+          gw<{ claims: ClaimApproval[] }>("api/v1/claims/approvals"),
         ]);
         if (!alive) return;
-        setCounts({
-          leave: (leave.requests ?? []).length,
-          ot: (ot.requests ?? []).length,
-          claims: (claims.claims ?? []).length,
+        setApprovals({
+          leave: leave.requests ?? [],
+          ot: ot.requests ?? [],
+          claims: claims.claims ?? [],
         });
       } catch {
         if (alive) setFailed(true);
@@ -86,7 +107,26 @@ function ApprovalsKpi() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [enabled]);
+
+  return { approvals, failed };
+}
+
+function ApprovalsKpi({
+  approvals,
+  failed,
+}: {
+  approvals: Approvals | null;
+  failed: boolean;
+}) {
+  const { t } = useI18N();
+  const counts = approvals
+    ? {
+        leave: approvals.leave.length,
+        ot: approvals.ot.length,
+        claims: approvals.claims.length,
+      }
+    : null;
 
   const total = counts ? counts.leave + counts.ot + counts.claims : 0;
   const hint = failed
@@ -104,6 +144,100 @@ function ApprovalsKpi() {
       value={counts ? String(total) : "—"}
       hint={hint}
     />
+  );
+}
+
+type ApprovalCard = {
+  key: string;
+  kind: "leave" | "ot" | "claim";
+  employee: string;
+  code: string;
+  when: string;
+  date: string;
+  href: string;
+};
+
+const APPROVAL_KIND: Record<ApprovalCard["kind"], string> = {
+  leave: "dash.approvals.leave",
+  ot: "dash.approvals.ot",
+  claim: "dash.approvals.claim",
+};
+
+function approvalCards(approvals: Approvals): ApprovalCard[] {
+  const range = (start: string, end: string) =>
+    start === end ? thDate(start) : `${thDate(start)} – ${thDate(end)}`;
+  return [
+    ...approvals.leave.map((r) => ({
+      key: `leave-${r.id}`,
+      kind: "leave" as const,
+      employee: r.employee_name,
+      code: r.employee_code,
+      when: r.start_date,
+      date: `${r.label_th} · ${range(r.start_date, r.end_date)}`,
+      href: "/leave",
+    })),
+    ...approvals.ot.map((r) => ({
+      key: `ot-${r.id}`,
+      kind: "ot" as const,
+      employee: r.employee_name,
+      code: r.employee_code,
+      when: r.work_date,
+      date: thDate(r.work_date),
+      href: "/ot",
+    })),
+    ...approvals.claims.map((r) => ({
+      key: `claim-${r.id}`,
+      kind: "claim" as const,
+      employee: r.employee_name,
+      code: r.employee_code,
+      when: r.expense_date,
+      date: thDate(r.expense_date),
+      href: "/claims",
+    })),
+  ]
+    .sort((a, b) => b.when.localeCompare(a.when))
+    .slice(0, 6);
+}
+
+function ApprovalsGrid({
+  approvals,
+  failed,
+}: {
+  approvals: Approvals | null;
+  failed: boolean;
+}) {
+  const { t } = useI18N();
+  const cards = approvals ? approvalCards(approvals) : [];
+
+  return (
+    <div className="card" data-testid="approvals-grid">
+      <div className="card-head">
+        <h2>{t("dash.approvals.title")}</h2>
+      </div>
+      <div className="appr-body">
+        {approvals === null && !failed ? null : cards.length ? (
+          <div className="appr-grid">
+            {cards.map((card) => (
+              <Link
+                className="appr"
+                href={card.href}
+                key={card.key}
+                data-testid="approval-card"
+              >
+                <span className="appr-head">
+                  <span className="chip">{t(APPROVAL_KIND[card.kind])}</span>
+                  <span className="appr-when">{card.date}</span>
+                </span>
+                <span className="appr-name">{card.employee}</span>
+                <span className="appr-code">{card.code}</span>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="appr-empty">{t("dash.empty.approvals")}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -244,6 +378,9 @@ export default function DashboardPage() {
 
   const role = me ? primaryRole(me) : null;
   const sections = role ? sectionsFor(role) : [];
+  const { approvals, failed: approvalsFailed } = useApprovals(
+    sections.includes("approvals") || sections.includes("approvalsGrid"),
+  );
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
@@ -331,14 +468,18 @@ export default function DashboardPage() {
               }
             />
           )}
-          {sections.includes("approvals") && <ApprovalsKpi />}
+          {sections.includes("approvals") && (
+            <ApprovalsKpi approvals={approvals} failed={approvalsFailed} />
+          )}
           {sections.includes("ownPayslip") && <OwnPayslipKpi />}
         </div>
       )}
 
       <div className="dash-grid">
         <div className="stack">
-          {/* Task 5 appends approvalsGrid here. */}
+          {sections.includes("approvalsGrid") && (
+            <ApprovalsGrid approvals={approvals} failed={approvalsFailed} />
+          )}
           {/* Task 6 appends otTrend here. */}
           {/* Task 7 appends activity here. */}
           {sections.includes("selfService") && <SelfServiceCard />}

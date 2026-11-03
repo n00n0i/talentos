@@ -898,8 +898,16 @@ test("HR opens settings and sees the notification summary without error", async 
 test("HR opens AI settings and sees the provider form", async ({ page }) => {
   await login(page);
   await page.goto("/settings/ai");
-  await expect(page.getByTestId("ai-provider")).toBeVisible();
-  await expect(page.getByTestId("ai-save")).toHaveText("บันทึก");
+  await expect(page.getByTestId("ai-provider-kind")).toBeVisible();
+  await expect(page.getByTestId("ai-provider-save")).toHaveText("บันทึกผู้ให้บริการ");
+  await page.getByTestId("ai-tab-roles").click();
+  await expect(page.getByTestId("ai-role-chat")).toBeVisible();
+  await page.getByTestId("ai-tab-mcp").click();
+  await expect(page.getByTestId("ai-mcp")).toBeVisible();
+  await page.getByTestId("ai-tab-skills").click();
+  await expect(page.getByTestId("ai-tabpanel-skills")).toBeVisible();
+  await page.getByTestId("ai-tab-agents").click();
+  await expect(page.getByTestId("ai-agent-add")).toBeVisible();
 });
 
 test("chat head is on every page and links to AI settings when unconfigured", async ({ page }) => {

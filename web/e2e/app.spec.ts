@@ -113,6 +113,30 @@ test("settings persist across reload", async ({ page }) => {
   await expect(page.getByText("settings.payroll").first()).toBeVisible();
 });
 
+test("AI settings and knowledge graph render for HR", async ({ page }) => {
+  await login(page);
+  await page.goto("/settings/ai");
+  await expect(page.getByTestId("ai-settings")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "ตั้งค่า AI" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "บันทึก" })).toBeVisible();
+
+  await page.goto("/settings/ai/graph");
+  await expect(page.getByRole("heading", { name: "กราฟความรู้ขององค์กร" })).toBeVisible();
+  // A fresh tenant has no nodes, so the empty state also renders a rebuild button.
+  await page.getByRole("button", { name: "สร้างกราฟใหม่" }).first().click();
+  await expect(page.getByText(/โหนด:/).first()).toBeVisible();
+
+  // The chat widget fails visibly: no secret (503) shows the settings link,
+  // no permission (403) shows the forbidden text. Never a silent no-op.
+  await page.goto("/settings/ai");
+  await page.getByTestId("chat-launcher").click();
+  await page.getByTestId("chat-input").fill("สวัสดี");
+  await page.getByTestId("chat-send").click();
+  await expect(
+    page.getByTestId("chat-settings-link").or(page.getByTestId("chat-forbidden")),
+  ).toBeVisible();
+});
+
 test("creates an employee, records OT, runs and approves payroll", async ({ page }) => {
   await login(page);
   await page.goto("/");

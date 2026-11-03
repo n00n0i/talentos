@@ -244,6 +244,27 @@ cd plugins/bonus-calculator-thai && cargo build --release --target wasm32-wasip1
 The agent loop currently runs in-process (`AgentRunner`) instead of on Temporal; the
 phase boundary is already isolated, so the Temporal swap is a wiring change, not a rewrite.
 
+## AI settings + knowledge graph (2026-11-02)
+
+Shipped: tenant AI settings, an organizational knowledge graph, and a grounded chat
+endpoint with a Next.js settings page, graph inspector, and floating chat widget.
+
+- Endpoints: `GET/PUT /api/v1/ai/settings`, `POST /api/v1/ai/settings/test`,
+  `POST /api/v1/ai/chat`, `GET /api/v1/ai/kg` (counts), `GET /api/v1/ai/kg/nodes`,
+  `GET /api/v1/ai/kg/neighbors`, `POST /api/v1/ai/kg/rebuild`.
+- Permissions: `ai.chat` (hr_admin, payroll_manager, manager) and
+  `ai.settings.manage` (hr_admin). The provider key is write-only and never returned.
+- Secrets: OpenBao KV v2 with static auto-unseal; seal key at `/etc/openbao/seal.key`
+  (mode 0600), scoped gateway token at `/etc/openbao/ai.token`, wired through
+  `OPENBAO_*` env. No plaintext key is written to Postgres.
+- Services: gateway and web are `systemd` units (`talentos-gateway.service` :18479,
+  `talentos-web.service` :3000); the OpenBao container runs with
+  `restart=unless-stopped`.
+
+Known limits: retrieval is lexical (no embeddings for chat grounding), stale graph
+nodes are not pruned on rebuild, Benefit and Process node classes are declared but
+not populated, and `ai.settings.update` is not written to the audit log.
+
 ## Known shortcuts (grep `shortcut:`)
 
 - `to_tsvector('simple', ...)` for Thai keyword search — no Thai tokenizer installed yet.

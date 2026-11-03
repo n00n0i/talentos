@@ -131,7 +131,7 @@ export default function AiSettingsPage() {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head" data-testid="ai-settings">
         <div>
           <h1>{t("ai.title")}</h1>
           <p className="page-sub">{t("ai.subtitle")}</p>

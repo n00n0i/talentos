@@ -28,6 +28,8 @@ logs/
 # Database
 *.sqlite
 *.db
+# DB dumps contain PII — never commit
+/backups/
 
 # Docker
 docker-compose.override.yml

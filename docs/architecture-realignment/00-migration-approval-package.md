@@ -140,7 +140,44 @@ Evidence file: `docs/architecture-realignment/evidence/ws0/ledger/sqlx_migrate_r
 
 ## 4. Independent verifier verdict
 
-`PENDING` — to be completed by a separate verifier.
+**Verifier:** independent subagent (did not author this package).  
+**Date:** 2026-11-03  
+**Scope:** re-ran the full rehearsal of §1 and §5 in a new scratch database, plus backup/ledger/schema/data/dev-DB checks. No SQL was executed against `talentos`, `talentos_e2e`, or their `_sqlx_migrations`.  
+**Environment:** `loans-postgres-1` (PostgreSQL 16.14, pgvector:pg16), role `talentos`, `sqlx-cli 0.9.0`; scratch DBs `talentos_ledger_check` (rehearsal) and `talentos_ledger_fresh` (fresh-build comparison), both created from scratch and dropped afterwards.
+
+### 4.1 Evidence
+
+| # | Command | Result |
+|---|---|---|
+| 1 | `sha256sum backups/ws0-2026-11-03.sql` | `8d2be48d7a7eb99b8e93689a75dc8a5f36cb6930ea19576a8c835f8f6487ae63` — matches |
+| 2 | `CREATE DATABASE talentos_ledger_check OWNER talentos` | `CREATE DATABASE` |
+| 3 | `psql -v ON_ERROR_STOP=1 < backups/ws0-2026-11-03.sql` | exit 0, zero `ERROR` lines |
+| 4 | `SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'` | `79` — matches |
+| 5 | BEFORE rows for the 4 versions (incl. `execution_time`, `installed_on`) | `20261101000003` 96 B, `20261214000001` 96 B, `20261215000001` 48 B, `20261114000001` absent; total 70 rows |
+| 6 | `psql -v ON_ERROR_STOP=1 <` §1 SQL verbatim | `BEGIN / UPDATE 2 / UPDATE 1 / INSERT 0 1 / COMMIT`, exit 0 — matches §3.4 |
+| 7 | AFTER digest check vs `sha384sum` of the 4 files | all 4 rows 48 B, `success = true`, digest == file SHA-384; `71 / 71 / 71` (total / 48-byte / success) |
+| 8 | `sqlx migrate run` against `talentos_ledger_check` | exit 0, no pending output — matches §3.6 |
+| 9 | `schema_inventory.sql \| sha256sum` before vs after | both `29356a964db7acd0f1a1babc037fb52d0fedeed6587ab17a86a8b1f51b1e87b6`; `diff` empty — matches §6.1 |
+| 10 | `SELECT count(*)` on `tenants/users/employees` before vs after | `3 / 8 / 3` both sides — matches §6.2 |
+| 11 | `psql <` §5 rollback SQL verbatim | `BEGIN / UPDATE 1 / UPDATE 1 / UPDATE 1 / DELETE 1 / COMMIT`, exit 0 |
+| 12 | Post-rollback 4-row diff vs BEFORE snapshot | byte-identical (incl. `execution_time`, `installed_on`); rows back to 70, `20261114000001` absent |
+| 13 | Re-apply §1 and re-verify | same four digests, `71 / 71 / 71`, `sqlx migrate run` exit 0, schema hash unchanged → both directions safe |
+| 14 | `talentos` (dev) `_sqlx_migrations` | `70` rows, `68`×48 B, `2`×96 B, `70` success; the 4 rows byte-identical to the BEFORE snapshot — untouched |
+| 15 | `git status --porcelain migrations/`, `git diff HEAD -- migrations/` | empty; no migration file modified (last touching commits: `a0bbfba`, `7a42389`, `d85dd9d`, `c6e102b`, `544c478`, `f948a91`) |
+| 16 | Fresh build from empty DB via `sqlx migrate run` + inventory diff | exit 0, 79 tables, but inventory hash `74494e8a…` differs from live `29356a96…` — see finding 1 |
+| 17 | `DROP DATABASE talentos_ledger_check; DROP DATABASE talentos_ledger_fresh;` | both dropped; only `talentos`, `talentos_ai_test`, `talentos_e2e` remain |
+
+### 4.2 Findings
+
+1. **The §1(B) justification is overstated (medium, documentation).** "The live schema already equals a fresh build" is not exactly true. A fresh build from `migrations/` differs from the live schema in two semantically equivalent ways: (a) `ai_settings` column ordinals are `1,2,3,4,5` live vs `1,7,8,9,10` fresh (columns `provider`, `base_url`, `model`, `secret_ref`, `api_key_set` were dropped by `20261216000001`, leaving gaps only in the fresh build); (b) the `document_signatures` unique constraint is named `document_signatures_sig_uq` live vs the auto-generated `document_signatures_tenant_id_document_type_document_id_sig_key` fresh. Column sets, types, defaults, nullability, RLS, policies, index and constraint definitions are otherwise identical, and no code references either object name (grep: only the dump). No functional impact; the restated checksum is safe, but the owner should accept the claim as "equivalent up to column ordinal and constraint naming", not byte-identical.
+2. **The documented scratch DB is gone (low).** `talentos_ledger_rehearsal` no longer exists, so §3/§5 cannot be replayed against that database. This verdict re-ran everything in `talentos_ledger_check` instead; the package's reported command outputs reproduced exactly.
+3. **Rollback deliberately restores a stale ledger (low).** After §5 runs, `sqlx migrate run` fails again by construction: a 96-byte double-hex payload cannot equal a 48-byte SHA-384, and the `20261215000001` row is back to a stale 48-byte digest (this failure was not separately re-run; it follows from the restored values verified in step 12). Rollback is only safe if no `sqlx` command runs before re-applying §1; this is implicit, not stated. Rollback was verified to restore the exact BEFORE rows, so it remains a valid escape hatch.
+
+### 4.3 Verdict
+
+`APPROVED_FOR_OWNER_EXECUTION`
+
+The repair is ledger-only, reproducible from the committed backup, idempotent in effect, passes `sqlx migrate run`, leaves schema and business data untouched, and is exactly reversible. Finding 1 does not affect the safety of the checksum repair; it only weakens the stated justification for restating `20261215000001`. **No SQL in §1 has been run against `talentos`**; execution still requires explicit owner authorization, a fresh backup, and the owner's acknowledgement of finding 1.
 
 ---
 

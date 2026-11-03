@@ -129,6 +129,11 @@ static MATRIX: LazyLock<HashMap<(&'static str, &'static str), &'static [&'static
                 &["hr_admin", "payroll_manager", "manager"][..],
             ),
             (("ai.settings", "manage"), &["hr_admin"][..]),
+            (("integration", "manage"), &["hr_admin"][..]),
+            (
+                ("integration", "read"),
+                &["hr_admin", "payroll_manager"][..],
+            ),
         ])
     });
 
@@ -392,6 +397,36 @@ mod tests {
             assert!(
                 !has_permission(&[role.into()], "ai.settings", "manage"),
                 "{role} must not manage AI settings"
+            );
+        }
+    }
+
+    #[test]
+    fn integration_permissions_are_split_read_and_manage() {
+        assert!(has_permission(
+            &["hr_admin".into()],
+            "integration",
+            "manage"
+        ));
+        assert!(has_permission(&["hr_admin".into()], "integration", "read"));
+        assert!(has_permission(
+            &["payroll_manager".into()],
+            "integration",
+            "read"
+        ));
+        assert!(!has_permission(
+            &["payroll_manager".into()],
+            "integration",
+            "manage"
+        ));
+        for role in ["manager", "employee"] {
+            assert!(
+                !has_permission(&[role.into()], "integration", "read"),
+                "{role} must not read integrations"
+            );
+            assert!(
+                !has_permission(&[role.into()], "integration", "manage"),
+                "{role} must not manage integrations"
             );
         }
     }

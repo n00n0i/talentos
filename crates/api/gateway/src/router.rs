@@ -8,8 +8,8 @@ use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
     ai, ai_providers, attendance, audit, auth, bank_templates, calendar, claims, delegations,
-    documents, employees, forms, goals, graphql, health, leave, loans, mcp, me, memory,
-    notifications, oidc, onboarding, ot, payroll, pdpa, performance, pf, plugins, privacy,
+    documents, employees, forms, goals, graphql, health, integration, leave, loans, mcp, me,
+    memory, notifications, oidc, onboarding, ot, payroll, pdpa, performance, pf, plugins, privacy,
     recruitment, reports, settings, settlement, setup, training, users,
 };
 use crate::middleware::auth::auth_middleware;
@@ -481,6 +481,36 @@ pub fn build(state: AppState) -> Router {
         .route("/api/v1/ai/memory/stats", get(memory::stats))
         .route("/api/v1/plugins", get(plugins::list))
         .route("/api/v1/plugins/:name/invoke", post(plugins::invoke))
+        .route(
+            "/api/v1/integrations/connectors",
+            get(integration::list_connectors).post(integration::create_connector),
+        )
+        .route(
+            "/api/v1/integrations/connectors/:connector_id",
+            get(integration::get_connector).patch(integration::update_connector),
+        )
+        .route(
+            "/api/v1/integrations/connectors/:connector_id/publish",
+            post(integration::publish_connector),
+        )
+        .route(
+            "/api/v1/integrations/connectors/:connector_id/disable",
+            post(integration::disable_connector),
+        )
+        .route(
+            "/api/v1/integrations/connections",
+            get(integration::list_connections).post(integration::create_connection),
+        )
+        .route(
+            "/api/v1/integrations/connections/:id",
+            get(integration::get_connection)
+                .patch(integration::update_connection)
+                .delete(integration::delete_connection),
+        )
+        .route(
+            "/api/v1/integrations/connections/:id/test",
+            post(integration::record_connection_test),
+        )
         .route("/api/v1/ai/agents/run", post(ai::run_agent))
         .route(
             "/api/v1/payroll/payslips/:id/render",

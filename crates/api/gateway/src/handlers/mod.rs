@@ -13,6 +13,7 @@ pub mod forms;
 pub mod goals;
 pub mod graphql;
 pub mod health;
+pub mod integration;
 pub mod leave;
 pub mod loans;
 pub mod mcp;

@@ -1,0 +1,5 @@
+ total_rows | rows_with_48_byte_checksum | success_rows 
+------------+----------------------------+--------------
+         71 |                         71 |           71
+(1 row)
+

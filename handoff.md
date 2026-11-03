@@ -1,23 +1,21 @@
 # TalentOS — Handoff
 
-อัปเดต: 2026-10-31  
-Repo: `/home/opc/content-creator/talentos`  
-Branch: `master` @ `3f9ddc2` (handoff snapshot; ฟีเจอร์/เทสต์ยืนยันที่ `ce88371`)  
-CI: GitHub Actions `CI` เขียว (quality / web / e2e / build-release) — Strix Pentest อาจยังรันแยกอยู่
+อัปเดต: 2026-11-03
+Repo: `/home/opc/content-creator/talentos`
+Branch: `master` @ `a456ccf` (ยังไม่ push — นำ `origin/master` อยู่ 63 commits)
+Migrations: 71 ไฟล์
+สถานะทดสอบล่าสุด: **Playwright 61/61 passed** (clean DB) · `cargo test -p talentos-gateway -p talentos-hr-runner` ผ่าน · `tsc` 0 · `vitest` 41/41 · `next build` ผ่าน
 
 ---
 
 ## 1. ภาพรวม
 
-TalentOS คือ SaaS HR + เงินเดือนสำหรับองค์กรไทย (Thai-first):
+TalentOS = SaaS HR + เงินเดือนสำหรับองค์กรไทย (Thai-first)
 
-- Rust workspace: Axum gateway, payroll engine, HR services, GraphQL/MCP, PostgreSQL + RLS
-- Next.js App Router: Thai UI, cookie session ผ่าน Next proxy
-- เงินเป็น `rust_decimal`; payroll เป็น deterministic DAG
-- Tenant isolation ด้วย PostgreSQL RLS (`talentos_app` เป็น `NOBYPASSRLS`)
-
-สถานะทดสอบล่าสุด: **451 Rust tests passed, 1 ignored (load)** และ **53/53 Playwright**  
-Migrations: **63 ไฟล์** (`sqlx migrate run` บน DB ใหม่ผ่าน)
+- **Rust workspace**: Axum gateway, payroll engine, HR services, GraphQL/MCP, PostgreSQL + RLS
+- **Next.js 15 App Router**: Thai UI + EN toggle, cookie session ผ่าน Next proxy (`/api/session/*`, `/api/gw/*`)
+- เงินใช้ `rust_decimal`; payroll เป็น deterministic DAG
+- Tenant isolation ด้วย PostgreSQL RLS (`talentos_app` = `NOBYPASSRLS`)
 
 ---
 
@@ -25,255 +23,197 @@ Migrations: **63 ไฟล์** (`sqlx migrate run` บน DB ใหม่ผ่
 
 ```
 crates/
-  core/            authz (RBAC matrix), kernel (TenantContext), ...
-  domain/          payroll/attendance domain rules
-  infra/db         TenantPool, begin_tenant, PII cipher
+  core/        authz (RBAC matrix), kernel (TenantContext)
+  domain/      payroll/attendance domain rules
+  infra/db     TenantPool, begin_tenant, PII cipher
   services/
-    talentos-hr-runner       HR: attendance, leave, OT, claims, loans, documents,
-                             onboarding, recruitment, training, performance, privacy, ...
-    talentos-payroll-runner  payroll run, PDF, load test
+    talentos-hr-runner      attendance, leave, OT, claims, loans, documents,
+                            onboarding, recruitment, training, performance,
+                            goals, privacy, kg, kg_sync
+    talentos-payroll-runner payroll run, PDF
+  ai/
+    talentos-model-gw       OpenAI-compatible client (chat, embeddings, cost)
+    talentos-rag            chunking + pgvector search
+    talentos-agent          Observe→Plan→Act→Reflect runner
+    talentos-tools          tool registry (calculate_tax, check_compliance, …)
+    talentos-memory         memory layers + recall
   api/
-    gateway          REST /api/v1, auth, setup, metrics
+    gateway                 REST /api/v1, auth, setup, metrics, secrets (OpenBao)
     graphql, mcp
-web/               Next.js app (Thai UI), API proxy, E2E
-migrations/        SQLx migrations (63)
-scripts/           restore-drill.sh, ...
-docs/              BUILD_STATUS, QA, ops, plans
+web/                        Next.js app + E2E
+migrations/                 71 SQLx migrations
+scripts/                    deploy/backup/bootstrap/openbao-bootstrap
+docs/superpowers/specs|plans  ดีไซน์ + แผนงานทั้งหมด
 ```
-
-### หน้าหลักในเว็บ
-
-`/setup`, `/login`, `/`, `/employees`, `/attendance`, `/calendar`, `/clock`, `/leave`,
-`/ot`, `/claims`, `/payroll`, `/payslip`, `/me/payslips`, `/reports`, `/loans`,
-`/final-settlement`, `/users`, `/settings`, `/forms`, `/audit`, `/privacy`,
-`/documents`, `/training`, `/onboarding`, `/recruitment`, `/performance`,
-`/goals`, `/me/reviews`
 
 ---
 
-## 3. ฟีเจอร์ที่ทำเสร็จแล้ว (ล่าสุด)
+## 3. ทำอะไรได้แล้ว (feature inventory)
 
-- Attendance: กะ, geofence, import, correction/approval, team calendar
-- Offline PWA: คิวลงเวลาใน `localStorage`, `client_id` idempotent, คงเวลาเดิม (`client_time` ≤ 7 วัน), service worker แคชเฉพาะ navigation
-- Payroll: รอบคำนวณ, anomaly review gate ก่อนอนุมัติ, bank payout CSV configurable, mark-paid, payslip/50 ทวิ PDF
-- Leave/OT/claims/loans/PF/GL/reports
-- PDPA: `/privacy`, consent version, DSAR JSON export (account, employee ทุกคนที่ผูก, attendance, leave, OT, claims, loans, payslips, documents, onboarding, training, reviews, goals)
-- Documents: 1 ไฟล์/เอกสาร, expiry 60 วัน
-- Metrics: `GET /metrics` (2xx/4xx/5xx/other, duration sum/count, uptime), optional `METRICS_TOKEN`
-- Onboarding: checklist มาตรฐาน 6 งานจากวันเริ่มงาน + งานเอง
-- Recruitment: job openings, candidates, pipeline, CV 1 ไฟล์, stage history, interview scheduling, offer letter PDF + status
-- Training: ประวัติอบรม + certificate expiry 90 วัน
-- Performance: review cycles, ratings/feedback, employee `/me/reviews` acknowledgement, goals/OKR
-- Ops: `scripts/restore-drill.sh`, CI restore drill, CI payroll load 600 employees
+### 3.1 ระบบหลัก
+- Login/logout, refresh token rotation + reuse detection, 2FA (TOTP), invite/reset flows, SSO/OIDC (JWKS verify)
+- Multi-tenant setup ครั้งแรก (`/setup` + setup token), tenant/entity สลับได้ตามสิทธิ์
+- RBAC 4 บทบาท: `hr_admin`, `payroll_manager`, `manager`, `employee` + delegation
+
+### 3.2 HR
+- พนักงาน (CRUD, CSV import, manager line, cost center, PF rates)
+- เอกสารพนักงาน + ไฟล์ + วันหมดอายุ (`/documents/expiring`)
+- Onboarding checklist, Recruitment pipeline, Training records
+- Performance: รอบประเมิน, review, calibration, employee acknowledge
+- Goals/OKR + progress
+- Attendance: ลงเวลา, กะ, วันหยุด, นำเข้า CSV, อนุมัติ/แก้ไข
+- Leave (หลายประเภท, โควตา, 2-step approval, delegation), OT, Claims (พร้อมใบเสร็จ)
+- Loans, Final settlement, Privacy/PDPA (retention + purge)
+
+### 3.3 Payroll
+- สร้าง/คำนวณ/อนุมัติ/จ่ายรอบ, สลิป PDF, 50 ทวี, PND.1, สปส., กองทุนสำรองฯ
+- Anomaly review, bank transfer file, template สลิป, payroll constants ที่ตั้งได้
+
+### 3.4 Dashboard & UI
+- Shell ใหม่: sidebar แบ่งกลุ่ม + command bar + drawer มือถือ + ค้นหาเมนู
+- Dashboard ตามบทบาท (HR / payroll / manager / employee) พร้อม KPI, งานรออนุมัติ, งานติดตาม, กราฟ OT, สรุปงวด, donut แผนก, กิจกรรม
+- Reports: headcount, payroll cost, OT trend
+- Form control ทั้งแอปเป็นระบบเดียว (input/select/checkbox/date/radius/สี)
+- Chat head มุมขวาล่างทุกหน้า
+
+### 3.5 AI (Phase 4 — บางส่วน)
+- **Providers**: เพิ่มได้หลายเจ้า (OpenAI-compatible presets: OpenAI, OpenRouter, Groq, Together, Mistral, DeepSeek, xAI, Ollama, vLLM, LM Studio, custom) + **ดึงรายการโมเดล** จาก provider
+- **Model roles**: chat / embedding / ocr / vision / graph_extract
+- **MCP / Skills / Agents**: มี UI ตั้งค่า (MCP toggle, skills จาก tool registry, agents list) — ยังไม่ใช่ของที่ผู้ใช้ "สร้างเอง" เต็มรูปแบบ
+- **Knowledge graph องค์กร**: 12 คลาส (Organization, LegalEntity, Department, Position, Employee, Skill, Policy, Benefit, PayrollItem, Cycle, Document, Process) + ความสัมพันธ์ตาม taxonomy, rebuild ได้, ดู neighbours ได้
+- **Chat API** `POST /api/v1/ai/chat` — grounded ด้วย subgraph + citations + cost tracking
+- **Secrets**: provider key เก็บใน **OpenBao** (KV v2, auto-unseal) — ไม่ลง Postgres
 
 ---
 
-## 4. รัน local
+## 4. Feature ที่สเปกกำหนดแต่ยังไม่มี
 
-### 4.1 Containers
+อ้างอิง `docs/design/phase-4-spec.md`:
 
-- Postgres: `loans-postgres-1` (volume `loans_pgdata`)
-- Redis: `talentos-redis-1` (password `redis_dev_secret`)
+| รายการ | สถานะ |
+|---|---|
+| `POST /ai/agents/:id/status` | ❌ |
+| `POST /ai/agents/:id/approve` (human-in-the-loop signal) | ❌ (มี `allow_destructive` แต่ไม่มี approval flow) |
+| `POST /ai/documents` + `/ai/documents/search` (RAG ingest + hybrid search + citations) | ❌ (มีตาราง embeddings แต่ไม่มี API) |
+| `GET /ai/cost` (รายงานต้นทุน) | ❌ (บันทึก cost แล้ว แต่ไม่มี endpoint/หน้า) |
+| Temporal workflow สำหรับ agent | ❌ (runner เป็น in-process) |
+| MCP server ที่ผู้ใช้เพิ่มเอง + tool sync | ❌ (ศึกษาไว้ใน `2026-11-03-ai-providers-mcp-skills-agents-study.md`) |
+| Skills ที่ผู้ใช้สร้าง + versioning | ❌ |
+| Agents ที่ผู้ใช้สร้าง + ผูก skills/tools | ❌ |
 
-### 4.2 Migrations
+---
 
-Production/CI ใช้:
+## 5. สิ่งที่เหลือต้องทำ (แนะนำลำดับ)
 
-```sh
-sqlx migrate run
+### P0 — ยังไม่ครบตามดีไซน์ AI ล่าสุด
+1. **Provider ให้ถูกจริง** — `auth_style` (bearer / x-api-key / query / none), `catalog_style` (openai / anthropic / google / ollama), `chat_style`, capability override, ปุ่มทดสอบ provider
+2. **MCP servers ที่ผู้ใช้เพิ่มได้** — transport stdio / sse / streamable-http, sync `tools/list`, toggle ราย tool, namespace `mcp:<server>:<tool>`, secret ใน OpenBao
+3. **Skills ที่ผู้ใช้สร้าง** — prompt + tool allowlist + model role + KG scope + versioning
+4. **Agents ที่ผู้ใช้สร้าง** — ผูก model role + skills + tools + kg scope, `chat` รับ `agent_id`
+
+### P1 — ปิดช่องว่าง Phase 4
+5. `/ai/documents` + `/ai/documents/search` (RAG + citations)
+6. `/ai/agents/:id/status` + `/approve` (human gate)
+7. `/ai/cost` + หน้า dashboard ต้นทุน
+8. Audit row `ai.settings.update`
+
+### P2 — คุณภาพ/KG
+9. KG: prune node ที่หายไป, populate Benefit/Process, embedding nodes เมื่อมี key
+10. Retrieval ภาษาไทยไม่เว้นวรรค (ตอนนี้ lexical match คำตรงตัว)
+11. KG inspector: graph visualization
+
+### P3 — Ops
+12. Push `master` (63 commits) + tag
+13. จัดการ **migration drift** (`20261101000003` ถูกแก้หลัง apply → `sqlx migrate run` จะหยุด)
+14. CI: เพิ่ม job สำหรับ AI/KG tests
+15. แยก DB สำหรับ E2E เพื่อไม่ให้ `DELETE FROM tenants` ลบข้อมูล demo
+
+---
+
+## 6. วิธีรัน / ทดสอบ
+
+### Services (systemd แล้ว — อยู่ถาวรข้าม reboot)
+```bash
+systemctl status talentos-gateway.service talentos-web.service
+sudo systemctl restart talentos-web.service     # หลัง build
+sudo journalctl -u talentos-web.service -n 50 --no-pager
 ```
+- Gateway `:18479` (env ที่ `/etc/talentos-gateway.env`, token OpenBao อ่านจาก `/etc/openbao/ai.token`)
+- Web `:3000` (standalone build ที่ `web/.next/standalone`)
+- OpenBao `:8200` (docker `openbao`, auto-unseal จาก `/etc/openbao/seal.key`)
 
-Dev DB เคย apply บางไฟล์ด้วยมือและบันทึก `_sqlx_migrations` เอง — ถ้าเพิ่ม migration ใหม่บน dev ให้ apply ด้วย `psql` แล้ว insert แถว `_sqlx_migrations` (version, description, success, checksum sha384, execution_time) หรือใช้ `sqlx migrate run` ถ้า checksum ตรงทั้งหมด
-
-### 4.3 Gateway
-
-```sh
-cd /home/opc/content-creator/talentos
-export DATABASE_URL="postgres://talentos_app:app_dev_secret@localhost:5432/talentos"
-export DATABASE_AUTH_URL="postgres://talentos_auth:auth_dev_secret@localhost:5432/talentos"
-export DATABASE_ADMIN_URL="postgres://talentos:talentos_dev_secret@localhost:5432/talentos"
-export REDIS_URL="redis://:redis_dev_secret@127.0.0.1:6379"
-export AUTH_JWT_SECRET="dev-secret-change-me-in-prod-minimum-32-bytes-okay!!"
-export GATEWAY_PORT=18479
-export PAYSLIP_STORE_DIR=/tmp/opencode/payslips
-export DOCUMENT_UPLOAD_DIR=/tmp/opencode/documents
-export CANDIDATE_CV_DIR=/tmp/opencode/cvs
-export PII_ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-export SETUP_TOKEN=e2e-setup-token
-export TALENTOS_COOKIE_SECURE=false
-cargo build -p talentos-gateway
-nohup ./target/debug/talentos-gateway > /tmp/opencode/gateway.log 2>&1 &
-curl -sf http://127.0.0.1:18479/health
-```
-
-`PII_ENCRYPTION_KEY` ตัวอย่างเป็น test key 64 hex — production ต้องสุ่มจริงและเก็บแยกจาก DB  
-`SETUP_TOKEN` ใช้สร้าง tenant เพิ่มได้เฉพาะ non-production; production อนุญาต first-run เท่านั้น
-
-### 4.4 Web
-
-```sh
-cd web
-npm ci                       # ครั้งแรก
-npm run build
+### Deploy build ใหม่
+```bash
+cd web && npm run build
 rm -rf .next/standalone/.next/static .next/standalone/public
-cp -r .next/static .next/standalone/.next/
-cp -r public .next/standalone/
-cd .next/standalone
-PORT=3156 HOSTNAME=127.0.0.1 \
-TALENTOS_API_URL=http://127.0.0.1:18479 \
-TALENTOS_COOKIE_SECURE=false \
-node server.js
+cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/
+sudo systemctl restart talentos-web.service
 ```
 
-หมายเหตุ: ต้อง copy static/public เข้า standalone เอง ไม่งั้นหน้าเว็บจะ 400/500 เรื่อง chunk
+### Migrations
+```bash
+DATABASE_URL="postgres://talentos:talentos_dev_secret@localhost:5432/talentos" sqlx migrate run
+```
 
-### 4.5 E2E
-
-E2E ต้องเริ่มจาก **DB ว่าง** และสร้างทุกอย่างผ่าน UI (ไม่มี seed SQL):
-
-```sh
+### Tests
+```bash
+cd crates && cargo test -p talentos-gateway -p talentos-hr-runner
+cd web && npx tsc --noEmit && npx vitest run && npm run build
 docker exec loans-postgres-1 psql -U talentos -d talentos -c "DELETE FROM tenants;"
-cd web
-E2E_BASE_URL=http://127.0.0.1:3156 \
-E2E_SETUP_TOKEN=e2e-setup-token \
-npx playwright test
+E2E_BASE_URL=http://127.0.0.1:3000 E2E_SETUP_TOKEN=e2e-setup-token npx playwright test
 ```
+> ⚠️ E2E ล้าง tenant ทั้งหมด — หลังรันต้องสร้าง demo กลับ (ดู §7)
 
-- `app.spec.ts` เป็น serial และใช้ tenant ร่วมกัน
-- `roles.spec.ts` สร้าง tenant แยกด้วย `SETUP_TOKEN`
-- Login แรกสร้าง tenant/admin ที่ `/setup` (slug `e2e`)
-
----
-
-## 5. คำสั่งคุณภาพ
-
-```sh
-cargo fmt --all -- --check
-cargo clippy -p talentos-hr-runner -p talentos-gateway --all-targets -- -D warnings
-cargo test --workspace
+### Demo tenant
 ```
-
-ต้อง export `DATABASE_URL`, `DATABASE_AUTH_URL`, `DATABASE_ADMIN_URL` ก่อนรัน test ที่ใช้ DB  
-ถ้าแก้ `query!`/`query_as!` ให้รัน `cargo sqlx prepare --workspace -- --all-targets`
-
-Load test (ไม่รันใน suite ปกติ):
-
-```sh
-LOAD_EMPLOYEES=600 \
-DATABASE_URL=postgres://talentos_app:app_dev_secret@localhost:5432/talentos \
-DATABASE_ADMIN_URL=postgres://talentos:talentos_dev_secret@localhost:5432/talentos \
-cargo test -p talentos-payroll-runner --test load -- --ignored --nocapture
-```
-
-Restore drill:
-
-```sh
-# destination DB ต้องมีอยู่ก่อน
-createdb -h localhost -U talentos talentos_restore   # หรือ psql -c "CREATE DATABASE ..."
-SRC_DATABASE_URL=postgres://talentos:talentos_dev_secret@localhost:5432/talentos \
-DEST_DATABASE_URL=postgres://talentos:talentos_dev_secret@localhost:5432/talentos_restore \
-bash scripts/restore-drill.sh
-```
-
-บนเครื่อง dev นี้ไม่มี `psql`/`pg_dump` ที่ host — รันผ่าน container ได้:
-
-```sh
-docker cp scripts/restore-drill.sh loans-postgres-1:/tmp/restore-drill.sh
-docker exec loans-postgres-1 psql -U talentos -d postgres -c "CREATE DATABASE talentos_restore"
-docker exec -e SRC_DATABASE_URL="postgres://talentos:talentos_dev_secret@localhost:5432/talentos" \
-  -e DEST_DATABASE_URL="postgres://talentos:talentos_dev_secret@localhost:5432/talentos_restore" \
-  loans-postgres-1 bash /tmp/restore-drill.sh
+http://<host>:3000   องค์กร: demo
+admin@demo.test / DemoPass12345   (สร้างด้วย setup token e2e-setup-token)
 ```
 
 ---
 
-## 6. ข้อตกลงสำคัญของโค้ด
+## 7. สร้าง demo tenant กลับหลัง E2E
 
-- **RLS:** ทุก service ใช้ `pool.begin_tenant(tenant_id)` และ query มี `tenant_id = $1` ชัดเจน; อย่าพึ่ง RLS อย่างเดียว
-- **Money:** `rust_decimal::Decimal` เท่านั้น; อย่าใช้ float
-- **ห้าม `unwrap()`/`expect()` ใน production code** (test ได้)
-- **Audit:** การกระทำสำคัญเขียน `audit_log` (เช่น payroll, privacy export, attendance)
-- **Permissions:** แก้ที่ `crates/core/authz/src/rbac.rs`; UI ใช้ `me.permissions` เพื่อซ่อนปุ่ม
-- **PII:** `national_id`, `bank_account_number`, `sso_number` เข้ารหัสด้วย `PiiCipher`; legacy plaintext ผ่าน decrypt ได้
-- **Migration:** เพิ่มไฟล์ใหม่ + apply + บันทึก `_sqlx_migrations` บน dev; CI ใช้ fresh DB
-- **Next proxy:** `web/app/api/gw/[...path]/route.ts` ต้องมี HTTP method ครบ (เคยขาด `PATCH`); body limit สำหรับ upload ตั้งที่ router
-- **UI:** ภาษาไทย, `handleApiError`, `data-testid` สำหรับ E2E, `canWrite = me.permissions.includes("employee.update")` สำหรับหน้าที่ payroll ดูได้แต่แก้ไม่ได้
+```bash
+curl -s -X POST -H "content-type: application/json" \
+ -d '{"org_name":"Demo Co","slug":"demo","entity_name":"Demo HQ",
+      "admin_email":"admin@demo.test","password":"DemoPass12345",
+      "setup_token":"e2e-setup-token"}' \
+ http://127.0.0.1:3000/api/gw/api/v1/setup
+```
 
 ---
 
-## 7. Storage / Env ที่อยู่นอก DB
+## 8. ข้อควรระวัง / ปัญหาที่รู้อยู่
 
-| ข้อมูล | Env | Default dev |
-|---|---|---|
-| Payslip PDF | `PAYSLIP_STORE_DIR` | `/tmp/opencode/payslips` |
-| Claim receipts | `CLAIM_UPLOAD_DIR` | `/tmp/talentos-claims` |
-| Employee documents | `DOCUMENT_UPLOAD_DIR` | `/tmp/talentos-documents` |
-| Candidate CV | `CANDIDATE_CV_DIR` | `/tmp/talentos-cvs` |
-| Metrics auth | `METRICS_TOKEN` | ไม่ตั้ง = เปิด |
-| Chromium PDF | `CHROME_BIN` | `chromium-browser` |
-
-ทุกไฟล์ต้อง mount volume/backup ก่อน production; dump DB ไม่มีไฟล์เหล่านี้
+1. **Migration drift** — `20261101000003` ถูกแก้หลัง apply ไปแล้ว ทำให้ `sqlx migrate run` หยุด; migration `20261216000001_ai_providers` ถูก apply + ลงทะเบียนมือไปแล้ว ต้องจัดการ drift ก่อน deploy ใหม่
+2. **`Requires=` ของ web → gateway** เปลี่ยนเป็น `Wants=` แล้ว (ไม่งั้น gateway restart จะลาก web ล่ม)
+3. **SELinux Enforcing** — systemd รัน node จาก `/home` ไม่ได้ → ใช้ `/usr/local/bin/talentos-node` ผ่าน `sh -c`
+4. **AI provider ยังไม่ตั้งค่า** — `api_key_set: false`; chat ตอบ 503 จนกว่าจะใส่ key ที่ `/settings/ai`
+5. **E2E ลบ tenant ทั้งหมด** — ต้อง seed demo กลับ (ดู §7)
+6. **KG retrieval เป็น lexical** — ภาษาไทยที่ไม่มีเว้นวรรคจะ match ได้เฉพาะคำที่ตรง
+7. **Gateway binary เป็น debug build** (`target/debug`) — ควรเปลี่ยนเป็น release ก่อนใช้งานจริง
+8. **`PII_ENCRYPTION_KEY`** ถูกใส่ใน `/etc/talentos-gateway.env` แล้ว (ไม่กี่ชั่วโมงก่อน) — ข้อมูล PII ที่เข้ารหัสด้วยคีย์เก่าจะถอดไม่ได้ (tenant ถูกล้างไปแล้ว)
 
 ---
 
-## 8. งานที่ยังเหลือ / ติด external
+## 9. เอกสารที่เกี่ยวข้อง
 
-1. **SSO (OIDC)** — ต้องมี OAuth client credentials; ยังไม่ได้ทำ generic OIDC
-2. **PDPA deletion/anonymisation + retention purge** — ต้องตัดสินนโยบายเก็บรักษา (ภาษี/ค่าจ้างตามกฎหมาย)
-3. **E-signature provider** — offer letter เป็น PDF/สถานะแล้ว แต่ยังไม่มีลายเซ็นถูกต้องตามกฎหมาย
-4. **Performance ต่อ** — calibration, manager workflow (ยังไม่มี reporting line ใน schema), goal check-ins
-5. **Ops ต่อ** — business gauges (notification backlog/payroll), alert receiver, WAL/PITR, scheduled backup
-6. **EN UI / i18n**
-7. **Phase 0 official formats** — bank layouts จริง, e-filing, template 50 ทวิ/สปส. ต้องมีตัวอย่างและ accountant sign-off
-8. **Candidate PII at rest** — email/phone ของผู้สมัครยังเป็น plaintext (พนักงานใช้ PII cipher)
-
----
-
-## 9. ความเสี่ยงที่ต้องรู้
-
-- `PII_ENCRYPTION_KEY` หาย = ถอดข้อมูลที่เข้ารหัสไม่ได้; backup key แยกจาก DB
-- ไฟล์ upload อยู่ local disk; default `/tmp` หายเมื่อ reboot
-- Bank payout CSV เป็น template configurable; ยังไม่ตรง format ธนาคารจริง และช่องบัญชีว่างได้ถ้าพนักงานไม่ได้กรอก
-- `mark-paid` ไม่มี undo
-- Anomaly review gate ใช้ `payroll_run.approve` (ไม่มี permission แยก); backend กัน 409 แต่ UI อาจ enable ก่อน panel โหลด
-- Offline queue: error 5xx/401 เก็บไว้ลองใหม่, 4xx เชิงธุรกิจถูก drop; `client_time` ยอมให้ลงเวลาย้อน ≤7 วัน (มี audit)
-- Performance: HR ส่งผลใหม่จะล้าง acknowledgement; ไม่มีช่องโต้แย้ง
-- Offer PDF ต้องมี Chromium; ถ้าไม่มีจะ 503 (E2E ตรวจแค่ลิงก์ PDF เพราะ CI gateway ไม่มี Chromium)
-- E2E เป็น stateful/serial; ต้องล้าง tenant ก่อนทุกครั้ง
-- Dev DB `_sqlx_migrations` อาจไม่ตรง checksum กับไฟล์ทุกตัว; CI fresh DB คือแหล่งความจริง
+| ไฟล์ | เนื้อหา |
+|---|---|
+| `docs/design/phase-1..4-spec.md` | สเปกทุกเฟส |
+| `docs/superpowers/specs/2026-11-02-dashboard-sidebar-redesign-design.md` | ดีไซน์ sidebar + dashboard ตามบทบาท |
+| `docs/superpowers/plans/2026-11-02-sidebar-shell-role-dashboard.md` | แผนงาน (ทำเสร็จแล้ว) |
+| `docs/superpowers/specs/2026-11-02-ai-settings-knowledge-graph-design.md` | AI settings + KG + OpenBao |
+| `docs/superpowers/plans/2026-11-02-ai-settings-knowledge-graph.md` | แผนงาน (ทำเสร็จแล้ว) |
+| `docs/superpowers/specs/2026-11-03-ai-provider-model-roles-design.md` | multi-provider + model roles |
+| `docs/superpowers/specs/2026-11-03-ai-providers-mcp-skills-agents-study.md` | ศึกษา provider/MCP/skills/agents + ดีไซน์ที่ยังไม่ลงโค้ด |
+| `docs/BUILD_STATUS.md` | สถานะ build/feature แบบละเอียด |
 
 ---
 
-## 10. จุดเริ่มต้นแนะนำสำหรับคนรับงาน
+## 10. คำถามที่ยังต้องตัดสิน (ก่อนทำ P0)
 
-1. อ่าน `docs/BUILD_STATUS.md` และ `docs/qa/e2e-journeys.md`
-2. รัน `cargo test --workspace` + E2E ตามด้านบน เพื่อยืนยัน baseline 451/53
-3. ถ้ามี OAuth credentials: เริ่ม SSO generic OIDC (discovery, PKCE, per-tenant config, link by email)
-4. ถ้ายังไม่มี: ทำ EN UI/i18n หรือ performance manager workflow (ต้องเพิ่ม reporting line) หรือ ops business gauges
-5. ก่อน production: ตัดสิน PDPA retention, ตั้ง volume/backup, เปลี่ยน secrets, ตรวจ bank/e-filing กับ accountant
-
----
-
-## 11. เอกสาร/ไฟล์สำคัญ
-
-- `docs/BUILD_STATUS.md` — สถานะรวม, test counts, known gaps
-- `docs/qa/e2e-journeys.md` — E2E coverage matrix
-- `docs/ops/metrics.md` — scrape/alert
-- `docs/ops/backup-restore.md` — backup/drill/load
-- `docs/superpowers/plans/` — plan ล่าสุดของแต่ละฟีเจอร์
-- `crates/api/gateway/src/router.rs` — routes + body limits
-- `crates/core/authz/src/rbac.rs` — permission matrix
-- `crates/services/talentos-hr-runner/src/privacy.rs` — DSAR export
-- `web/app/api/gw/[...path]/route.ts` — session proxy/refresh
-- `web/e2e/app.spec.ts`, `web/e2e/roles.spec.ts` — real-user E2E
-
----
-
-## 12. Gotchas
-
-- Gateway ไม่ได้ serve static web; ต้องรันแยกและตั้ง `TALENTOS_API_URL`
-- Next standalone ต้อง copy `.next/static` + `public` เข้า `.next/standalone`
-- ถ้าเพิ่ม route/method ใหม่ ต้องเพิ่มใน Next proxy ด้วย
-- `cargo test` บางชุด skip ถ้าไม่ตั้ง `DATABASE_URL`; อย่าคิดว่าผ่านครบถ้าไม่ได้ตั้ง env
-- PDF tests จะ skip ถ้าไม่มี Chromium
-- หลัง merge งานใหม่ อย่าลืมอัปเดต `docs/BUILD_STATUS.md` (tests/E2E/migrations) และ README ถ้ามีข้อจำกัดใหม่
+1. **stdio MCP** — เปิดใน v1 (พร้อม command allowlist) หรือรับเฉพาะ HTTP transport?
+2. **Built-in skills** — seed ชุดเริ่มต้น 3 ตัว (leave policy / payroll anomaly / onboarding) หรือเริ่มว่าง?
+3. **Agent เริ่มต้น** — seed "HR Assistant" ให้ทุกองค์กร หรือบังคับเลือก agent ทุกครั้ง?

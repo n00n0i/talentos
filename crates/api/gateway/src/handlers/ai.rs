@@ -27,7 +27,6 @@ use talentos_rag::HybridSearch;
 use crate::dto::requests::AiSettingsUpdate;
 use crate::dto::responses::ErrorResponse;
 use crate::middleware::auth::{require, Authed};
-use crate::secrets::{ai_secret_path, AiSecret};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -121,16 +120,13 @@ pub async fn run_agent(
 
 #[derive(Debug, Serialize)]
 pub struct AiSettingsResponse {
-    pub provider: String,
-    pub base_url: Option<String>,
-    pub model: String,
     pub mcp_enabled: bool,
     pub skills: serde_json::Value,
-    pub api_key_set: bool,
+    pub agents: serde_json::Value,
     pub secrets_backend: &'static str,
 }
 
-/// GET /api/v1/ai/settings — never reads or returns the provider key.
+/// GET /api/v1/ai/settings — only cross-cutting flags; provider keys never appear.
 pub async fn get_settings(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
     if let Err(forbidden) = require(&ctx, "ai.settings", "manage") {
         return forbidden;
@@ -139,13 +135,11 @@ pub async fn get_settings(State(state): State<AppState>, Authed(ctx): Authed) ->
         Ok(tx) => tx,
         Err(e) => return internal_err(&e.to_string()),
     };
-    let row = sqlx::query(
-        "SELECT provider, base_url, model, mcp_enabled, skills, api_key_set
-           FROM ai_settings WHERE tenant_id = $1",
-    )
-    .bind(ctx.tenant_id.0)
-    .fetch_optional(&mut *tx)
-    .await;
+    let row =
+        sqlx::query("SELECT mcp_enabled, skills, agents FROM ai_settings WHERE tenant_id = $1")
+            .bind(ctx.tenant_id.0)
+            .fetch_optional(&mut *tx)
+            .await;
     let _ = tx.rollback().await;
 
     let backend = secrets_backend(&state);
@@ -153,12 +147,9 @@ pub async fn get_settings(State(state): State<AppState>, Authed(ctx): Authed) ->
         Ok(Some(row)) => (
             StatusCode::OK,
             Json(AiSettingsResponse {
-                provider: row.get("provider"),
-                base_url: row.get("base_url"),
-                model: row.get("model"),
                 mcp_enabled: row.get("mcp_enabled"),
                 skills: row.get("skills"),
-                api_key_set: row.get("api_key_set"),
+                agents: row.get("agents"),
                 secrets_backend: backend,
             }),
         )
@@ -166,12 +157,9 @@ pub async fn get_settings(State(state): State<AppState>, Authed(ctx): Authed) ->
         Ok(None) => (
             StatusCode::OK,
             Json(AiSettingsResponse {
-                provider: "huakati".into(),
-                base_url: None,
-                model: "qwen2.5-72b-instruct".into(),
                 mcp_enabled: true,
                 skills: serde_json::json!([]),
-                api_key_set: false,
+                agents: serde_json::json!([]),
                 secrets_backend: backend,
             }),
         )
@@ -180,7 +168,7 @@ pub async fn get_settings(State(state): State<AppState>, Authed(ctx): Authed) ->
     }
 }
 
-/// PUT /api/v1/ai/settings — non-secrets in Postgres, key only in OpenBao.
+/// PUT /api/v1/ai/settings — flags only; providers and keys have their own API.
 pub async fn put_settings(
     State(state): State<AppState>,
     Authed(ctx): Authed,
@@ -189,60 +177,29 @@ pub async fn put_settings(
     if let Err(forbidden) = require(&ctx, "ai.settings", "manage") {
         return forbidden;
     }
-
-    let key = body.api_key.as_deref().filter(|k| !k.trim().is_empty());
-    if let Some(key) = key {
-        // Fail closed before any write: a disabled backend never stores a key.
-        let Some(client) = &state.secrets else {
-            return unavailable("OpenBao is not configured");
-        };
-        let secret = AiSecret {
-            provider: body.provider.clone(),
-            base_url: body.base_url.clone(),
-            model: body.model.clone(),
-            api_key: key.to_string(),
-        };
-        if let Err(e) = client.write_ai_secret(ctx.tenant_id.0, &secret).await {
-            return unavailable(&format!("secret backend write failed: {e}"));
-        }
-    }
-
     let mut tx = match state.pool.begin_tenant(ctx.tenant_id).await {
         Ok(tx) => tx,
         Err(e) => return internal_err(&e.to_string()),
     };
     let saved = sqlx::query(
-        r#"INSERT INTO ai_settings
-             (tenant_id, provider, base_url, model, mcp_enabled, skills, api_key_set, secret_ref)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        r#"INSERT INTO ai_settings (tenant_id, mcp_enabled, skills, agents)
+           VALUES ($1, $2, $3, $4)
            ON CONFLICT (tenant_id) DO UPDATE SET
-               provider = EXCLUDED.provider,
-               base_url = EXCLUDED.base_url,
-               model = EXCLUDED.model,
                mcp_enabled = EXCLUDED.mcp_enabled,
                skills = EXCLUDED.skills,
-               api_key_set = CASE WHEN $7 THEN true ELSE ai_settings.api_key_set END,
-               secret_ref = CASE WHEN $7 THEN EXCLUDED.secret_ref ELSE ai_settings.secret_ref END,
-               updated_at = now()
-           RETURNING api_key_set"#,
+               agents = EXCLUDED.agents,
+               updated_at = now()"#,
     )
     .bind(ctx.tenant_id.0)
-    .bind(&body.provider)
-    .bind(&body.base_url)
-    .bind(&body.model)
     .bind(body.mcp_enabled)
     .bind(&body.skills)
-    .bind(key.is_some())
-    .bind(key.map(|_| ai_secret_path(ctx.tenant_id.0)))
-    .fetch_one(&mut *tx)
+    .bind(&body.agents)
+    .execute(&mut *tx)
     .await;
-    let api_key_set = match saved {
-        Ok(row) => row.get::<bool, _>("api_key_set"),
-        Err(e) => {
-            let _ = tx.rollback().await;
-            return internal_err(&e.to_string());
-        }
-    };
+    if let Err(e) = saved {
+        let _ = tx.rollback().await;
+        return internal_err(&e.to_string());
+    }
     if let Err(e) = tx.commit().await {
         return internal_err(&e.to_string());
     }
@@ -250,16 +207,65 @@ pub async fn put_settings(
     (
         StatusCode::OK,
         Json(AiSettingsResponse {
-            provider: body.provider,
-            base_url: body.base_url,
-            model: body.model,
             mcp_enabled: body.mcp_enabled,
             skills: body.skills,
-            api_key_set,
+            agents: body.agents,
             secrets_backend: secrets_backend(&state),
         }),
     )
         .into_response()
+}
+
+/// Resolved `chat` role: the only provider/model source at request time.
+struct ChatTarget {
+    base_url: String,
+    api_key: String,
+    model: String,
+}
+
+/// `Ok(None)` means the role or its key is missing; `Err` is a backend failure.
+async fn resolve_chat_target(
+    state: &AppState,
+    tenant_id: TenantId,
+) -> Result<Option<ChatTarget>, String> {
+    let mut tx = state
+        .pool
+        .begin_tenant(tenant_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    let row = sqlx::query(
+        r#"SELECT p.id AS provider_id, p.base_url, p.api_key_ref, r.model
+             FROM ai_model_roles r
+             JOIN ai_providers p
+               ON p.id = r.provider_id AND p.tenant_id = r.tenant_id
+            WHERE r.tenant_id = $1 AND r.role = 'chat' AND p.enabled"#,
+    )
+    .bind(tenant_id.0)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| e.to_string())?;
+    let _ = tx.rollback().await;
+
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let base_url: String = row.get("base_url");
+    let model: String = row.get("model");
+    let Some(api_key_ref) = row.get::<Option<String>, _>("api_key_ref") else {
+        return Ok(None);
+    };
+    let Some(secrets) = &state.secrets else {
+        return Err("OpenBao is not configured".into());
+    };
+    match secrets.read_provider_key(&api_key_ref).await {
+        Ok(Some(api_key)) => Ok(Some(ChatTarget {
+            base_url,
+            api_key,
+            model,
+        })),
+        Ok(None) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -269,25 +275,25 @@ pub struct AiSettingsTestResponse {
     pub model: String,
 }
 
-/// POST /api/v1/ai/settings/test — one cheap completion with the stored secret.
+/// POST /api/v1/ai/settings/test — one cheap completion with the `chat` role.
 pub async fn test_settings(State(state): State<AppState>, Authed(ctx): Authed) -> Response {
     if let Err(forbidden) = require(&ctx, "ai.settings", "manage") {
         return forbidden;
     }
-    let Some(secrets) = &state.secrets else {
-        return unavailable("OpenBao is not configured");
-    };
-    let secret = match secrets.read_ai_secret(ctx.tenant_id.0).await {
-        Ok(Some(secret)) => secret,
+    let target = match resolve_chat_target(&state, ctx.tenant_id).await {
+        Ok(Some(target)) => target,
         Ok(None) => return unavailable("AI provider is not configured"),
-        Err(e) => return unavailable(&format!("secret backend read failed: {e}")),
+        Err(e) => {
+            tracing::warn!(error = %e, "AI connection test failed to resolve the chat role");
+            return unavailable("secret backend read failed");
+        }
     };
 
     let defaults = GatewayConfig::default();
     let config = GatewayConfig {
-        base_url: secret.base_url.clone().unwrap_or(defaults.base_url.clone()),
-        api_key: secret.api_key.clone(),
-        primary_model: secret.model.clone(),
+        base_url: target.base_url.clone(),
+        api_key: target.api_key.clone(),
+        primary_model: target.model.clone(),
         ..defaults
     };
     let client = match HuakatiClient::with_config(config) {
@@ -296,7 +302,7 @@ pub async fn test_settings(State(state): State<AppState>, Authed(ctx): Authed) -
     };
 
     let request = ChatRequest {
-        model: secret.model.clone(),
+        model: target.model.clone(),
         messages: vec![Message {
             role: "user".into(),
             content: "ping".into(),
@@ -498,6 +504,29 @@ pub fn build_chat_prompt(triples: &[String], tool_names: &[&str]) -> String {
     prompt
 }
 
+/// The chat request always carries the model resolved from the `chat` role.
+fn chat_request_for(model: &str, triples: &[String], message: &str) -> ChatRequest {
+    ChatRequest {
+        model: model.to_string(),
+        messages: vec![
+            Message {
+                role: "system".into(),
+                content: build_chat_prompt(triples, talentos_tools::tools::TOOL_NAMES),
+                tool_calls: None,
+            },
+            Message {
+                role: "user".into(),
+                content: message.to_string(),
+                tool_calls: None,
+            },
+        ],
+        tools: None,
+        stream: Some(false),
+        temperature: Some(0.3),
+        max_tokens: Some(1024),
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ChatBody {
     pub message: String,
@@ -551,40 +580,15 @@ pub async fn chat(
             .into_response();
     }
 
-    // 1. Settings (existence check) + provider secret. Both must be configured.
-    let Some(secrets) = &state.secrets else {
-        return unavailable("ยังไม่ได้ตั้งค่า AI กรุณาตั้งค่า provider และ API key ที่หน้าตั้งค่า AI");
-    };
-    let secret = match secrets.read_ai_secret(ctx.tenant_id.0).await {
-        Ok(Some(secret)) => secret,
+    // 1. The `chat` model role is the only provider/model source at request time.
+    let target = match resolve_chat_target(&state, ctx.tenant_id).await {
+        Ok(Some(target)) => target,
         Ok(None) => return unavailable("ยังไม่ได้ตั้งค่า AI กรุณาตั้งค่า provider และ API key ที่หน้าตั้งค่า AI"),
         Err(e) => {
-            tracing::warn!(error = %e, "chat secret read failed");
+            tracing::warn!(error = %e, "chat role resolution failed");
             return unavailable("ไม่สามารถอ่านการตั้งค่า AI ได้ กรุณาลองใหม่ภายหลัง");
         }
     };
-    let settings_configured = match state
-        .pool
-        .begin_tenant(ctx.tenant_id)
-        .await
-        .map_err(|e| e.to_string())
-    {
-        Ok(mut tx) => {
-            let row = sqlx::query("SELECT 1 FROM ai_settings WHERE tenant_id = $1")
-                .bind(ctx.tenant_id.0)
-                .fetch_optional(&mut *tx)
-                .await;
-            let _ = tx.rollback().await;
-            match row {
-                Ok(row) => row.is_some(),
-                Err(e) => return internal_err(&e.to_string()),
-            }
-        }
-        Err(e) => return internal_err(&e),
-    };
-    if !settings_configured {
-        return unavailable("ยังไม่ได้ตั้งค่า AI กรุณาตั้งค่า provider และ API key ที่หน้าตั้งค่า AI");
-    }
 
     // 2. Retrieve the subgraph around nodes mentioned in the message.
     let candidates = match candidate_nodes(&state.pool, ctx.tenant_id, message).await {
@@ -635,37 +639,19 @@ pub async fn chat(
     }
     let triples: Vec<String> = triples.into_iter().collect();
 
-    // 4. Call the tenant's provider. Errors never echo the prompt or the key.
+    // 4. Call the tenant's `chat` provider. Errors never echo the prompt or the key.
     let defaults = GatewayConfig::default();
     let config = GatewayConfig {
-        base_url: secret.base_url.clone().unwrap_or(defaults.base_url.clone()),
-        api_key: secret.api_key.clone(),
-        primary_model: secret.model.clone(),
+        base_url: target.base_url.clone(),
+        api_key: target.api_key.clone(),
+        primary_model: target.model.clone(),
         ..defaults
     };
     let client = match HuakatiClient::with_config(config) {
         Ok(client) => client,
         Err(_) => return unavailable("การตั้งค่า AI ไม่สมบูรณ์ กรุณาตรวจสอบที่หน้าตั้งค่า AI"),
     };
-    let request = ChatRequest {
-        model: secret.model.clone(),
-        messages: vec![
-            Message {
-                role: "system".into(),
-                content: build_chat_prompt(&triples, talentos_tools::tools::TOOL_NAMES),
-                tool_calls: None,
-            },
-            Message {
-                role: "user".into(),
-                content: message.to_string(),
-                tool_calls: None,
-            },
-        ],
-        tools: None,
-        stream: Some(false),
-        temperature: Some(0.3),
-        max_tokens: Some(1024),
-    };
+    let request = chat_request_for(&target.model, &triples, message);
     let response = match client
         .chat_with_request(&ctx.tenant_id.0.to_string(), request)
         .await
@@ -693,7 +679,7 @@ pub async fn chat(
         body.agent.as_deref().unwrap_or("chat"),
         message,
         &reply,
-        &secret.model,
+        &target.model,
         response.usage.as_ref(),
     )
     .await;
@@ -832,13 +818,12 @@ fn secrets_backend(state: &AppState) -> &'static str {
     }
 }
 
-fn internal_err(message: &str) -> Response {
-    tracing::error!(error = %message, "ai settings request failed");
+pub(crate) fn error_response(status: StatusCode, error: &str, message: &str) -> Response {
     (
-        StatusCode::INTERNAL_SERVER_ERROR,
+        status,
         Json(ErrorResponse {
-            error: "internal_error".into(),
-            message: "Internal server error".into(),
+            error: error.to_string(),
+            message: message.to_string(),
             details: vec![],
             request_id: Uuid::new_v4().to_string(),
             retry_after_seconds: None,
@@ -847,18 +832,17 @@ fn internal_err(message: &str) -> Response {
         .into_response()
 }
 
-fn unavailable(message: &str) -> Response {
-    (
-        StatusCode::SERVICE_UNAVAILABLE,
-        Json(ErrorResponse {
-            error: "ai_unavailable".into(),
-            message: message.to_string(),
-            details: vec![],
-            request_id: Uuid::new_v4().to_string(),
-            retry_after_seconds: None,
-        }),
+pub(crate) fn internal_err(message: &str) -> Response {
+    tracing::error!(error = %message, "ai settings request failed");
+    error_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "internal_error",
+        "Internal server error",
     )
-        .into_response()
+}
+
+pub(crate) fn unavailable(message: &str) -> Response {
+    error_response(StatusCode::SERVICE_UNAVAILABLE, "ai_unavailable", message)
 }
 
 #[cfg(test)]
@@ -913,5 +897,12 @@ mod tests {
         assert!(prompt.contains("Never invent policy numbers"));
         assert!(prompt.contains("calculate_tax"));
         assert!(prompt.contains("query_employee"));
+    }
+
+    #[test]
+    fn chat_request_uses_the_resolved_role_model() {
+        let request = chat_request_for("role-model", &[], "สวัสดี");
+        assert_eq!(request.model, "role-model");
+        assert_eq!(request.messages.len(), 2);
     }
 }

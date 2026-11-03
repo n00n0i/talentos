@@ -1,13 +1,13 @@
-//! Chat endpoint: RBAC, fail-closed without a secret, and a grounded reply
-//! against a fake OpenAI-compatible provider. Requires DATABASE_URL; skips when unset.
+//! Chat endpoint: RBAC, fail-closed without a secret, resolves the `chat` role,
+//! and a grounded reply against a fake OpenAI-compatible provider.
+//! Requires DATABASE_URL; skips when unset.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use axum::{
     body::Body,
     http::{header, Method, Request, StatusCode},
     response::IntoResponse,
-    routing::get,
     Json, Router,
 };
 use serde_json::{json, Value};
@@ -54,8 +54,10 @@ fn app_state(pool: TenantPool, secrets: Option<Arc<SecretsClient>>) -> AppState 
     }
 }
 
-async fn seed(raw: &PgPool) -> Uuid {
+/// Tenant + one provider with a key + a `chat` role pointing at `model`.
+async fn seed(raw: &PgPool, base_url: &str, model: &str) -> Uuid {
     let tenant_id = Uuid::new_v4();
+    let provider_id = Uuid::new_v4();
     let mut tx = raw.begin().await.expect("begin");
     sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
         .bind(tenant_id.to_string())
@@ -69,14 +71,28 @@ async fn seed(raw: &PgPool) -> Uuid {
         .await
         .expect("tenant");
     sqlx::query(
-        "INSERT INTO ai_settings (tenant_id, model, api_key_set, secret_ref)
-         VALUES ($1, 'test-model', true, $2)",
+        "INSERT INTO ai_providers (id, tenant_id, name, kind, base_url, api_key_ref)
+         VALUES ($1, $2, 'Test', 'custom', $3, $4)",
     )
+    .bind(provider_id)
     .bind(tenant_id)
-    .bind(format!("secret/data/talentos/tenants/{tenant_id}/ai"))
+    .bind(base_url)
+    .bind(format!(
+        "secret/data/talentos/tenants/{tenant_id}/providers/{provider_id}"
+    ))
     .execute(&mut *tx)
     .await
-    .expect("ai settings");
+    .expect("provider");
+    sqlx::query(
+        "INSERT INTO ai_model_roles (tenant_id, role, provider_id, model, params)
+         VALUES ($1, 'chat', $2, $3, '{}')",
+    )
+    .bind(tenant_id)
+    .bind(provider_id)
+    .bind(model)
+    .execute(&mut *tx)
+    .await
+    .expect("chat role");
     tx.commit().await.expect("commit");
     tenant_id
 }
@@ -128,74 +144,72 @@ async fn post_chat(app: &Router, auth: &str, message: &str) -> (StatusCode, Valu
     (status, json)
 }
 
-/// Stand-in OpenBao KV v2: every read returns the same secret.
-async fn fake_openbao(base_url: &str, model: &str) -> String {
-    let body = json!({
-        "data": {
-            "data": {
-                "provider": "huakati",
-                "base_url": base_url,
-                "model": model,
-                "api_key": "sk-test",
-            }
-        }
-    });
+/// Stand-in OpenBao KV v2: every read returns the same provider key.
+async fn fake_openbao() -> String {
+    let body = json!({ "data": { "data": { "api_key": "sk-test" } } });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind");
     let addr = listener.local_addr().expect("addr");
     tokio::spawn(async move {
-        let app = Router::new().route(
-            "/v1/secret/data/talentos/tenants/:tenant/ai",
-            get(move || {
-                let body = body.clone();
-                async move { Json(body) }
-            }),
-        );
+        let app = Router::new().fallback(move || {
+            let body = body.clone();
+            async move { Json(body) }
+        });
         axum::serve(listener, app).await.expect("serve");
     });
     format!("http://{addr}")
 }
 
-/// Stand-in OpenAI-compatible provider.
-async fn fake_provider() -> String {
+/// Stand-in OpenAI-compatible provider; records the model the caller asked for.
+async fn fake_provider(model: &str) -> (String, Arc<Mutex<Option<String>>>) {
+    let seen = Arc::new(Mutex::new(None));
+    let recorder = seen.clone();
+    let model = model.to_string();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind");
     let addr = listener.local_addr().expect("addr");
     tokio::spawn(async move {
-        let app = Router::new().fallback(|| async {
-            Json(json!({
-                "id": "chatcmpl-test",
-                "object": "chat.completion",
-                "created": 0,
-                "model": "test-model",
-                "choices": [{
-                    "index": 0,
-                    "message": {"role": "assistant", "content": "สวัสดีค่ะ"},
-                    "finish_reason": "stop"
-                }],
-                "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-            }))
-            .into_response()
+        let app = Router::new().fallback(move |Json(body): Json<Value>| {
+            *recorder.lock().unwrap() = body
+                .get("model")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let model = model.clone();
+            async move {
+                Json(json!({
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 0,
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "สวัสดีค่ะ"},
+                        "finish_reason": "stop"
+                    }],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                }))
+                .into_response()
+            }
         });
         axum::serve(listener, app).await.expect("serve");
     });
-    format!("http://{addr}/v1")
+    (format!("http://{addr}/v1"), seen)
 }
 
 #[tokio::test]
-async fn chat_requires_secret_and_permission() {
+async fn chat_requires_role_and_permission() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
     let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
     let raw = pool.pool().clone();
-    let tenant_id = seed(&raw).await;
+    let tenant_id = seed(&raw, "http://127.0.0.1:9/v1", "test-model").await;
     let app = router::build(app_state(pool, None));
 
-    // No secret backend: 503 ai_unavailable, Thai-friendly message.
+    // Role exists but no secret backend: 503 ai_unavailable.
     let (status, body) = post_chat(&app, &bearer(tenant_id, &["hr_admin"]), "สวัสดี").await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{body}");
     assert_eq!(body["error"], "ai_unavailable");
@@ -211,17 +225,17 @@ async fn chat_requires_secret_and_permission() {
 }
 
 #[tokio::test]
-async fn chat_replies_grounded_and_persists() {
+async fn chat_uses_the_chat_role_model_and_persists() {
     let Some(url) = database_url() else {
         eprintln!("SKIP: DATABASE_URL not set");
         return;
     };
     let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
     let raw = pool.pool().clone();
-    let tenant_id = seed(&raw).await;
 
-    let provider = fake_provider().await;
-    let openbao = fake_openbao(&provider, "test-model").await;
+    let (provider, seen) = fake_provider("role-chat-model").await;
+    let tenant_id = seed(&raw, &provider, "role-chat-model").await;
+    let openbao = fake_openbao().await;
     let app = router::build(app_state(
         pool,
         Some(Arc::new(SecretsClient::new(openbao, "test-token"))),
@@ -233,6 +247,11 @@ async fn chat_replies_grounded_and_persists() {
     assert_eq!(body["usage"]["input_tokens"], 10);
     assert_eq!(body["usage"]["output_tokens"], 5);
     assert!(body["citations"].is_array());
+    assert_eq!(
+        seen.lock().unwrap().as_deref(),
+        Some("role-chat-model"),
+        "chat must send the model from the chat role"
+    );
     assert_eq!(conversation_count(&raw, tenant_id).await, 1);
 
     let _ = sqlx::query("DELETE FROM tenants WHERE id = $1")

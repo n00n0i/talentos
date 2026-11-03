@@ -1,41 +1,15 @@
 //! Provider secrets in OpenBao KV v2.
 //!
-//! One entry per tenant: `secret/data/talentos/tenants/<tenant>/ai`.
+//! One entry per provider:
+//! `secret/data/talentos/tenants/<tenant>/providers/<provider_id>`.
 //! When `OPENBAO_ENABLED` is unset/false the client is absent and callers must
-//! report `secrets_backend: none` — there is no Postgres fallback.
+//! fail closed — there is no Postgres key fallback.
 
-// Consumed by the AI settings/chat handlers in Tasks 3–5.
-#![allow(dead_code)]
-
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use serde::{Deserialize, Serialize};
+use reqwest::StatusCode;
+use serde::Deserialize;
 use uuid::Uuid;
 
-const CACHE_TTL: Duration = Duration::from_secs(60);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
-
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AiSecret {
-    pub provider: String,
-    pub base_url: Option<String>,
-    pub model: String,
-    pub api_key: String,
-}
-
-// Never let a stray `{:?}` write the key into a log line.
-impl std::fmt::Debug for AiSecret {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AiSecret")
-            .field("provider", &self.provider)
-            .field("base_url", &self.base_url)
-            .field("model", &self.model)
-            .field("api_key", &"<redacted>")
-            .finish()
-    }
-}
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SecretError {
@@ -54,18 +28,11 @@ pub struct SecretsClient {
     addr: String,
     token: String,
     http: reqwest::Client,
-    cache: Arc<Mutex<HashMap<Uuid, CacheEntry>>>,
 }
 
-#[derive(Clone)]
-struct CacheEntry {
-    fetched_at: Instant,
-    value: Option<AiSecret>,
-}
-
-/// KV v2 API path for a tenant's AI provider secret.
-pub fn ai_secret_path(tenant: Uuid) -> String {
-    format!("secret/data/talentos/tenants/{tenant}/ai")
+/// KV v2 API path for one provider's API key.
+pub fn provider_secret_path(tenant: Uuid, provider: Uuid) -> String {
+    format!("secret/data/talentos/tenants/{tenant}/providers/{provider}")
 }
 
 impl SecretsClient {
@@ -97,24 +64,19 @@ impl SecretsClient {
             addr: addr.into().trim_end_matches('/').to_string(),
             token: token.into(),
             http,
-            cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    pub async fn read_ai_secret(&self, tenant: Uuid) -> Result<Option<AiSecret>, SecretError> {
-        if let Some(hit) = self.cache_get(tenant) {
-            return Ok(hit);
-        }
-
+    /// `Ok(None)` means the provider has no stored key.
+    pub async fn read_provider_key(&self, path: &str) -> Result<Option<String>, SecretError> {
         let resp = self
             .http
-            .get(self.url(tenant))
+            .get(self.url(path))
             .header("X-Vault-Token", &self.token)
             .send()
             .await?;
 
-        if resp.status() == reqwest::StatusCode::NOT_FOUND {
-            self.cache_put(tenant, None);
+        if resp.status() == StatusCode::NOT_FOUND {
             return Ok(None);
         }
         if !resp.status().is_success() {
@@ -122,54 +84,50 @@ impl SecretsClient {
         }
 
         let body: KvReadResponse = resp.json().await?;
-        let secret = body
+        Ok(body
             .data
             .and_then(|d| d.data)
-            .ok_or(SecretError::Malformed)?;
-        self.cache_put(tenant, Some(secret.clone()));
-        Ok(Some(secret))
+            .and_then(|d| d.api_key)
+            .filter(|key| !key.trim().is_empty()))
     }
 
-    pub async fn write_ai_secret(
+    pub async fn write_provider_key(
         &self,
         tenant: Uuid,
-        secret: &AiSecret,
+        provider: Uuid,
+        api_key: &str,
     ) -> Result<(), SecretError> {
         let resp = self
             .http
-            .post(self.url(tenant))
+            .post(self.url(&provider_secret_path(tenant, provider)))
             .header("X-Vault-Token", &self.token)
-            .json(&serde_json::json!({ "data": secret }))
+            .json(&serde_json::json!({ "data": { "api_key": api_key } }))
             .send()
             .await?;
 
         if !resp.status().is_success() {
             return Err(SecretError::UnexpectedStatus(resp.status().as_u16()));
         }
-        self.cache_put(tenant, Some(secret.clone()));
         Ok(())
     }
 
-    fn url(&self, tenant: Uuid) -> String {
-        format!("{}/v1/{}", self.addr, ai_secret_path(tenant))
+    /// Deleting a key that is already gone counts as success.
+    pub async fn delete_provider_key(&self, path: &str) -> Result<(), SecretError> {
+        let resp = self
+            .http
+            .delete(self.url(path))
+            .header("X-Vault-Token", &self.token)
+            .send()
+            .await?;
+
+        if resp.status().is_success() || resp.status() == StatusCode::NOT_FOUND {
+            return Ok(());
+        }
+        Err(SecretError::UnexpectedStatus(resp.status().as_u16()))
     }
 
-    fn cache_get(&self, tenant: Uuid) -> Option<Option<AiSecret>> {
-        let cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
-        cache
-            .get(&tenant)
-            .and_then(|entry| (entry.fetched_at.elapsed() < CACHE_TTL).then(|| entry.value.clone()))
-    }
-
-    fn cache_put(&self, tenant: Uuid, value: Option<AiSecret>) {
-        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
-        cache.insert(
-            tenant,
-            CacheEntry {
-                fetched_at: Instant::now(),
-                value,
-            },
-        );
+    fn url(&self, path: &str) -> String {
+        format!("{}/v1/{}", self.addr, path)
     }
 }
 
@@ -180,7 +138,12 @@ struct KvReadResponse {
 
 #[derive(Deserialize)]
 struct KvReadData {
-    data: Option<AiSecret>,
+    data: Option<ProviderSecret>,
+}
+
+#[derive(Deserialize)]
+struct ProviderSecret {
+    api_key: Option<String>,
 }
 
 #[cfg(test)]
@@ -188,13 +151,15 @@ mod tests {
     use super::*;
 
     const TENANT: &str = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    const PROVIDER: &str = "9b2c4a1e-7d3f-4a8b-9c1d-2e3f4a5b6c7d";
 
     #[test]
     fn path_is_kv_v2_layout() {
         let tenant = Uuid::parse_str(TENANT).unwrap();
+        let provider = Uuid::parse_str(PROVIDER).unwrap();
         assert_eq!(
-            ai_secret_path(tenant),
-            format!("secret/data/talentos/tenants/{TENANT}/ai")
+            provider_secret_path(tenant, provider),
+            format!("secret/data/talentos/tenants/{TENANT}/providers/{PROVIDER}")
         );
     }
 

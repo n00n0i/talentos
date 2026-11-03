@@ -7,10 +7,10 @@ use tower_http::request_id::SetRequestIdLayer;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    ai, attendance, audit, auth, bank_templates, calendar, claims, delegations, documents,
-    employees, forms, goals, graphql, health, leave, loans, mcp, me, memory, notifications, oidc,
-    onboarding, ot, payroll, pdpa, performance, pf, plugins, privacy, recruitment, reports,
-    settings, settlement, setup, training, users,
+    ai, ai_providers, attendance, audit, auth, bank_templates, calendar, claims, delegations,
+    documents, employees, forms, goals, graphql, health, leave, loans, mcp, me, memory,
+    notifications, oidc, onboarding, ot, payroll, pdpa, performance, pf, plugins, privacy,
+    recruitment, reports, settings, settlement, setup, training, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -434,6 +434,27 @@ pub fn build(state: AppState) -> Router {
             get(claims::hr_download_receipt),
         )
         .route("/api/v1/ai/tools", get(ai::list_tools))
+        .route(
+            "/api/v1/ai/provider-presets",
+            get(ai_providers::list_presets),
+        )
+        .route(
+            "/api/v1/ai/providers",
+            get(ai_providers::list_providers).post(ai_providers::create_provider),
+        )
+        .route(
+            "/api/v1/ai/providers/:id",
+            axum::routing::put(ai_providers::update_provider).delete(ai_providers::delete_provider),
+        )
+        .route(
+            "/api/v1/ai/providers/:id/models",
+            post(ai_providers::fetch_models),
+        )
+        .route("/api/v1/ai/model-roles", get(ai_providers::get_model_roles))
+        .route(
+            "/api/v1/ai/model-roles/:role",
+            axum::routing::put(ai_providers::put_model_role),
+        )
         .route(
             "/api/v1/ai/settings",
             get(ai::get_settings).put(ai::put_settings),

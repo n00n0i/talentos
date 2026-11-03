@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod ai_providers;
 pub mod attendance;
 pub mod audit;
 pub mod auth;

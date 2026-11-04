@@ -1,0 +1,4 @@
+:18480 pid=1599381 cwd=/home/opc/content-creator/talentos cmd=./target/debug/talentos-gateway 
+:3100 pid=1678824 cwd=/home/opc/content-creator/talentos/web/.next/standalone cmd=next-server (v15.5.28)                                   
+gateway health ok
+web health ok

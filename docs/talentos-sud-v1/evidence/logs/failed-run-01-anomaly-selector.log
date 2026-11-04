@@ -1,0 +1,108 @@
+
+Running 61 tests using 1 worker
+
+  ✓   1 [chromium] › e2e/app.spec.ts:44:5 › first-run setup creates the tenant and admin (6.5s)
+  ✓   2 [chromium] › e2e/app.spec.ts:62:5 › switches to English via the lang-toggle and sees EN nav labels (3.4s)
+  ✓   3 [chromium] › e2e/app.spec.ts:82:5 › settings persist across reload (4.4s)
+  ✓   4 [chromium] › e2e/app.spec.ts:116:5 › AI settings and knowledge graph render for HR (3.8s)
+  ✘   5 [chromium] › e2e/app.spec.ts:140:5 › creates an employee, records OT, runs and approves payroll (7.4s)
+  -   6 [chromium] › e2e/app.spec.ts:280:5 › classifies OT on a company holiday
+  -   7 [chromium] › e2e/app.spec.ts:306:5 › invites a user from the admin screen
+  -   8 [chromium] › e2e/app.spec.ts:330:5 › resets the invited user's password with an HR link
+  -   9 [chromium] › e2e/app.spec.ts:357:5 › links an employee account and shows self-service payslips
+  -  10 [chromium] › e2e/app.spec.ts:399:5 › employee punches in and out from the clock page
+  -  11 [chromium] › e2e/app.spec.ts:429:5 › offline punch is queued locally and syncs when back online
+  -  12 [chromium] › e2e/app.spec.ts:451:5 › HR creates a shift, corrects and approves a derived day
+  -  13 [chromium] › e2e/app.spec.ts:481:5 › employee requests leave, HR approves it
+  -  14 [chromium] › e2e/app.spec.ts:515:5 › dashboard shows the pending approvals
+  -  15 [chromium] › e2e/app.spec.ts:537:5 › HR bulk-imports employees from a CSV
+  -  16 [chromium] › e2e/app.spec.ts:584:5 › HR enrolls in 2FA, logs in with a code, then disables it
+  -  17 [chromium] › e2e/app.spec.ts:643:5 › HR saves a LINE id for the invited user
+  -  18 [chromium] › e2e/app.spec.ts:659:5 › employee requests OT, HR approves it
+  -  19 [chromium] › e2e/app.spec.ts:694:5 › multi-level leave approval chain
+  -  20 [chromium] › e2e/app.spec.ts:744:5 › HR opens reports and sees headcount totals
+  -  21 [chromium] › e2e/app.spec.ts:762:5 › HR creates a loan for an employee
+  -  22 [chromium] › e2e/app.spec.ts:775:5 › HR imports opening leave balance and employee sees quota
+  -  23 [chromium] › e2e/app.spec.ts:806:5 › employee submits an expense claim with receipt and HR approves it
+  -  24 [chromium] › e2e/app.spec.ts:861:5 › HR computes a final settlement for an employee
+  -  25 [chromium] › e2e/app.spec.ts:885:5 › HR opens settings and sees the notification summary without error
+  -  26 [chromium] › e2e/app.spec.ts:898:5 › HR opens AI settings and sees the provider form
+  -  27 [chromium] › e2e/app.spec.ts:913:5 › chat head is on every page and links to AI settings when unconfigured
+  -  28 [chromium] › e2e/app.spec.ts:933:5 › HR rebuilds the knowledge graph and sees all class counts
+  -  29 [chromium] › e2e/app.spec.ts:959:5 › rejects a wrong password and stays on the login page
+  -  30 [chromium] › e2e/app.spec.ts:969:5 › employee navigation hides HR/admin areas
+  -  31 [chromium] › e2e/app.spec.ts:983:5 › leave rejects an inverted date range
+  -  32 [chromium] › e2e/app.spec.ts:996:5 › employee cancels a pending leave request
+  -  33 [chromium] › e2e/app.spec.ts:1015:5 › HR rejects a leave request and the employee sees it
+  -  34 [chromium] › e2e/app.spec.ts:1038:5 › employee cancels OT and HR rejects another request
+  -  35 [chromium] › e2e/app.spec.ts:1068:5 › employee cost center and PF rate persist
+  -  36 [chromium] › e2e/app.spec.ts:1087:5 › bulk import dry-run blocks an invalid file
+  -  37 [chromium] › e2e/app.spec.ts:1104:5 › form template edits persist
+  -  38 [chromium] › e2e/app.spec.ts:1119:5 › audit page lists login events
+  -  39 [chromium] › e2e/app.spec.ts:1125:5 › final settlement rejects a termination before hire
+  -  40 [chromium] › e2e/app.spec.ts:1142:5 › reports shows an empty state for an empty period
+  -  41 [chromium] › e2e/app.spec.ts:1151:5 › 2FA rejects a wrong enrollment code
+  -  42 [chromium] › e2e/app.spec.ts:1162:5 › session management lists and revokes all sessions
+  -  43 [chromium] › e2e/app.spec.ts:1172:5 › manager role sees team areas but no admin or payroll
+  -  44 [chromium] › e2e/app.spec.ts:1207:5 › payroll manager role sees payroll/reports but no admin or loans
+  -  45 [chromium] › e2e/app.spec.ts:1228:5 › manager approves step one, HR approves step two
+  -  46 [chromium] › e2e/app.spec.ts:1271:5 › HR creates a holiday and sees it on the team calendar
+  -  47 [chromium] › e2e/app.spec.ts:1286:5 › employee accepts the privacy notice and exports their personal data
+  -  48 [chromium] › e2e/app.spec.ts:1311:5 › HR adds an expiring document and downloads its file
+  -  49 [chromium] › e2e/app.spec.ts:1344:5 › HR runs the standard onboarding checklist
+  -  50 [chromium] › e2e/app.spec.ts:1363:5 › HR opens a job and moves a candidate through the pipeline
+  -  51 [chromium] › e2e/app.spec.ts:1436:5 › HR records an expiring training certificate
+  -  52 [chromium] › e2e/app.spec.ts:1460:5 › HR runs a performance cycle and submits a review
+  -  53 [chromium] › e2e/app.spec.ts:1495:5 › HR adds a goal and updates its progress
+  -  54 [chromium] › e2e/app.spec.ts:1519:5 › manager workflow: reporting line, calibration, goal check-in
+  -  55 [chromium] › e2e/app.spec.ts:1628:5 › employee acknowledges their performance review
+  ✓  56 [chromium] › e2e/oidc.spec.ts:14:5 › OIDC settings persist and show masked secret on reload (4.0s)
+  ✓  57 [chromium] › e2e/roles.spec.ts:64:5 › HR admin can open every admin module (4.9s)
+  ✓  58 [chromium] › e2e/roles.spec.ts:91:5 › payroll manager is limited to payroll, reports, people (5.5s)
+  ✓  59 [chromium] › e2e/roles.spec.ts:119:5 › manager is limited to team and self-service areas (6.2s)
+  ✓  60 [chromium] › e2e/roles.spec.ts:158:5 › employee is limited to self-service areas (6.6s)
+  ✓  61 [chromium] › e2e/roles.spec.ts:191:5 › employee cannot open calendar; manager can (6.4s)
+
+
+  1) [chromium] › e2e/app.spec.ts:140:5 › creates an employee, records OT, runs and approves payroll 
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByText('ตรวจสอบความผิดปกติแล้ว')
+    Expected: visible
+    Error: strict mode violation: getByText('ตรวจสอบความผิดปกติแล้ว') resolved to 2 elements:
+        1) <p class="badge success">ตรวจสอบความผิดปกติแล้ว</p> aka getByRole('paragraph').filter({ hasText: 'ตรวจสอบความผิดปกติแล้ว' })
+        2) <button disabled class="btn btn-sm btn-primary" data-testid="review-anomalies">ตรวจสอบความผิดปกติแล้ว</button> aka getByTestId('review-anomalies')
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 15000ms[22m
+    [2m  - waiting for getByText('ตรวจสอบความผิดปกติแล้ว')[22m
+
+
+      244 |   await page.getByText("รออนุมัติ").first().click();
+      245 |   await page.getByTestId("review-anomalies").click();
+    > 246 |   await expect(page.getByText("ตรวจสอบความผิดปกติแล้ว")).toBeVisible();
+          |                                                          ^
+      247 |
+      248 |   await page.getByTestId("approve-run").click();
+      249 |   await expect(page.getByText("อนุมัติรอบเงินเดือนแล้ว")).toBeVisible();
+        at /home/opc/content-creator/talentos/.worktrees/ux/web/e2e/app.spec.ts:246:58
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/app-creates-an-employee-records-OT-runs-and-approves-payroll-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/app-creates-an-employee-records-OT-runs-and-approves-payroll-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/app-creates-an-employee-records-OT-runs-and-approves-payroll-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/app-creates-an-employee-records-OT-runs-and-approves-payroll-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › e2e/app.spec.ts:140:5 › creates an employee, records OT, runs and approves payroll 
+  50 did not run
+  10 passed (1.5m)

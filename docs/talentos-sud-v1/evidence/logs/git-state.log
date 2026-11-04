@@ -1,0 +1,11 @@
+CANDIDATE: 71e9852 (this commit)
+SOURCE+DOCS PARENT: dff42af
+BRANCH: sud-closure
+BASE: e73ce01
+STATUS (only preserved untracked):
+ M docs/talentos-sud-v1/evidence/logs/git-state.log
+?? web/debug-pw.mjs
+AHEAD OF origin/master:
+88
+REMOTE HEADS:
+refs/heads/master

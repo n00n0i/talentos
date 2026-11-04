@@ -1,0 +1,30 @@
+/ Overview th:8 ov:0
+/employees Employees th:8 ov:0
+/team My team th:1 ov:0
+/documents Employee documents th:8 ov:0
+/onboarding Onboarding employees th:7 ov:0
+/recruitment Recruitment th:3 ov:0
+/training Training & certificates th:8 ov:0
+/performance Performance reviews th:3 ov:0
+/goals Goals & OKRs th:8 ov:0
+/attendance Time & OT th:2 ov:0
+/attendance/shifts Work shift th:7 ov:0
+/calendar Team calendar th:2 ov:0
+/clock Time clock th:2 ov:0
+/leave Leave th:8 ov:0
+/ot Request OT th:3 ov:0
+/claims Expenses th:1 ov:0
+/payroll Payroll th:1 ov:0
+/loans Loans th:8 ov:0
+/final-settlement Offboarding th:8 ov:0
+/reports Reports th:1 ov:0
+/payslip Payslip form th:1 ov:0
+/me/payslips My payslips th:1 ov:0
+/me/reviews My reviews th:1 ov:0
+/privacy Privacy and personal information th:8 ov:0
+/users Users th:4 ov:0
+/settings Settings th:8 ov:0
+/settings/ai AI settings th:1 ov:0
+/settings/ai/graph Organizational knowledge graph th:7 ov:0
+/forms Forms th:4 ov:0
+/audit Audit log th:2 ov:0

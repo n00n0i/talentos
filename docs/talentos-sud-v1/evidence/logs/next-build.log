@@ -1,0 +1,68 @@
+
+> build
+> next build
+
+   ▲ Next.js 15.5.28
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 2.3s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/39) ...
+   Generating static pages (9/39) 
+   Generating static pages (19/39) 
+   Generating static pages (29/39) 
+ ✓ Generating static pages (39/39)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ƒ /                                    6.54 kB         153 kB
+├ ○ /_not-found                            998 B         104 kB
+├ ƒ /api/gw/[...path]                      141 B         103 kB
+├ ƒ /api/session/accept-invite             141 B         103 kB
+├ ƒ /api/session/login                     141 B         103 kB
+├ ƒ /api/session/logout                    141 B         103 kB
+├ ƒ /api/session/reset-password            141 B         103 kB
+├ ƒ /attendance                          4.61 kB         152 kB
+├ ƒ /attendance/shifts                   3.43 kB         150 kB
+├ ƒ /audit                               1.81 kB         145 kB
+├ ƒ /calendar                             2.9 kB         146 kB
+├ ƒ /claims                              4.48 kB         148 kB
+├ ƒ /clock                               3.24 kB         147 kB
+├ ƒ /documents                           4.23 kB         148 kB
+├ ƒ /employees                           6.45 kB         150 kB
+├ ƒ /final-settlement                    3.64 kB         147 kB
+├ ƒ /forms                               3.65 kB         147 kB
+├ ƒ /goals                               3.33 kB         147 kB
+├ ƒ /invite/[token]                      1.96 kB         149 kB
+├ ƒ /leave                               6.22 kB         150 kB
+├ ƒ /loans                               4.09 kB         148 kB
+├ ○ /login                               2.26 kB         149 kB
+├ ƒ /me/payslips                         1.97 kB         146 kB
+├ ƒ /me/reviews                          1.89 kB         145 kB
+├ ƒ /onboarding                           3.6 kB         147 kB
+├ ƒ /ot                                  4.01 kB         148 kB
+├ ƒ /payroll                             4.86 kB         148 kB
+├ ƒ /payslip                              2.8 kB         146 kB
+├ ƒ /performance                         4.52 kB         148 kB
+├ ƒ /privacy                             1.95 kB         145 kB
+├ ƒ /recruitment                         6.45 kB         150 kB
+├ ƒ /reports                             3.34 kB         147 kB
+├ ƒ /reset/[token]                       1.97 kB         149 kB
+├ ƒ /settings                            7.23 kB         151 kB
+├ ƒ /settings/ai                         5.76 kB         153 kB
+├ ƒ /settings/ai/graph                   3.26 kB         150 kB
+├ ○ /setup                               2.16 kB         146 kB
+├ ƒ /team                                1.55 kB         145 kB
+├ ƒ /training                            3.65 kB         147 kB
+└ ƒ /users                                3.1 kB         147 kB
++ First Load JS shared by all             103 kB
+  ├ chunks/1255-dc3ddf72a1dc71a7.js      46.6 kB
+  ├ chunks/4bd1b696-f785427dddbba9fb.js  54.2 kB
+  └ other shared chunks (total)          1.93 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

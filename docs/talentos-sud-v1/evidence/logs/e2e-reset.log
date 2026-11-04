@@ -1,0 +1,11 @@
+PASS  destructive-flag         E2E_ALLOW_DESTRUCTIVE=1
+PASS  e2e-db                   E2E_DB=talentos_e2e
+PASS  connection-target        env DATABASE_ADMIN_URL -> talentos_e2e
+PASS  auth-url-target          env DATABASE_AUTH_URL not set
+PASS  gateway-env              /etc/talentos-gateway.env -> talentos (not used; overridden by env DATABASE_ADMIN_URL)
+PASS  server-identity          current_database()=talentos_e2e
+PASS  demo-tenant              no tenant with slug='demo'
+PASS  init-db-grants           applied scripts/init-db.sql
+PASS  delete-tenants           DELETE FROM tenants
+PASS  tenants-empty            count=0
+RESULT: PASS

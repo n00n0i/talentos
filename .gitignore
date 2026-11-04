@@ -45,3 +45,7 @@ certs/
 .worktrees/
 .superpowers/
 .superpowers/sdd/
+
+# Campaign evidence logs are part of the frozen deliverable
+!docs/talentos-sud-v1/evidence/logs/
+!docs/talentos-sud-v1/evidence/logs/*.log

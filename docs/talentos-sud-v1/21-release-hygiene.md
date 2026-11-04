@@ -33,7 +33,12 @@
 
 ## CI status
 
-**CI on the candidate SHA: NOT_EVALUATED.** No remote push was authorised, so no CI
+**First CI run on the PR: `web` job failed at `npm ci`** because `@types/node@20.16.11`
+conflicted with `vite@8` peer requirements (pre-existing dependency drift). Fixed by
+bumping `@types/node` to `^22.20.5`; `npm ci --dry-run` now resolves, and tsc/vitest/
+build are green locally. CI is rerun on the pushed branch.
+
+**CI on the pre-push candidate SHA: NOT_EVALUATED.** No remote push was authorised, so no CI
 run exists for this commit. Local gates above are the evidence.
 
 ## Safe push plan (requires owner authorisation)

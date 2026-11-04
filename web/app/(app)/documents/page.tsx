@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -278,21 +280,11 @@ export default function DocumentsPage() {
             </label>
             <label>
               วันที่ออก
-              <input
-                data-testid="doc-issued"
-                type="date"
-                value={form.issued_date}
-                onChange={(e) => set("issued_date", e.target.value)}
-              />
+              <ThaiDateInput testId="doc-issued" value={form.issued_date} onChange={(v) => set("issued_date", v)} />
             </label>
             <label>
               วันหมดอายุ
-              <input
-                data-testid="doc-expiry"
-                type="date"
-                value={form.expiry_date}
-                onChange={(e) => set("expiry_date", e.target.value)}
-              />
+              <ThaiDateInput testId="doc-expiry" value={form.expiry_date} onChange={(v) => set("expiry_date", v)} />
             </label>
           </div>
           <label>

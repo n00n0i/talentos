@@ -63,10 +63,11 @@ test("switches to English via the lang-toggle and sees EN nav labels", async ({ 
   await login(page);
   // Switch to EN
   await page.getByTestId("lang-toggle").click();
-  await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Payroll" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Settings" })).toBeVisible();
-  await expect(page.getByTestId("side-nav")).toBeVisible();
+  const sideNav = page.getByTestId("side-nav");
+  await expect(sideNav.getByRole("link", { name: "Employees" })).toBeVisible();
+  await expect(sideNav.getByRole("link", { name: "Payroll" })).toBeVisible();
+  await expect(sideNav.getByRole("link", { name: "Settings" })).toBeVisible();
+  await expect(sideNav).toBeVisible();
   // The toggle now shows "TH" (to switch back)
   await expect(page.getByTestId("lang-toggle")).toHaveText("TH");
   // Cookie is set to en
@@ -75,8 +76,10 @@ test("switches to English via the lang-toggle and sees EN nav labels", async ({ 
   expect(langCookie?.value).toBe("en");
   // Reload and confirm it persists
   await page.reload();
-  await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
+  await expect(page.getByTestId("side-nav").getByRole("link", { name: "Employees" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await page.goto("/claims");
+  await expect(page.getByRole("heading", { name: "Expenses" })).toBeVisible();
   await context.clearCookies();
 });
 
@@ -1491,6 +1494,8 @@ test("HR runs a performance cycle and submits a review", async ({ page }) => {
 
   await page.getByTestId("cycle-name").fill("รอบประเมิน E2E");
   await page.getByTestId("cycle-start").fill("2026-01-01");
+  await page.getByTestId("cycle-start").blur();
+  await expect(page.getByTestId("cycle-start")).toHaveValue("01/01/2569");
   await page.getByTestId("cycle-end").fill("2026-12-31");
   await page.getByTestId("create-cycle").click();
   await expect(page.getByText("สร้างรอบประเมินแล้ว")).toBeVisible();
@@ -1586,6 +1591,8 @@ test("manager workflow: reporting line, calibration, goal check-in", async ({ pa
   await page.goto("/performance");
   await page.getByTestId("cycle-name").fill("รอบประเมิน E2E-2");
   await page.getByTestId("cycle-start").fill("2026-01-01");
+  await page.getByTestId("cycle-start").blur();
+  await expect(page.getByTestId("cycle-start")).toHaveValue("01/01/2569");
   await page.getByTestId("cycle-end").fill("2026-12-31");
   await page.getByTestId("create-cycle").click();
   await expect(page.getByText("สร้างรอบประเมินแล้ว")).toBeVisible();

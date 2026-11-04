@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -244,7 +246,7 @@ export default function OtPage() {
             <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
               <div className="field">
                 <label htmlFor="ot-date">วันที่ทำ OT</label>
-                <input id="ot-date" data-testid="ot-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                <ThaiDateInput id="ot-date" testId="ot-date" value={date} onChange={(v) => setDate(v)} required />
               </div>
               <div className="field">
                 <label htmlFor="ot-hours">ชั่วโมง</label>

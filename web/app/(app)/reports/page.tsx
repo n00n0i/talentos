@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, thb } from "@/lib/api";
 
@@ -157,11 +159,11 @@ export default function ReportsPage() {
         >
           <div className="field">
             <label htmlFor="cost-from">จาก</label>
-            <input id="cost-from" type="date" data-testid="cost-from" value={from} onChange={(e) => setFrom(e.target.value)} required />
+            <ThaiDateInput id="cost-from" testId="cost-from" value={from} onChange={(v) => setFrom(v)} required />
           </div>
           <div className="field">
             <label htmlFor="cost-to">ถึง</label>
-            <input id="cost-to" type="date" data-testid="cost-to" value={to} onChange={(e) => setTo(e.target.value)} required />
+            <ThaiDateInput id="cost-to" testId="cost-to" value={to} onChange={(v) => setTo(v)} required />
           </div>
           <div className="field">
             <span aria-hidden="true">&nbsp;</span>

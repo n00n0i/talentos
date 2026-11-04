@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
@@ -162,7 +164,7 @@ export default function ShiftsPage() {
           </div>
           <div className="field">
             <label>มีผลตั้งแต่</label>
-            <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} required />
+            <ThaiDateInput value={effectiveFrom} onChange={(v) => setEffectiveFrom(v)} required />
           </div>
           <div>
             <button className="btn btn-primary" data-testid="assign-shift" type="submit" disabled={busy || !shiftId || !employeeId}>

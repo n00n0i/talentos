@@ -672,7 +672,7 @@ export default function SettingsPage() {
             <h2 style={{ fontSize: 16 }}>PDPA: การเก็บรักษาและลบข้อมูล</h2>
             <p className="hint">
               เก็บรักษาเอกสารภาษี/เงินเดือน {pdpaPolicy?.payroll_retention_years ?? 7} ปี ·
-              ข้อมูลบรืหารหลังลาออก {pdpaPolicy?.ops_retention_months ?? 12} เดือน
+              ข้อมูลบริหารหลังลาออก {pdpaPolicy?.ops_retention_months ?? 12} เดือน
             </p>
             <button
               className="btn btn-primary"
@@ -680,7 +680,7 @@ export default function SettingsPage() {
               disabled={busy}
               onClick={purgeNow}
             >
-              ลบข้อมูลท่ีหมดกําหนด (Purge now)
+              ลบข้อมูลที่หมดกำหนด (Purge now)
             </button>
           </div>
         )}

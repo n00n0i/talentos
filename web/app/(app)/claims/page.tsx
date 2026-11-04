@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, Me, thb, thDate } from "@/lib/api";
 
@@ -291,14 +293,7 @@ export default function ClaimsPage() {
               </div>
               <div className="field">
                 <label htmlFor="claim-date">วันที่ค่าใช้จ่าย</label>
-                <input
-                  id="claim-date"
-                  data-testid="claim-date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                />
+                <ThaiDateInput id="claim-date" testId="claim-date" value={date} onChange={(v) => setDate(v)} required />
               </div>
             </div>
             <div className="field">

@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
@@ -288,13 +290,7 @@ export default function AttendancePage() {
           <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <div className="field">
               <label>วันที่</label>
-              <input
-                data-testid="holiday-date"
-                type="date"
-                value={holidayDate}
-                onChange={(e) => setHolidayDate(e.target.value)}
-                required
-              />
+              <ThaiDateInput testId="holiday-date" value={holidayDate} onChange={(v) => setHolidayDate(v)} required />
             </div>
             <div className="field">
               <label>ชื่อวันหยุด</label>

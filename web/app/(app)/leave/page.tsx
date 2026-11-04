@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -465,25 +467,11 @@ export default function LeavePage() {
               </div>
               <div className="field">
                 <label htmlFor="delegate-start">เริ่ม</label>
-                <input
-                  id="delegate-start"
-                  data-testid="delegate-start"
-                  type="date"
-                  value={delegateStart}
-                  onChange={(e) => setDelegateStart(e.target.value)}
-                  required
-                />
+                <ThaiDateInput id="delegate-start" testId="delegate-start" value={delegateStart} onChange={(v) => setDelegateStart(v)} required />
               </div>
               <div className="field">
                 <label htmlFor="delegate-end">ถึง</label>
-                <input
-                  id="delegate-end"
-                  data-testid="delegate-end"
-                  type="date"
-                  value={delegateEnd}
-                  onChange={(e) => setDelegateEnd(e.target.value)}
-                  required
-                />
+                <ThaiDateInput id="delegate-end" testId="delegate-end" value={delegateEnd} onChange={(v) => setDelegateEnd(v)} required />
               </div>
             </div>
             <div>
@@ -655,11 +643,11 @@ export default function LeavePage() {
               </div>
               <div className="field">
                 <label htmlFor="leave-start">เริ่ม</label>
-                <input id="leave-start" data-testid="leave-start" type="date" value={start} onChange={(e) => setStart(e.target.value)} required />
+                <ThaiDateInput id="leave-start" testId="leave-start" value={start} onChange={(v) => setStart(v)} required />
               </div>
               <div className="field">
                 <label htmlFor="leave-end">ถึง</label>
-                <input id="leave-end" data-testid="leave-end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} required />
+                <ThaiDateInput id="leave-end" testId="leave-end" value={end} onChange={(v) => setEnd(v)} required />
               </div>
             </div>
             <div className="field">

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
+import Translate from "@/components/Translate";
+import TableLabels from "@/components/TableLabels";
 import { gw, Me } from "@/lib/api";
 import { useI18N } from "@/lib/i18n";
 import { activeHref, visibleNav } from "@/lib/nav";
@@ -77,25 +79,25 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const canReports = me?.roles.some((r) => ["hr_admin", "payroll_manager"].includes(r)) ?? false;
 
   // Direct URLs must not render admin screens for roles that only see the
-  // error state. The API still enforces permissions; this keeps the UI honest.
-  useEffect(() => {
-    if (!me) return;
-    const adminOnly = ["/users", "/settings", "/forms", "/audit", "/loans", "/final-settlement", "/payslip"];
-    const payrollOnly = ["/payroll", "/reports"];
-    const hrOnly = [
-      "/employees",
-      "/documents",
-      "/onboarding",
-      "/recruitment",
-      "/training",
-      "/performance",
-      "/goals",
-    ];
-    const attendanceOnly = ["/attendance", "/calendar"];
-    // /performance and /goals are reachable only by managers with manage_direct.
-    const directOnly = ["/performance", "/goals"];
-    const denied =
-      (adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
+  // error state. Gate the page itself so a denied page never fires its data
+  // requests (and logs a 403) before the redirect.
+  const adminOnly = ["/users", "/settings", "/forms", "/audit", "/loans", "/final-settlement", "/payslip"];
+  const payrollOnly = ["/payroll", "/reports"];
+  const hrOnly = [
+    "/employees",
+    "/documents",
+    "/onboarding",
+    "/recruitment",
+    "/training",
+    "/performance",
+    "/goals",
+  ];
+  const attendanceOnly = ["/attendance", "/calendar"];
+  // /performance and /goals are reachable only by managers with manage_direct.
+  const directOnly = ["/performance", "/goals"];
+  const denied =
+    me !== null &&
+    ((adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
       (payrollOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canReports) ||
       (hrOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
         !canHr &&
@@ -104,9 +106,10 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           directOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`))
         )) ||
       (attendanceOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
-        !me.permissions.includes("attendance.read"));
+        !me.permissions.includes("attendance.read")));
+  useEffect(() => {
     if (denied) router.replace("/clock");
-  }, [me, pathname, router, isAdmin, canHr, canReports]);
+  }, [denied, router]);
 
   const displayName = me?.full_name_th || me?.email || "TalentOS";
   const roleLabel =
@@ -209,7 +212,16 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         </div>
-        <main className="content">{children}</main>
+        <main className="content">
+          {!me || denied ? (
+            <div className="spinner">{t("common.loading")}</div>
+          ) : (
+            <>
+              <TableLabels />
+              <Translate>{children}</Translate>
+            </>
+          )}
+        </main>
       </div>
     </div>
   );

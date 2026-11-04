@@ -407,14 +407,14 @@ export default function GoalsPage() {
         )}
         {canDirect && directReports.length > 0 && (
           <div className="card card-pad" style={{ marginTop: 12, display: "grid", gap: 12 }}>
-            <h2 style={{ fontSize: 16 }}>Check-in เป้าหมายลูกข่าตรง</h2>
+            <h2 style={{ fontSize: 16 }}>Check-in เป้าหมายลูกทีม</h2>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <select
                 data-testid="checkin-goal"
                 value={checkInGoal}
                 onChange={(e) => setCheckInGoal(e.target.value)}
               >
-                <option value="">— เลือกเป้าหมายลูกข่า —</option>
+                <option value="">— เลือกเป้าหมายลูกทีม —</option>
                 {goals.map((g) => {
                   const report = directReports.find((r) => r.id === g.employee_id);
                   return (

@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, thb, thDate } from "@/lib/api";
 
@@ -122,14 +124,7 @@ export default function FinalSettlementPage() {
           </div>
           <div className="field">
             <label htmlFor="settlement-date">วันที่สิ้นสุดการจ้าง</label>
-            <input
-              id="settlement-date"
-              data-testid="settlement-date"
-              type="date"
-              value={terminationDate}
-              onChange={(e) => setTerminationDate(e.target.value)}
-              required
-            />
+            <ThaiDateInput id="settlement-date" testId="settlement-date" value={terminationDate} onChange={(v) => setTerminationDate(v)} required />
           </div>
           <div className="field">
             <label htmlFor="settlement-unused">วันลาค้าง (วัน)</label>

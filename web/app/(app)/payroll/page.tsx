@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   gw,
@@ -193,15 +195,15 @@ export default function PayrollPage() {
         <div className="form-row">
           <div className="field">
             <label htmlFor="start" data-testid="create-start-label">{t("payroll.periodStart")}</label>
-            <input id="start" data-testid="create-start" type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} required />
+            <ThaiDateInput id="start" testId="create-start" value={periodStart} onChange={(v) => setPeriodStart(v)} required />
           </div>
           <div className="field">
             <label htmlFor="end">{t("payroll.periodEnd")}</label>
-            <input id="end" data-testid="create-end" type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} required />
+            <ThaiDateInput id="end" testId="create-end" value={periodEnd} onChange={(v) => setPeriodEnd(v)} required />
           </div>
           <div className="field">
             <label htmlFor="pay">{t("payroll.paymentDate")}</label>
-            <input id="pay" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+            <ThaiDateInput id="pay" value={paymentDate} onChange={(v) => setPaymentDate(v)} required />
           </div>
         </div>
         <div className="form-row" style={{ marginTop: 12, gridTemplateColumns: "1fr auto" }}>

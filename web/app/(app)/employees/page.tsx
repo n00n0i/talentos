@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, thb } from "@/lib/api";
 import { useI18N } from "@/lib/i18n";
@@ -492,7 +494,7 @@ export default function EmployeesPage() {
           <div className="form-row">
             <div className="field">
               <label>{t("employees.hireDate")}</label>
-              <input data-testid="employee-hire-date" type="date" value={form.hire_date} onChange={(e) => set("hire_date", e.target.value)} required />
+              <ThaiDateInput testId="employee-hire-date" value={form.hire_date} onChange={(v) => set("hire_date", v)} required />
             </div>
             <div className="field">
               <label>{t("employees.bank")}</label>
@@ -602,12 +604,7 @@ export default function EmployeesPage() {
             </div>
             <div className="field">
               <label>{t("employees.effectiveFrom")}</label>
-              <input
-                data-testid="employee-pf-rate-from"
-                type="date"
-                value={form.pf_rate_from}
-                onChange={(e) => set("pf_rate_from", e.target.value)}
-              />
+              <ThaiDateInput testId="employee-pf-rate-from" value={form.pf_rate_from} onChange={(v) => set("pf_rate_from", v)} />
               <span className="hint">อัตราจะมีผลกับรอบเงินเดือนที่สิ้นสุดตั้งแต่วันนี้</span>
             </div>
           </div>

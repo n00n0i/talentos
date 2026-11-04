@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -196,21 +198,11 @@ export default function TrainingPage() {
             <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>
                 วันที่อบรมเสร็จ
-                <input
-                  data-testid="training-completed"
-                  type="date"
-                  value={form.completed_on}
-                  onChange={(e) => setForm({ ...form, completed_on: e.target.value })}
-                />
+                <ThaiDateInput testId="training-completed" value={form.completed_on} onChange={(v) => setForm({ ...form, completed_on: v })} />
               </label>
               <label>
                 วันหมดอายุใบรับรอง
-                <input
-                  data-testid="training-expires"
-                  type="date"
-                  value={form.expires_on}
-                  onChange={(e) => setForm({ ...form, expires_on: e.target.value })}
-                />
+                <ThaiDateInput testId="training-expires" value={form.expires_on} onChange={(v) => setForm({ ...form, expires_on: v })} />
               </label>
             </div>
             <button

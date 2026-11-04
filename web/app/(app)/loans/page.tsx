@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, thb, thDate, RUN_STATUS } from "@/lib/api";
 
@@ -265,14 +267,7 @@ export default function LoansPage() {
           </div>
           <div className="field">
             <label htmlFor="loan-start">วันเริ่มผ่อน</label>
-            <input
-              id="loan-start"
-              data-testid="loan-start"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              required
-            />
+            <ThaiDateInput id="loan-start" testId="loan-start" value={startDate} onChange={(v) => setStartDate(v)} required />
           </div>
           <div className="field">
             <label htmlFor="loan-note">หมายเหตุ</label>

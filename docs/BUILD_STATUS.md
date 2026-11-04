@@ -133,7 +133,9 @@ request → HR approval, bulk CSV employee import, TOTP enroll/login/disable, LI
 - Performance-page fix: `loadCycles` now uses the full cycle list for write-capable roles (`hr_admin`) and only the manager-scoped `me/performance/cycles` for pure direct-managers — a freshly created cycle no longer vanishes from an HR admin's list (was the blocker on the clean-DB run).
 
 New in this cycle (2026-11-01):
-- EN i18n layer: `lang-toggle` TH/EN switcher; 11 vitest unit tests + 1 Playwright case
+- EN i18n layer: `lang-toggle` TH/EN switcher; shell keys plus a full-page Thai→English dictionary (`web/lib/th-en.ts`) and DOM translator; 11 vitest unit tests + Playwright cases
+- Thai Buddhist date fields (`ThaiDateInput`, DD/MM/YYYY+543) across forms
+- Mobile tables render as stacked cards (header labels via `TableLabels`)
 - Performance manager workflow: manager links to employee → direct-report cycles + calibrations + goal check-ins (4 service tests + 1 E2E journey)
 - PDPA purge: `pdpa-purge` admin button + retention policy in `/settings` (6 service tests)
 - E-signature: payslip sign button on `/me/payslips` (`payslip-sign` data-testid, 4 service tests)

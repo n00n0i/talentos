@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -285,23 +287,11 @@ export default function PerformancePage() {
               </label>
               <label>
                 เริ่ม
-                <input
-                  data-testid="cycle-start"
-                  type="date"
-                  value={form.period_start}
-                  onChange={(e) => setForm({ ...form, period_start: e.target.value })}
-                  required
-                />
+                <ThaiDateInput testId="cycle-start" value={form.period_start} onChange={(v) => setForm({ ...form, period_start: v })} required />
               </label>
               <label>
                 สิ้นสุด
-                <input
-                  data-testid="cycle-end"
-                  type="date"
-                  value={form.period_end}
-                  onChange={(e) => setForm({ ...form, period_end: e.target.value })}
-                  required
-                />
+                <ThaiDateInput testId="cycle-end" value={form.period_end} onChange={(v) => setForm({ ...form, period_end: v })} required />
               </label>
             </div>
             <button className="btn btn-primary" data-testid="create-cycle" type="submit" disabled={busy}>
@@ -505,7 +495,7 @@ export default function PerformancePage() {
       {selected && canDirect && (
         <div className="card card-pad" style={{ marginTop: 12 }}>
           <h2 style={{ fontSize: 16, marginBottom: 10 }}>
-            การจัดวางระดับ (Calibration) — ลูกข่าท่ีรายงานตรง
+            การจัดวางระดับ (Calibration) — ลูกทีมที่รายงานตรง
           </h2>
           {calibrations.length === 0 ? (
             <div className="empty">ยงไม่มีกำรจัดวางระดัยในรอบนี้</div>

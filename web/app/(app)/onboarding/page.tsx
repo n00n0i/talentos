@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -197,12 +199,7 @@ export default function OnboardingPage() {
               </label>
               <label>
                 กำหนดเสร็จ
-                <input
-                  data-testid="task-due"
-                  type="date"
-                  value={form.due_date}
-                  onChange={(e) => setForm({ ...form, due_date: e.target.value })}
-                />
+                <ThaiDateInput testId="task-due" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} />
               </label>
             </div>
             <label>

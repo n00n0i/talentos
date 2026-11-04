@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -842,13 +844,7 @@ export default function RecruitmentPage() {
                     </label>
                     <label>
                       วันที่เริ่มงาน
-                      <input
-                        data-testid="offer-start"
-                        type="date"
-                        value={offerForm.start_date}
-                        onChange={(e) => setOfferForm({ ...offerForm, start_date: e.target.value })}
-                        required
-                      />
+                      <ThaiDateInput testId="offer-start" value={offerForm.start_date} onChange={(v) => setOfferForm({ ...offerForm, start_date: v })} required />
                     </label>
                   </div>
                   <label>

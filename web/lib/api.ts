@@ -45,12 +45,17 @@ export const thb = (value: string | number) =>
 export const thbShort = (value: string | number) =>
   new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(Number(value));
 
-export const thDate = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+export const thDate = (iso: string) => {
+  const lang =
+    typeof document !== "undefined" &&
+    document.cookie.split("; ").some((c) => c === "talentos_lang=en")
+      ? "en"
+      : "th";
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(
+    lang === "en" ? "en-GB" : "th-TH",
+    { day: "numeric", month: "short", year: "numeric" },
+  );
+};
 
 export const RUN_STATUS: Record<string, { label: string; tone: string }> = {
   draft: { label: "ฉบับร่าง", tone: "" },

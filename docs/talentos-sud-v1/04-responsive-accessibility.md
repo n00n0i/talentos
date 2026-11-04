@@ -1,3 +1,6 @@
+> **Superseded during closure:** the unlabeled inputs and undersized targets reported
+> below are fixed (0/0) and axe-core is integrated. See `19-accessibility-closure.md`.
+
 # SUD-04 — Responsive & Accessibility Verification
 
 **Gate:** `SUD-A4_RESPONSIVE_ACCESSIBILITY_VERIFIED` — **PARTIAL**

@@ -522,7 +522,7 @@ export default function RecruitmentPage() {
                 >
                   {Object.entries(TYPES).map(([value, label]) => (
                     <option key={value} value={value}>
-                      {label}
+                      {tr(label)}
                     </option>
                   ))}
                 </select>

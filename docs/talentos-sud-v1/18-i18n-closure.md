@@ -7,7 +7,7 @@
 ## Architecture
 
 - `web/lib/i18n-catalog.ts` — Thai catalog (`th`, `as const`) and a complete
-  `Record<TranslationKey, string>` English catalog. **1,386 keys** in 30+ namespaces
+  `Record<TranslationKey, string>` English catalog. **1,388 keys** in 30+ namespaces
   (auth, payroll, leave, attendance, employees, claims, OT, settings, users, team,
   shared/common).
 - `TranslationKey = keyof typeof th`. `useI18N().t(key)` only accepts known keys.
@@ -46,13 +46,16 @@
 - Dates, relative times, numbers and compact currency now follow the active language
   (sidebar date chip, dashboard month labels/"M vs ล้าน", relative time, session/audit
   timestamps, recruitment timestamps).
+- Three status/type dropdowns that briefly rendered raw catalog keys in the first
+  closure commit (documents, employment type, goal status) were fixed to `tr(label)`
+  before this candidate; unit tests now cover the locale formatters.
 
 ## Verification
 
 | Check | Result |
 |---|---|
-| `npx vitest run` | **50 passed** (`test/i18n.test.ts` has **14** tests) |
-| EN crawl, 30 admin routes at 1440 | **0 bad**: one `h1`, `lang=en`, 0 horizontal overflow; remaining Thai strings are business data (names, Thai labels from the API, seeded content) |
+| `npx vitest run` | **53 passed** (`test/i18n.test.ts` has **17** tests) |
+| EN crawl, 30 admin routes at 1440 | one `h1`, `lang=en`, 0 horizontal overflow on **30/30**; remaining Thai strings are business data (names, Thai labels from the API, seeded content), not UI copy |
 | EN toggle + runtime | Playwright EN test asserts `lang=en`, 6 axe scans clean, and **no React #418/hydration console error** |
 | Full isolated E2E | **68/68** (includes 4 axe/i18n tests) |
 

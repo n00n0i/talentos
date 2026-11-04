@@ -1,3 +1,6 @@
+> **Superseded during closure:** the DOM bridge and `th-en.ts` have been removed and the
+> key-based migration is complete. See `18-i18n-closure.md` for the current state.
+
 # SUD-02 — Localization Audit & Migration
 
 **Gate:** `SUD-A2_I18N_ENGINEERING_VERIFIED` — **PARTIAL**  

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { en, missingKeys, plural, th, translate } from "@/lib/i18n-dicts";
-import { formatCurrency, formatDate, formatNumber } from "@/lib/i18n-format";
+import { formatCurrency, formatDate, formatDateTime, formatNumber } from "@/lib/i18n-format";
 
 const THAI = /[\u0E00-\u0E7F]/; // ฿ (U+0E3F) is allowed as a currency symbol
 
@@ -77,5 +77,31 @@ describe("locale formatting", () => {
   it("formats numbers and currency per locale", () => {
     expect(formatNumber(1234.5, "en")).toBe("1,234.50");
     expect(formatCurrency(1234.5, "th")).toContain("1,234.50");
+  });
+});
+
+describe("dashboard and timestamp formatting", () => {
+  it("formats compact currency per locale", async () => {
+    const { setCurrentLanguage } = await import("@/lib/i18n");
+    const { compactThb } = await import("@/lib/dashboard");
+    setCurrentLanguage("en");
+    expect(compactThb(1_500_000)).toBe("฿1.50M");
+    setCurrentLanguage("th");
+    expect(compactThb(1_500_000)).toContain("ล้าน");
+  });
+
+  it("formats relative time per locale", async () => {
+    const { setCurrentLanguage } = await import("@/lib/i18n");
+    const { relativeTh } = await import("@/lib/dashboard");
+    const now = new Date("2026-11-04T12:00:00Z");
+    setCurrentLanguage("en");
+    expect(relativeTh("2026-11-04T11:56:00Z", now)).toContain("4 min");
+    setCurrentLanguage("th");
+    expect(relativeTh("2026-11-04T11:56:00Z", now)).toContain("นาที");
+  });
+
+  it("formats API timestamps per locale", () => {
+    expect(formatDateTime("2026-11-04T07:05:00Z", "en")).toContain("2026");
+    expect(formatDateTime("2026-11-04T07:05:00Z", "th")).toContain("2569");
   });
 });

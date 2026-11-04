@@ -19,8 +19,9 @@ export function translate(
 ): string {
   const value = lang === "en" ? (en[key as TranslationKey] ?? th[key as TranslationKey]) : th[key as TranslationKey];
   if (value === undefined) {
+    const first = !missing.has(key);
     missing.add(key);
-    if (process.env.NODE_ENV !== "production") {
+    if (first && process.env.NODE_ENV !== "production") {
       console.warn(`[i18n] missing key: ${key}`);
     }
     return key;

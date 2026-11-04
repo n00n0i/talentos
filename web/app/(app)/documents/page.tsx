@@ -259,7 +259,7 @@ export default function DocumentsPage() {
               >
                 {Object.entries(DOC_TYPES).map(([value, label]) => (
                   <option key={value} value={value}>
-                    {label}
+                    {tr(label)}
                   </option>
                 ))}
               </select>

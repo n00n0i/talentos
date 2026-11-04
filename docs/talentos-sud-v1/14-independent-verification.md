@@ -26,7 +26,7 @@ full E2E/clippy/build.
 - **A2 / A4** are correctly **PARTIAL**; the campaign target is **NOT ACCEPTED**.
 - A second independent pass over the corrected evidence package is required before any
   acceptance claim; this document records the first independent pass and remediation,
-  not a new PASS.
+  not a new PASS. Corrected evidence is committed at `1bc9bc2`.
 
 ## Residual blockers
 

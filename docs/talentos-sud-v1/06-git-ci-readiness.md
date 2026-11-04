@@ -4,9 +4,9 @@
 
 ## Repository state
 
-- Branch `master`; **81 commits ahead of `origin/master`** at campaign start (plus
-  uncommitted campaign changes at evidence time).
-- Untracked `web/debug-pw.mjs` preserved; not referenced by the app.
+- Branch `master`; **81 commits ahead of `origin/master`** at campaign start; the
+  campaign commit `1bc9bc2` makes it **82 ahead**. Nothing was pushed.
+- Untracked `web/debug-pw.mjs` preserved; not referenced by the app and not committed.
 - Other branches `jwks-fixes`, `ai-settings-kg` untouched.
 - No force-push, reset, cherry-pick or destructive rewrite performed.
 - Track A changes are additive; WS2 files untouched.

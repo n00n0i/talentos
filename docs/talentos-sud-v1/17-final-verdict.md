@@ -43,4 +43,6 @@ complete enough to brief design, but two Track A gates are not fully met:
 
 `evidence/logs/playwright-isolated.log`, `evidence/logs/cargo-test-workspace.log`,
 `evidence/logs/e2e-guard-tests.log`, `evidence/responsive/checks.json`,
-`evidence/responsive/a11y.json`, `evidence/screens/`, `evidence/prototype/`.
+`evidence/responsive/a11y.json`, `evidence/responsive/a11y-unique.json`,
+`evidence/responsive/en-routes.json`, `evidence/screens/`, `evidence/prototype/`.
+Evidence commit: `1bc9bc2`.

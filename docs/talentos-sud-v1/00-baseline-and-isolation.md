@@ -10,6 +10,7 @@
 |---|---|
 | Branch | `master` |
 | HEAD at campaign start | `c298055` (Thai month/time + i18n/responsive polish) |
+| Campaign evidence commit | `1bc9bc2` (code + evidence) |
 | Ancestry | `c298055` was current HEAD, not merely an ancestor |
 | Ahead of `origin/master` | 81 commits (pre-existing, intentionally unpushed) |
 | Other branch | `jwks-fixes` @ `541aa0b`; `ai-settings-kg` @ `9010dea` |

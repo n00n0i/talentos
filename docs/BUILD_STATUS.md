@@ -8,8 +8,8 @@ Last verified: 2026-11-01 on Oracle Linux 9.8 (glibc 2.34), Rust 1.99.1, Postgre
 |---|---|---|
 | Format | `cargo fmt --all -- --check` | pass |
 | Lint | `cargo clippy --workspace --all-targets -- -D warnings` | pass (0 warnings) |
-| Tests | `cargo test --workspace` | **498 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
-| Migrations | `sqlx migrate run` on a fresh DB | 69 files apply cleanly (including `20261214000001_bank_templates.sql`, `20261213000001_document_signatures.sql`, `20261212000001_pdpa_retention.sql`, `20261211000001_performance_manager.sql`, `20261210000001_candidate_pii.sql`, `20261101000003_tenant_oidc_config.sql`) |
+| Tests | `cargo test --workspace` | **534 passed**, 0 failed, 1 ignored (load test; real PostgreSQL, real WASM guest, Chromium PDF, RBAC) |
+| Migrations | `sqlx migrate run` on a fresh DB | 72 files apply cleanly (including `20261217000001_integration_control_plane.sql`, `20261216000001_ai_providers.sql`, `20261215000001_ai_kg.sql`, `20261214000001_bank_templates.sql`, `20261213000001_document_signatures.sql`, `20261212000001_pdpa_retention.sql`, `20261211000001_performance_manager.sql`, `20261210000001_candidate_pii.sql`, `20261101000003_tenant_oidc_config.sql`) |
 
 Unit tests by crate: kernel 5, authz 35 (TOTP RFC 6238 vectors and rejection windows), attendance 10 (shift derivation,
 overnight, holiday/weekend OT, timezone), compliance 6, payroll 25, rag 7,
@@ -34,7 +34,7 @@ purge, stats), 2FA recovery/session units 5 (format/hash/normalize), approval ru
 tenant scoping), privacy 3 (consent idempotency/version, export scope/decrypt/audit,
 account-only), documents 4 (expiry/file lifecycle/tenant+self isolation), onboarding 3
 (standard/dates, completion/duplicates, self/RLS), recruitment 2 (pipeline, validation/isolation), training 2 (expiry/validation, self/RLS), performance 2 (start/submit/close/acknowledge, isolation), goals 2 (CRUD/filter, validation/isolation).
-Total: 498 passed, 1 ignored (`load.rs`).
+Total: 534 passed, 1 ignored (`load.rs`).
 
 New in this cycle (handoff-execution branch, 2026-11-01):
 - gateway business metrics 8 tests (outbox backlog, payroll run status, stuck-run age)
@@ -106,7 +106,7 @@ volume): migrate → gateway → web → nginx with the TLS overlay. HTTPS `/hea
 `talentos-gateway provision` created the first tenant through the compose
 service. This task did not re-run the compose/TLS verification; the new leave
 self-service, notifications, and TOTP were verified via API/DB tests and the
-53/53 Playwright E2E suite.
+63/63 Playwright E2E suite.
 
 Admin UI: `/settings` (organization, payroll/OT policy, system status with RLS +
 PII warnings, TOTP 2FA enrollment) and `/users` (invite, roles, deactivate,
@@ -119,7 +119,10 @@ classified holiday > weekend > weekday automatically. HTTPS is a compose overlay
 (`docker-compose.tls.yml`). UI restyled to the approved reference: rounded app
 shell, light sidebar, serif display headings, black pill actions, lavender/lime
 cards, self-hosted Inter/Instrument Serif/Noto Sans Thai, and a mobile layout.
-Browser E2E (`web/e2e`, Playwright) passes 56/56 locally and runs in CI: invite
+Browser E2E (`web/e2e`, Playwright) passes 63/63 locally and runs in CI: every
+permitted route is crawled at desktop and mobile widths for each role (one h1, no
+error banner, active nav, no console errors/overflow), mobile drawer + menu search,
+i18n TH/EN (html lang), invite
 acceptance → login, settings + audit, employee → attendance → payroll → approval,
 holiday OT, user invite, password reset, self-service payslips, employee clock
 punch with GPS, HR shift creation and day correction/approval, and employee leave

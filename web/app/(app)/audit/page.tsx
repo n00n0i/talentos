@@ -56,7 +56,7 @@ export default function AuditPage() {
                 <th>เวลา</th>
                 <th>ผู้กระทำ</th>
                 <th>การกระทำ</th>
-                <th>resource</th>
+                <th>ทรัพยากร</th>
                 <th>รายละเอียด</th>
               </tr>
             </thead>

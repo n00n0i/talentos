@@ -31,6 +31,10 @@ export function useI18N() {
     return () => window.removeEventListener(LANG_EVENT, sync);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
   const setLang = useCallback((next: Lang) => {
     setLangCookie(next);
     setLangState(next);

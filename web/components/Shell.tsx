@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
 import { gw, Me } from "@/lib/api";
 import { useI18N } from "@/lib/i18n";
-import { visibleNav } from "@/lib/nav";
+import { activeHref, visibleNav } from "@/lib/nav";
 
 /** Case- and diacritic-insensitive fold: "Käse" → "kase", Thai marks stripped too. */
 function fold(value: string) {
@@ -117,6 +117,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
         return label === key ? r : label; // unknown role → show the raw role
       })
       .join(" · ") || "";
+  const active = activeHref(pathname);
   const needle = fold(q.trim());
   const groups = visibleNav(me)
     .map((g) => ({
@@ -142,7 +143,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
             <div className="side-group" key={g.id}>
               {g.labelKey && <span className="side-group-label">{t(g.labelKey)}</span>}
               {g.items.map((i) => (
-                <Link key={i.href} href={i.href} className={pathname === i.href ? "active" : undefined}>
+                <Link key={i.href} href={i.href} className={i.href === active ? "active" : undefined}>
                   <span className="ico">
                     <Icon name={i.icon} size={10} />
                   </span>

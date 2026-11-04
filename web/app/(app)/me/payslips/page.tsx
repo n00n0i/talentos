@@ -45,7 +45,7 @@ export default function MyPayslipsPage() {
   }
 
   async function signPayslip(id: string) {
-    const name = window.prompt("กรอกชื่อบคุญเพื่อยืนยันลายมือชื่อ");
+    const name = window.prompt("กรอกชื่อของคุณเพื่อยืนยันลายมือชื่อ");
     if (!name || !name.trim()) return;
     setBusy(true);
     setError("");

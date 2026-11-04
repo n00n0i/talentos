@@ -339,7 +339,7 @@ export default function RecruitmentPage() {
   }
 
   async function signOffer(id: string) {
-    const name = window.prompt("กรอกชื่อบผ้สมครเพื่ือลงนามในขอเสนอ");
+    const name = window.prompt("กรอกชื่อผู้สมัครเพื่อลงนามในข้อเสนอ");
     if (!name || !name.trim()) return;
     setBusy(true);
     setError("");
@@ -349,7 +349,7 @@ export default function RecruitmentPage() {
         body: JSON.stringify({ typed_name: name.trim() }),
       });
       if (offerFor) await showOffers(offerFor);
-      setNotice("ลายมือชื่่อแล่ว");
+      setNotice("บันทึกลายมือชื่อแล้ว");
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -902,7 +902,7 @@ export default function RecruitmentPage() {
                         onClick={() => signOffer(offer.id)}
                         style={{ marginLeft: 6 }}
                       >
-                        ลายมือชื่่อ
+                        ลายมือชื่อ
                       </button>
                       {canWrite && (
                         <button

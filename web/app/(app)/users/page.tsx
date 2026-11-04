@@ -268,7 +268,8 @@ export default function UsersPage() {
                     </span>
                   </td>
                   <td>{u.last_login_at ? new Date(u.last_login_at).toLocaleString("th-TH") : "—"}</td>
-                  <td className="num" style={{ whiteSpace: "nowrap" }}>
+                  <td className="num" style={{ whiteSpace: "normal" }}>
+                    <div className="row-actions">
                     <select
                       aria-label={`เพิ่มบทบาทให้ ${u.email}`}
                       defaultValue=""
@@ -293,7 +294,7 @@ export default function UsersPage() {
                       onChange={(e) => setLines({ ...lines, [u.id]: e.target.value })}
                       maxLength={64}
                       className="compact-select"
-                      style={{ width: 270 }}
+                      style={{ width: 200 }}
                     />{" "}
                     <button
                       className="btn btn-sm"
@@ -325,6 +326,7 @@ export default function UsersPage() {
                         </button>
                       </>
                     )}
+                    </div>
                   </td>
                 </tr>
               ))}

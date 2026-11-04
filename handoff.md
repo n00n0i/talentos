@@ -1,10 +1,12 @@
 # TalentOS — Handoff
 
-อัปเดต: 2026-11-03
+อัปเดต: 2026-11-04 (QA pass)
 Repo: `/home/opc/content-creator/talentos`
-Branch: `master` @ `a456ccf` (ยังไม่ push — นำ `origin/master` อยู่ 63 commits)
-Migrations: 71 ไฟล์
-สถานะทดสอบล่าสุด: **Playwright 61/61 passed** (clean DB) · `cargo test -p talentos-gateway -p talentos-hr-runner` ผ่าน · `tsc` 0 · `vitest` 41/41 · `next build` ผ่าน
+Branch: `master` (QA pass บน `2a2382b`)
+Migrations: 72 ไฟล์
+สถานะทดสอบล่าสุด: **Playwright 63/63 passed** (clean DB, desktop+mobile route crawl) · `cargo test --workspace` **534 passed / 1 ignored** · `tsc` 0 · `vitest` 41/41 · `next build` ผ่าน
+
+QA 2026-11-04: เพิ่ม route/UX crawl สำหรับทุก role, แก้ active nav ของหน้าย่อย, table overflow, ฟอร์มมือถือ, คำผิดภาษาไทย (2FA/OIDC/ลายมือชื่อ), `html lang` ตอนสลับ EN และเพิ่มเทสต์ mobile drawer/menu search
 
 ---
 
@@ -194,6 +196,7 @@ curl -s -X POST -H "content-type: application/json" \
 6. **KG retrieval เป็น lexical** — ภาษาไทยที่ไม่มีเว้นวรรคจะ match ได้เฉพาะคำที่ตรง
 7. **Gateway binary เป็น debug build** (`target/debug`) — ควรเปลี่ยนเป็น release ก่อนใช้งานจริง
 8. **`PII_ENCRYPTION_KEY`** ถูกใส่ใน `/etc/talentos-gateway.env` แล้ว (ไม่กี่ชั่วโมงก่อน) — ข้อมูล PII ที่เข้ารหัสด้วยคีย์เก่าจะถอดไม่ได้ (tenant ถูกล้างไปแล้ว)
+9. **EN toggle ยังแปลไม่ครบ** — nav และบางหน้า (payroll/settings/AI) เป็น EN แต่หน้าอื่นยังเป็นไทย; ควรแปลให้ครบหรือทำ label “EN (beta)” ก่อนใช้งานจริง
 
 ---
 

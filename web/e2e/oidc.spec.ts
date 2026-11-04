@@ -27,10 +27,10 @@ test("OIDC settings persist and show masked secret on reload", async ({ page }) 
   await page.getByTestId("oidc-enabled").check();
 
   await page.getByTestId("oidc-save").click();
-  await expect(page.getByText("บันทึกตังคาส SSO / OIDC แลว")).toBeVisible();
+  await expect(page.getByText("บันทึกตั้งค่า SSO / OIDC แล้ว")).toBeVisible();
 
   // The status badge should show "configured".
-  await expect(page.getByTestId("oidc-status")).toContainText("ตังคาสแลว");
+  await expect(page.getByTestId("oidc-status")).toContainText("ตั้งค่าแล้ว");
 
   // Reload and verify the settings persist.
   await page.reload();
@@ -44,5 +44,5 @@ test("OIDC settings persist and show masked secret on reload", async ({ page }) 
   expect(secretVal).not.toContain(clientSecret);
 
   // The status badge should still show "configured".
-  await expect(page.getByTestId("oidc-status")).toContainText("ตังคาสแลว");
+  await expect(page.getByTestId("oidc-status")).toContainText("ตั้งค่าแล้ว");
 });

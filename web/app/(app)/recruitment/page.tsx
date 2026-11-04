@@ -1,6 +1,7 @@
 "use client";
 
 import ThaiDateInput from "@/components/ThaiDateInput";
+import { ThaiDateTimeInput } from "@/components/ThaiDateTimeInput";
 
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
@@ -928,12 +929,11 @@ export default function RecruitmentPage() {
                   <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr 2fr", gap: 12 }}>
                     <label>
                       วันเวลา
-                      <input
-                        data-testid="interview-when"
-                        type="datetime-local"
+                      <ThaiDateTimeInput
+                        testId="interview-when"
                         value={interviewForm.scheduled_at}
-                        onChange={(e) =>
-                          setInterviewForm({ ...interviewForm, scheduled_at: e.target.value })
+                        onChange={(v) =>
+                          setInterviewForm({ ...interviewForm, scheduled_at: v })
                         }
                         required
                       />

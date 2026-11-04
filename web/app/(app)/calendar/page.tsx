@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, thDate } from "@/lib/api";
+import { ThaiMonthInput } from "@/components/ThaiDateTimeInput";
 
 type Holiday = { name: string };
 type Leave = {
@@ -62,12 +63,11 @@ export default function CalendarPage() {
           <p className="page-sub">วันหยุด การลา และ OT ของทีมในเดือนเดียว</p>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <input
-            data-testid="calendar-month"
-            type="month"
-            aria-label="เดือน"
+          <ThaiMonthInput
+            testId="calendar-month"
+            ariaLabel="เดือน"
             value={month}
-            onChange={(e) => e.target.value && setMonth(e.target.value)}
+            onChange={setMonth}
           />
         </div>
       </div>

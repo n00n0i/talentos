@@ -1,6 +1,7 @@
 "use client";
 
 import ThaiDateInput from "@/components/ThaiDateInput";
+import { ThaiDateTimeInput, ThaiMonthInput } from "@/components/ThaiDateTimeInput";
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -164,12 +165,11 @@ export default function AttendancePage() {
           <p className="page-sub">อนุมัติวันทำงานที่คำนวณจากการลงเวลา — เฉพาะวันที่อนุมัติแล้วเท่านั้นที่เข้ารอบเงินเดือน</p>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <input
-            data-testid="month-picker"
-            type="month"
-            aria-label="เดือน"
+          <ThaiMonthInput
+            testId="month-picker"
+            ariaLabel="เดือน"
             value={month}
-            onChange={(e) => e.target.value && setMonth(e.target.value)}
+            onChange={setMonth}
           />
           <select data-testid="day-filter" aria-label="ตัวกรอง" value={filter} onChange={(e) => setFilter(e.target.value)}>
             {FILTERS.map((f) => (
@@ -236,8 +236,8 @@ export default function AttendancePage() {
                       <td className="num">
                         {d.status === "approved" ? null : editing === d.id ? (
                           <div style={{ display: "grid", gap: 6, justifyItems: "end" }}>
-                            <input data-testid="correct-in" type="datetime-local" value={inAt} onChange={(e) => setInAt(e.target.value)} />
-                            <input data-testid="correct-out" type="datetime-local" value={outAt} onChange={(e) => setOutAt(e.target.value)} />
+                            <ThaiDateTimeInput testId="correct-in" value={inAt} onChange={setInAt} />
+                            <ThaiDateTimeInput testId="correct-out" value={outAt} onChange={setOutAt} />
                             <span className="hint">เวลาไทย (UTC+7)</span>
                             <span style={{ display: "flex", gap: 6 }}>
                               <button className="btn btn-sm" onClick={() => setEditing(null)} disabled={busy}>

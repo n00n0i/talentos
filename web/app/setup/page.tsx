@@ -1,10 +1,13 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Icon from "@/components/Icon";
 
 export default function SetupPage() {
+  const { t: tr } = useI18N();
   const router = useRouter();
   const [org, setOrg] = useState("");
   const [slug, setSlug] = useState("");
@@ -20,7 +23,7 @@ export default function SetupPage() {
     e.preventDefault();
     setError("");
     if (password !== confirm) {
-      setError("รหัสผ่านทั้งสองช่องไม่ตรงกัน");
+      setError(tr("auth.setup.the-two-password-fields-do-not"));
       return;
     }
     setBusy(true);
@@ -38,10 +41,10 @@ export default function SetupPage() {
         }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "ตั้งค่าระบบไม่สำเร็จ");
+      if (!res.ok) throw new Error((body.error === "gateway_unreachable" ? tr("common.serverUnreachable") : body.message) || tr("auth.setup.system-setup-failed"));
       router.replace("/login");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "ตั้งค่าระบบไม่สำเร็จ");
+      setError(err instanceof Error ? err.message : tr("auth.setup.system-setup-failed"));
     } finally {
       setBusy(false);
     }
@@ -53,42 +56,42 @@ export default function SetupPage() {
         <div className="login-brand">
           <span className="brand-mark"><Icon name="clover" size={20} /></span> talentos
         </div>
-        <h1 style={{ fontSize: 20, marginBottom: 4 }}>ติดตั้งระบบครั้งแรก</h1>
+        <h1 style={{ fontSize: 20, marginBottom: 4 }}>{tr("auth.setup.install-the-system-for-the-first")}</h1>
         <p className="hint" style={{ marginBottom: 16 }}>
-          สร้างองค์กร สาขา และผู้ดูแล HR คนแรก
+          {tr("auth.setup.create-your-first-organization-branch-and")}
         </p>
         <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
           <div className="field">
-            <label htmlFor="setup-org">ชื่อองค์กร</label>
+            <label htmlFor="setup-org">{tr("auth.setup.organization-name")}</label>
             <input id="setup-org" data-testid="setup-org" value={org} onChange={(e) => setOrg(e.target.value)} required />
           </div>
           <div className="field">
-            <label htmlFor="setup-slug">รหัสองค์กร (a-z, 0-9, -)</label>
+            <label htmlFor="setup-slug">{tr("auth.setup.organization-code-a-z-0-9")}</label>
             <input id="setup-slug" data-testid="setup-slug" value={slug} onChange={(e) => setSlug(e.target.value)} required />
           </div>
           <div className="field">
-            <label htmlFor="setup-entity">ชื่อสาขา/นิติบุคคล</label>
+            <label htmlFor="setup-entity">{tr("auth.setup.branch-juristic-person-name")}</label>
             <input id="setup-entity" data-testid="setup-entity" value={entity} onChange={(e) => setEntity(e.target.value)} required />
           </div>
           <div className="field">
-            <label htmlFor="setup-email">อีเมลผู้ดูแล</label>
+            <label htmlFor="setup-email">{tr("auth.setup.administrator-email")}</label>
             <input id="setup-email" data-testid="setup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="field">
-            <label htmlFor="setup-password">รหัสผ่าน (12+ ตัวอักษร)</label>
+            <label htmlFor="setup-password">{tr("auth.setup.password-12-characters")}</label>
             <input id="setup-password" data-testid="setup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           </div>
           <div className="field">
-            <label htmlFor="setup-token">Setup token (เฉพาะติดตั้งเพิ่ม/ทดสอบ)</label>
+            <label htmlFor="setup-token">{tr("auth.setup.setup-token-only-for-additional-installation")}</label>
             <input id="setup-token" data-testid="setup-token" value={setupToken} onChange={(e) => setSetupToken(e.target.value)} />
           </div>
           <div className="field">
-            <label htmlFor="setup-confirm">ยืนยันรหัสผ่าน</label>
+            <label htmlFor="setup-confirm">{tr("auth.setup.confirm-password")}</label>
             <input id="setup-confirm" data-testid="setup-confirm" type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
           </div>
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error" role="alert" data-testid="setup-error">{error}</p>}
           <button className="btn btn-primary" data-testid="setup-submit" type="submit" disabled={busy}>
-            {busy ? "กำลังติดตั้ง…" : "สร้างองค์กร"}
+            {busy ? tr("auth.setup.installing") : tr("auth.setup.create-an-organization")}
           </button>
         </form>
       </div>

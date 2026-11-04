@@ -5,24 +5,31 @@
 
 pub mod approval_rules;
 pub mod attendance;
+pub mod bank_templates;
 pub mod calendar;
 pub mod claims;
 pub mod delegations;
 pub mod documents;
 pub mod escalation;
+pub mod esign;
 pub mod forms;
 pub mod goals;
+pub mod integration;
+pub mod kg;
+pub mod kg_sync;
 pub mod leave;
 pub mod loans;
 pub mod notify;
 pub mod onboarding;
 pub mod ot;
+pub mod pdpa;
 pub mod performance;
 pub mod pf;
 pub mod privacy;
 pub mod recruitment;
 pub mod reports;
 pub mod settlement;
+pub mod team;
 pub mod training;
 
 pub use approval_rules::{
@@ -31,6 +38,10 @@ pub use approval_rules::{
 pub use attendance::{
     active_shift, assign_shift, create_shift, punch, punch_at, set_geofence, AttendanceError,
     DayView, PunchInput, ShiftInput, ShiftView,
+};
+pub use bank_templates::{
+    create_bank_template, get_bank_template, list_bank_templates, BankTemplate, BankTemplateError,
+    BankTemplateInput, PAYOUT_SOURCES,
 };
 pub use calendar::{
     calendar, CalendarDay, CalendarError, CalendarHoliday, CalendarLeave, CalendarOt,
@@ -46,11 +57,19 @@ pub use delegations::{
     DelegateCandidate, DelegationError, DelegationInput, DelegationView,
 };
 pub use escalation::escalate_overdue;
+pub use esign::{
+    claim_employee_of_payslip, external_provider, sign_document, DocumentType, EsignError,
+    EsignResult, SignatureView,
+};
 pub use forms::{
     export_bank_payout_csv, export_pnd1_csv, export_pnd1a_csv, export_sso1_10_csv,
     load_active_template, render_50tawi, save_template, validate, FormColumn, FormConfig,
     FormError, FormField, FormTemplate, HeaderField, ALLOWED_SOURCES, FORM_TYPE_50TAWI,
     FORM_TYPE_BANK_PAYOUT, FORM_TYPE_PND1, FORM_TYPE_PND1A, FORM_TYPE_SSO1_10,
+};
+pub use goals::{
+    add_goal_check_in, list_goal_check_ins, list_goals_for_manager, CheckInError, CheckInView,
+    GoalError, GoalInput, GoalView,
 };
 pub use leave::{
     cancel_request, count_leave_days, create_request, decide_request, employee_of_user,
@@ -66,6 +85,14 @@ pub use ot::{
     decide_request as decide_ot_request, list_requests as list_ot_requests,
     pending_approvals as pending_ot_approvals, tenant_requests as ot_tenant_requests,
     OtDecideOutcome, OtError, OtInput, OtRequestView, PendingOt,
+};
+pub use pdpa::{
+    get_policy, purge_employee_pii, run_retention_purge, PdpaError, PdpaPolicy, PurgeResult,
+    DEFAULT_OPS_RETENTION_MONTHS, DEFAULT_PAYROLL_RETENTION_YEARS,
+};
+pub use performance::{
+    list_calibrations, list_cycles_for_manager, list_direct_reports, set_employee_manager,
+    upsert_calibration, CalibrationView, DirectReportView,
 };
 pub use pf::{
     build_remittance_payload, list_rates, rate_for, upsert_rate, PfError, PfRate,

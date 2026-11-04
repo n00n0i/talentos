@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import { useEffect, useState } from "react";
 import { gw, handleApiError, RUN_STATUS, thb, thDate } from "@/lib/api";
 
@@ -14,6 +16,7 @@ type SelfPayslip = {
 };
 
 export default function MyPayslipsPage() {
+  const { t: tr } = useI18N();
   const [linked, setLinked] = useState(true);
   const [rows, setRows] = useState<SelfPayslip[] | null>(null);
   const [error, setError] = useState("");
@@ -44,51 +47,69 @@ export default function MyPayslipsPage() {
     }
   }
 
+  async function signPayslip(id: string) {
+    const name = window.prompt(tr("mePayslips.enter-your-name-to-verify-signature"));
+    if (!name || !name.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      await gw(`api/v1/me/payslips/${id}/sign`, {
+        method: "POST",
+        body: JSON.stringify({ typed_name: name.trim() }),
+      });
+      await load();
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>สลิปของฉัน</h1>
-          <p className="page-sub">สลิปเงินเดือนที่ออกให้คุณแล้ว</p>
+          <h1>{tr("mePayslips.my-payslips")}</h1>
+          <p className="page-sub">{tr("mePayslips.salary-slip-has-been-issued-to")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       <div className="card">
         {rows === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("mePayslips.loading")}</div>
         ) : !linked ? (
           <div className="empty">
-            ยังไม่ได้ผูกบัญชีนี้กับข้อมูลพนักงาน — ติดต่อ HR เพื่อเชื่อมบัญชี
+            {tr("mePayslips.this-account-has-not-been-linked")}
           </div>
         ) : rows.length === 0 ? (
-          <div className="empty">ยังไม่มีสลิปเงินเดือน</div>
+          <div className="empty">{tr("mePayslips.don-t-have-a-pay-slip")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>งวด</th>
-                <th>สถานะ</th>
-                <th className="num">ยอดรวม</th>
-                <th className="num">สุทธิ</th>
-                <th>สลิป</th>
-                <th>การรับสลิป</th>
+                <th scope="col">{tr("mePayslips.period")}</th>
+                <th scope="col">{tr("mePayslips.status")}</th>
+                <th scope="col" className="num">{tr("mePayslips.total")}</th>
+                <th scope="col" className="num">{tr("mePayslips.net")}</th>
+                <th scope="col">{tr("mePayslips.slip")}</th>
+                <th scope="col">{tr("mePayslips.payslip-acknowledgement")}</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((p) => {
-                const status = RUN_STATUS[p.status] ?? { label: p.status, tone: "" };
+                const status = RUN_STATUS[p.status];
                 return (
                 <tr key={p.id}>
                   <td>
                     {thDate(p.period_start)} – {thDate(p.period_end)}
                   </td>
                   <td>
-                    <span className={`badge ${status.tone}`}>{status.label}</span>
+                    <span className={`badge ${status?.tone ?? ""}`}>{status ? tr(status.labelKey) : p.status}</span>
                   </td>
-                  <td className="num">฿{thb(p.gross)}</td>
-                  <td className="num">฿{thb(p.net)}</td>
+                  <td className="num">{tr("mePayslips.text")}{thb(p.gross)}</td>
+                  <td className="num">{tr("mePayslips.text")}{thb(p.net)}</td>
                   <td>
                     <a
                       className="badge accent"
@@ -105,12 +126,12 @@ export default function MyPayslipsPage() {
                       target="_blank"
                       rel="noreferrer"
                     >
-                      50 ทวิ
+                      {tr("mePayslips.50-tawi")}
                     </a>
                   </td>
                   <td data-testid="payslip-ack-status">
                     {p.acknowledged_at ? (
-                      <span className="badge success">ยืนยันแล้ว</span>
+                      <span className="badge success">{tr("mePayslips.confirmed")}</span>
                     ) : (
                       <button
                         className="btn btn-sm"
@@ -118,9 +139,18 @@ export default function MyPayslipsPage() {
                         disabled={busy}
                         onClick={() => acknowledge(p.id)}
                       >
-                        ยืนยันรับสลิปแล้ว
+                        {tr("mePayslips.confirmed-receipt-of-slip")}
                       </button>
                     )}
+                    <button
+                      className="btn btn-sm"
+                      data-testid="payslip-sign"
+                      disabled={busy}
+                      style={{ marginLeft: 6 }}
+                      onClick={() => signPayslip(p.id)}
+                    >
+                      {tr("mePayslips.signature")}
+                    </button>
                   </td>
                 </tr>
                 );

@@ -29,6 +29,12 @@ pub enum PerformanceError {
     CycleNotActive,
     #[error("review has not been submitted yet")]
     ReviewNotSubmitted,
+    #[error("caller is not the direct manager of this employee")]
+    NotManager,
+    #[error("employee must not be their own manager")]
+    SelfAssignment,
+    #[error("manager must belong to this tenant")]
+    ManagerNotFound,
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
 }
@@ -434,4 +440,315 @@ pub async fn acknowledge_review(
     let view = map_review(&row)?;
     tx.commit().await?;
     Ok(view)
+}
+
+/// Reporting line: assign or clear `manager_id` on an employee.
+pub async fn set_employee_manager(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    employee_id: Uuid,
+    manager_id: Option<Uuid>,
+) -> Result<(), PerformanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let employee: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM employees WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.0)
+            .bind(employee_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if employee.is_none() {
+        return Err(PerformanceError::ReviewNotFound);
+    }
+    if manager_id.is_some_and(|m| m == employee_id) {
+        return Err(PerformanceError::SelfAssignment);
+    }
+    if let Some(manager_id) = manager_id {
+        let manager: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM employees WHERE tenant_id = $1 AND id = $2")
+                .bind(tenant_id.0)
+                .bind(manager_id)
+                .fetch_optional(&mut *tx)
+                .await?;
+        if manager.is_none() {
+            return Err(PerformanceError::ManagerNotFound);
+        }
+    }
+    sqlx::query(
+        "UPDATE employees SET manager_id = $3, updated_at = now()
+           WHERE tenant_id = $1 AND id = $2",
+    )
+    .bind(tenant_id.0)
+    .bind(employee_id)
+    .bind(manager_id)
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'employee.manager_set', 'employee', $3, $4)"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id.to_string())
+    .bind(employee_id.to_string())
+    .bind(serde_json::json!({ "manager_id": manager_id }))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+pub struct DirectReportView {
+    pub id: Uuid,
+    pub employee_code: String,
+    pub employee_name: String,
+}
+
+/// Employees whose `manager_id` points at the caller's employee record.
+pub async fn list_direct_reports(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+) -> Result<Vec<DirectReportView>, PerformanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let rows = sqlx::query(
+        r#"SELECT e2.id, e2.employee_code, e2.first_name_th, e2.last_name_th
+             FROM employees e1
+             JOIN employees e2 ON e2.manager_id = e1.id AND e2.tenant_id = e1.tenant_id
+            WHERE e1.tenant_id = $1 AND e1.user_id = $2
+            ORDER BY e2.employee_code"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| {
+            Ok(DirectReportView {
+                id: row.try_get("id")?,
+                employee_code: row.try_get("employee_code")?,
+                employee_name: format!(
+                    "{} {}",
+                    row.try_get::<String, _>("first_name_th")?,
+                    row.try_get::<String, _>("last_name_th")?
+                ),
+            })
+        })
+        .collect()
+}
+
+/// Cycles that hold at least one review for a direct report of the caller.
+pub async fn list_cycles_for_manager(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+) -> Result<Vec<CycleView>, PerformanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let rows = sqlx::query(
+        r#"SELECT c.id, c.name, c.period_start, c.period_end, c.status, c.created_at,
+                  COUNT(r.id) AS review_count,
+                  COUNT(r.id) FILTER (WHERE r.status = 'submitted') AS submitted_count
+             FROM performance_cycles c
+             JOIN performance_reviews r ON r.cycle_id = c.id AND r.tenant_id = c.tenant_id
+             JOIN employees e1 ON e1.tenant_id = c.tenant_id AND e1.user_id = $2
+             JOIN employees e2 ON e2.id = r.employee_id
+                                AND e2.tenant_id = c.tenant_id
+                                AND e2.manager_id = e1.id
+            WHERE c.tenant_id = $1
+            GROUP BY c.id
+            ORDER BY (c.status = 'active') DESC, c.created_at DESC"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| map_cycle(row).map_err(PerformanceError::from))
+        .collect()
+}
+
+#[derive(Debug, Serialize)]
+pub struct CalibrationView {
+    pub id: Uuid,
+    pub cycle_id: Uuid,
+    pub employee_id: Uuid,
+    pub employee_code: String,
+    pub employee_name: String,
+    pub calibrated_rating: i32,
+    pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+fn map_calibration(row: &sqlx::postgres::PgRow) -> Result<CalibrationView, sqlx::Error> {
+    Ok(CalibrationView {
+        id: row.try_get("id")?,
+        cycle_id: row.try_get("cycle_id")?,
+        employee_id: row.try_get("employee_id")?,
+        employee_code: row.try_get("employee_code")?,
+        employee_name: format!(
+            "{} {}",
+            row.try_get::<String, _>("first_name_th")?,
+            row.try_get::<String, _>("last_name_th")?
+        ),
+        calibrated_rating: row.try_get("calibrated_rating")?,
+        notes: row.try_get("notes")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+const CALIBRATION_SELECT: &str = r#"SELECT b.id, b.cycle_id, b.employee_id, e.employee_code,
+               e.first_name_th, e.last_name_th, b.calibrated_rating, b.notes,
+               b.created_at, b.updated_at
+          FROM performance_calibrations b
+          JOIN employees e ON e.id = b.employee_id AND e.tenant_id = b.tenant_id
+         WHERE b.tenant_id = $1"#;
+
+/// Calibrations of a cycle. Callers with an employee record are scoped to
+/// their own direct reports; callers without one (HR) see the whole cycle.
+pub async fn list_calibrations(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    cycle_id: Uuid,
+) -> Result<Vec<CalibrationView>, PerformanceError> {
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM performance_cycles WHERE tenant_id = $1 AND id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(cycle_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !exists {
+        return Err(PerformanceError::CycleNotFound);
+    }
+    let is_manager: bool = sqlx::query_scalar(
+        "SELECT EXISTS (SELECT 1 FROM employees WHERE tenant_id = $1 AND user_id = $2)",
+    )
+    .bind(tenant_id.0)
+    .bind(user_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    let sql = if is_manager {
+        format!(
+            "{CALIBRATION_SELECT}
+              AND b.cycle_id = $2
+              AND b.employee_id IN (
+                    SELECT e2.id FROM employees e1
+                    JOIN employees e2 ON e2.manager_id = e1.id AND e2.tenant_id = e1.tenant_id
+                   WHERE e1.tenant_id = $1 AND e1.user_id = $3)"
+        )
+    } else {
+        format!("{CALIBRATION_SELECT} AND b.cycle_id = $2")
+    };
+    let mut builder = sqlx::query(&sql).bind(tenant_id.0);
+    if is_manager {
+        builder = builder.bind(cycle_id).bind(user_id);
+    } else {
+        builder = builder.bind(cycle_id);
+    }
+    let rows = builder.fetch_all(&mut *tx).await?;
+    tx.commit().await?;
+    rows.iter()
+        .map(|row| map_calibration(row).map_err(PerformanceError::from))
+        .collect()
+}
+
+/// Insert or override the calibration of `employee_id` in `cycle_id`.
+/// Only the employee's direct manager (the caller's own employee record) may.
+pub async fn upsert_calibration(
+    pool: &TenantPool,
+    tenant_id: TenantId,
+    user_id: Uuid,
+    cycle_id: Uuid,
+    employee_id: Uuid,
+    calibrated_rating: i32,
+    notes: Option<&str>,
+) -> Result<CalibrationView, PerformanceError> {
+    if !(1..=5).contains(&calibrated_rating) {
+        return Err(PerformanceError::InvalidRating);
+    }
+    let notes = notes.map(str::trim).filter(|v| !v.is_empty());
+    if notes.is_some_and(|v| v.chars().count() > 2000) {
+        return Err(PerformanceError::InvalidText);
+    }
+
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let caller: Uuid =
+        sqlx::query_scalar("SELECT id FROM employees WHERE tenant_id = $1 AND user_id = $2")
+            .bind(tenant_id.0)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(PerformanceError::NotManager)?;
+    let allowed: Option<Uuid> =
+        sqlx::query_scalar("SELECT manager_id FROM employees WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.0)
+            .bind(employee_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if allowed != Some(caller) {
+        return Err(PerformanceError::NotManager);
+    }
+    let cycle: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM performance_cycles WHERE tenant_id = $1 AND id = $2")
+            .bind(tenant_id.0)
+            .bind(cycle_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+    if cycle.is_none() {
+        return Err(PerformanceError::CycleNotFound);
+    }
+    let row = sqlx::query(
+        r#"INSERT INTO performance_calibrations
+             (tenant_id, cycle_id, employee_id, manager_id, calibrated_rating, notes)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (tenant_id, cycle_id, employee_id) DO UPDATE
+                SET calibrated_rating = EXCLUDED.calibrated_rating,
+                    notes = EXCLUDED.notes,
+                    updated_at = now()
+            RETURNING id"#,
+    )
+    .bind(tenant_id.0)
+    .bind(cycle_id)
+    .bind(employee_id)
+    .bind(caller)
+    .bind(calibrated_rating)
+    .bind(notes)
+    .fetch_one(&mut *tx)
+    .await?;
+    let calibration_id: Uuid = row.try_get("id")?;
+    sqlx::query(
+        r#"INSERT INTO audit_log
+             (tenant_id, actor_type, actor_id, action, resource_type, resource_id, after_state)
+           VALUES ($1, 'user', $2, 'performance.calibration', 'performance_calibration', $3, $4)"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id.to_string())
+    .bind(calibration_id.to_string())
+    .bind(serde_json::json!({
+        "cycle_id": cycle_id,
+        "employee_id": employee_id,
+        "calibrated_rating": calibrated_rating,
+        "notes": notes,
+    }))
+    .execute(&mut *tx)
+    .await?;
+    tx.commit().await?;
+
+    // Re-read through the joined view so the response matches list_calibrations.
+    let mut tx = pool.begin_tenant(tenant_id).await?;
+    let sql = format!("{CALIBRATION_SELECT} AND b.id = $2");
+    let row = sqlx::query(&sql)
+        .bind(tenant_id.0)
+        .bind(calibration_id)
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(map_calibration(&row)?)
 }

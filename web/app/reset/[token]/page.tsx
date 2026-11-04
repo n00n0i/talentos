@@ -1,11 +1,14 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Icon from "@/components/Icon";
 
 export default function ResetPasswordPage() {
+  const { t: tr } = useI18N();
   const params = useParams<{ token: string }>();
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -18,7 +21,7 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setError("");
     if (password !== confirmPassword) {
-      setError("รหัสผ่านทั้งสองช่องไม่ตรงกัน");
+      setError(tr("auth.reset.the-two-password-fields-do-not"));
       return;
     }
     setBusy(true);
@@ -29,10 +32,10 @@ export default function ResetPasswordPage() {
         body: JSON.stringify({ token: params.token, password }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "ไม่สามารถตั้งรหัสผ่านใหม่ได้");
+      if (!res.ok) throw new Error((body.error === "gateway_unreachable" ? tr("common.serverUnreachable") : body.message) || tr("auth.reset.unable-to-set-a-new-password"));
       setDone(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "ไม่สามารถตั้งรหัสผ่านใหม่ได้");
+      setError(e instanceof Error ? e.message : tr("auth.reset.unable-to-set-a-new-password"));
     } finally {
       setBusy(false);
     }
@@ -49,20 +52,20 @@ export default function ResetPasswordPage() {
         </div>
         {done ? (
           <>
-            <h1 style={{ fontSize: 20, marginBottom: 8 }}>ตั้งรหัสผ่านใหม่แล้ว</h1>
+            <h1 style={{ fontSize: 20, marginBottom: 8 }}>{tr("auth.reset.a-new-password-has-been-set")}</h1>
             <p className="hint" style={{ marginBottom: 18 }}>
-              ลิงก์นี้ใช้ได้ครั้งเดียว — เข้าสู่ระบบด้วยรหัสใหม่ได้เลย
+              {tr("auth.reset.this-link-can-only-be-used")}
             </p>
             <button className="btn btn-primary" onClick={() => router.replace("/login")}>
-              ไปหน้าเข้าสู่ระบบ
+              {tr("auth.reset.go-to-login-page")}
             </button>
           </>
         ) : (
           <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
-            <h1 style={{ fontSize: 20 }}>ตั้งรหัสผ่านใหม่</h1>
-            <p className="hint">รหัสผ่านอย่างน้อย 12 ตัวอักษร</p>
+            <h1 style={{ fontSize: 20 }}>{tr("auth.reset.set-a-new-password")}</h1>
+            <p className="hint">{tr("auth.reset.password-must-be-at-least-12")}</p>
             <div className="field">
-              <label>รหัสผ่านใหม่</label>
+              <label>{tr("auth.reset.new-password")}</label>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -72,7 +75,7 @@ export default function ResetPasswordPage() {
               />
             </div>
             <div className="field">
-              <label>ยืนยันรหัสผ่าน</label>
+              <label>{tr("auth.reset.confirm-password")}</label>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -81,12 +84,12 @@ export default function ResetPasswordPage() {
                 required
               />
             </div>
-            {error && <p className="error">{error}</p>}
+            {error && <p className="error" role="alert">{error}</p>}
             <button className="btn btn-primary" type="submit" disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "ตั้งรหัสผ่าน"}
+              {busy ? tr("auth.reset.saving") : tr("auth.reset.set-password")}
             </button>
             <Link href="/login" className="hint">
-              กลับหน้าเข้าสู่ระบบ
+              {tr("auth.reset.return-to-login-page")}
             </Link>
           </form>
         )}

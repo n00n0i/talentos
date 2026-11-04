@@ -28,6 +28,10 @@ impl GatewayHandle {
             .unwrap_or_else(|_| "redis://:redis_dev_secret@localhost:6379".into());
         let jwt_secret = std::env::var("AUTH_JWT_SECRET")
             .unwrap_or_else(|_| "dev-secret-change-me-in-prod-minimum-32-bytes-okay!!".into());
+        let auth_db_url = std::env::var("DATABASE_AUTH_URL")
+            .unwrap_or_else(|_| "postgres://talentos_auth:auth_dev_secret@localhost:5432/talentos".into());
+        let pii_key = std::env::var("PII_ENCRYPTION_KEY")
+            .unwrap_or_else(|_| "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into());
 
         // Create a pool for test fixtures
         let pool = PgPool::connect(&database_url).await?;
@@ -35,6 +39,8 @@ impl GatewayHandle {
         let mut child = Command::new("cargo")
             .args(["run", "-p", "talentos-gateway"])
             .env("DATABASE_URL", &database_url)
+            .env("DATABASE_AUTH_URL", &auth_db_url)
+            .env("PII_ENCRYPTION_KEY", &pii_key)
             .env("REDIS_URL", &redis_url)
             .env("AUTH_JWT_SECRET", &jwt_secret)
             .env("GATEWAY_PORT", port.to_string())

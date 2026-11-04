@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TalentOS — UX/UI Prototype (mocked)</title>
+<style>
+  :root{--bg:#f6f7f4;--surface:#fff;--line:#e3e7df;--text:#1d2b2e;--muted:#6b7a76;--teal:#0f4c5c;--mint:#e5f2e8;--lime:#dff0d8;--danger:#b42318;--warn:#9a6700;--radius:16px}
+  *{box-sizing:border-box} body{margin:0;font-family:Inter,"Noto Sans Thai",sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+  button,input,select{font:inherit}
+  .app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+  aside{background:#eef1ea;padding:18px 14px;border-right:1px solid var(--line)}
+  .brand{display:flex;gap:10px;align-items:center;font-weight:700;margin:2px 6px 20px}
+  .mark{width:30px;height:30px;border-radius:9px;background:var(--lime);display:grid;place-items:center;color:var(--teal)}
+  .nav button{display:flex;gap:9px;width:100%;border:0;background:transparent;padding:9px 10px;border-radius:9px;color:var(--muted);text-align:left;cursor:pointer}
+  .nav button.active{background:#fff;color:var(--teal);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+  .nav .label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#93a09a;margin:16px 10px 6px}
+  main{padding:22px 26px;min-width:0}
+  .top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:18px}
+  .proto{background:#fff4d6;border:1px solid #ecd9a5;color:#6b540c;padding:5px 9px;border-radius:999px;font-size:11px}
+  .h1{font-size:26px;margin:0 0 4px;letter-spacing:-.02em}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .grid{display:grid;gap:14px}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g2{grid-template-columns:1.4fr 1fr}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;min-width:0}
+  .kpi{font-size:24px;font-weight:700;margin:5px 0}.muted{color:var(--muted)}
+  .row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 12px;cursor:pointer}
+  .btn.primary{background:var(--teal);border-color:var(--teal);color:#fff}
+  .btn.danger{color:var(--danger);border-color:#efc6c2}
+  .badge{display:inline-flex;padding:3px 8px;border-radius:999px;background:var(--mint);color:#2d6b45;font-size:11px}
+  .badge.warn{background:#fff3d6;color:var(--warn)}.badge.bad{background:#fde8e6;color:var(--danger)}
+  .table{width:100%;border-collapse:collapse}.table th,.table td{text-align:left;padding:9px 8px;border-bottom:1px solid #eef0eb;font-size:13px}
+  .table th{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#93a09a}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+  .tabs button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 11px;cursor:pointer}
+  .tabs button.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .section{display:none}.section.active{display:block}
+  .connectors{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .connector{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:#4caf50;margin-right:5px}
+  .dot.off{background:#b0b8b4}.dot.err{background:#d92d20}
+  .flow{display:grid;gap:10px;margin:14px 0}
+  .node{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fff;display:flex;justify-content:space-between;align-items:center}
+  .node small{color:var(--muted)}
+  .arrow{text-align:center;color:#9aa7a2}
+  .chat{display:grid;gap:10px}
+  .bubble{max-width:80%;padding:10px 12px;border-radius:12px;background:#f3f5f1}
+  .bubble.me{justify-self:end;background:var(--mint)}
+  .input{display:flex;gap:8px;margin-top:12px}.input input{flex:1;border:1px solid var(--line);border-radius:9px;padding:9px}
+  .split{display:grid;grid-template-columns:1.1fr .9fr;gap:14px}
+  .code{background:#1d2b2e;color:#d9efe5;border-radius:10px;padding:12px;font-family:ui-monospace,monospace;font-size:12px;overflow:auto}
+  .notice{border:1px solid #efc6c2;background:#fdf2f1;color:#8f1d14;padding:10px 12px;border-radius:10px}
+  .ok{border:1px solid #bfe0ca;background:#f1faf4;color:#23633b;padding:10px 12px;border-radius:10px}
+  .mobilebar{display:none}
+  @media (max-width:900px){.app{grid-template-columns:1fr}aside{display:none}main{padding:16px}.g3,.g2,.connectors,.split{grid-template-columns:1fr}.mobilebar{display:flex;gap:6px;overflow:auto;margin-bottom:12px}.mobilebar button{white-space:nowrap}.h1{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><span class="mark">✦</span><span>TalentOS</span></div>
+    <nav class="nav" id="nav">
+      <div class="label">Workspace</div>
+      <button data-view="overview" class="active">ภาพรวม</button>
+      <button data-view="assistant">HR Assistant</button>
+      <button data-view="studio">Integration Studio</button>
+      <div class="label">People & Payroll</div>
+      <button data-view="people">พนักงาน</button>
+      <button data-view="payroll">รอบเงินเดือน</button>
+      <button data-view="approvals">รายการรออนุมัติ</button>
+      <div class="label">Admin</div>
+      <button data-view="settings">ตั้งค่า</button>
+    </nav>
+  </aside>
+  <main>
+    <div class="top">
+      <span class="proto">PROTOTYPE · mocked data · no production APIs</span>
+      <span class="badge">HR Admin</span>
+    </div>
+    <div class="mobilebar" id="mobilebar"></div>
+
+    <section class="section active" id="view-overview">
+      <h1 class="h1">ภาพรวม</h1><p class="sub">ทีมและรอบเงินเดือนล่าสุดของคุณ</p>
+      <div class="grid g3">
+        <div class="card"><div class="muted">พนักงานที่ใช้งาน</div><div class="kpi">128</div><span class="badge">+4 เดือนนี้</span></div>
+        <div class="card"><div class="muted">ยอดจ่ายสุทธิรอบล่าสุด</div><div class="kpi">฿4.82M</div><span class="badge">อนุมัติแล้ว</span></div>
+        <div class="card"><div class="muted">รายการรออนุมัติ</div><div class="kpi">7</div><span class="badge warn">ต้องตรวจ</span></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card"><h3>งานที่ต้องติดตาม</h3><p class="muted">เอกสารหมดอายุ 3 · รอบเงินเดือนฉบับร่าง 1 · คำขอลา 4</p><table class="table"><thead><tr><th>รายการ</th><th>สถานะ</th><th>กำหนด</th></tr></thead><tbody><tr><td>ต่อใบอนุญาตทำงาน · สมชาย</td><td><span class="badge warn">เหลือ 12 วัน</span></td><td>16 พ.ย. 2569</td></tr><tr><td>อนุมัติ OT · ทีม Sales</td><td><span class="badge">รออนุมัติ</span></td><td>วันนี้</td></tr></tbody></table></div>
+        <div class="card"><h3>HR Assistant</h3><p class="muted">“ตรวจสอบเงินเดือนที่ผิดปกติในรอบนี้ให้หน่อย”</p><div class="ok">พบ 2 รายการ: SSO cap 1 ราย, OT เกินกำหนด 1 ราย — เปิดดูรายละเอียด</div><br><button class="btn primary" data-goto="assistant">เปิด Assistant</button></div>
+      </div>
+    </section>
+
+    <section class="section" id="view-assistant">
+      <h1 class="h1">HR Assistant</h1><p class="sub">ผู้ช่วยที่อ้างอิงข้อมูล HR/Payroll และ knowledge graph</p>
+      <div class="split">
+        <div class="card"><div class="chat"><div class="bubble">สวัสดีครับ ต้องการตรวจอะไรในรอบเงินเดือนนี้?</div><div class="bubble me">ช่วยสรุปพนักงานที่ OT เกิน 20 ชั่วโมง</div><div class="bubble">พบ 4 คน · 3 คนอยู่ในแผนก Operations · ยอด OT รวม 86 ชั่วโมง<br><span class="badge warn">ต้องอนุมัติ 1 รายการ</span></div></div><div class="input"><input placeholder="ถามเกี่ยวกับ HR, payroll, สิทธิ์การลา…"><button class="btn primary">ส่ง</button></div><div class="notice" style="margin-top:12px">Prototype: คำตอบใช้ mocked data ไม่ได้เรียกโมเดลจริง</div></div>
+        <div class="card"><h3>แหล่งข้อมูลที่อ้างอิง</h3><ul class="muted"><li>พนักงาน 128 คน</li><li>รอบเงินเดือน พ.ย. 2569</li><li>Attendance 4,912 รายการ</li><li>Knowledge graph: 42 โหนด</li></ul><span class="badge">VERIFIED EXISTING</span></div>
+      </div>
+    </section>
+
+    <section class="section" id="view-studio">
+      <h1 class="h1">Integration Studio</h1><p class="sub">ออกแบบ เชื่อมต่อ และตรวจสอบ integration โดยไม่แตะ production</p>
+      <div class="tabs" id="studiotabs"><button class="active" data-tab="connectors">Connectors</button><button data-tab="connect">เชื่อมต่อ</button><button data-tab="blueprint">AI Blueprint</button><button data-tab="flow">Flow</button><button data-tab="monitor">Monitoring</button><button data-tab="approval">อนุมัติ</button></div>
+      <div id="tab-connectors" class="tabpane"><div class="connectors">
+        <div class="connector"><div class="row"><strong>SCG HR Connector</strong><span class="badge">published</span></div><p class="muted">REST · v1.2.0</p><span class="dot"></span>Healthy · 42 ms</div>
+        <div class="connector"><div class="row"><strong>Bangkok Bank Payroll</strong><span class="badge warn">draft</span></div><p class="muted">SFTP · v0.9.0</p><span class="dot off"></span>Not configured</div>
+        <div class="connector"><div class="row"><strong>LINE Notify</strong><span class="badge bad">disabled</span></div><p class="muted">Webhook · v1.0.0</p><span class="dot err"></span>Credential expired</div>
+      </div></div>
+      <div id="tab-connect" class="tabpane" style="display:none"><div class="split"><div class="card"><h3>เชื่อมต่อ Connector</h3><label>ชื่อการเชื่อมต่อ<input value="Bangkok Bank — payroll" style="width:100%;padding:9px;margin:6px 0 12px;border:1px solid var(--line);border-radius:8px"></label><label>Endpoint<input value="sftp://bbank.example.com/out" style="width:100%;padding:9px;margin:6px 0 12px;border:1px solid var(--line);border-radius:8px"></label><label>Secret reference<input value="openbao://talentos/bbank-payroll" style="width:100%;padding:9px;margin:6px 0 12px;border:1px solid var(--line);border-radius:8px"></label><button class="btn primary" id="testconn">ทดสอบการเชื่อมต่อ</button><div id="testresult" style="margin-top:12px"></div></div><div class="card"><h3>ผลการทดสอบ</h3><p class="muted">จะบันทึกผลลง last_test โดยไม่เขียนข้อมูลจริง</p><div class="code">POST /integrations/connections/:id/test
+→ { ok: true, latency_ms: 42 }</div></div></div></div>
+      <div id="tab-blueprint" class="tabpane" style="display:none"><div class="split"><div class="card"><h3>AI-generated blueprint</h3><p class="muted">“ส่งไฟล์เงินเดือนไปยังธนาคารทุกสิ้นเดือน และแจ้งเตือน HR เมื่อล้มเหลว”</p><div class="flow"><div class="node"><span>Payroll run approved <small>trigger</small></span><span class="badge">verified</span></div><div class="arrow">↓</div><div class="node"><span>Map employee → bank fields <small>transform</small></span><span class="badge warn">review</span></div><div class="arrow">↓</div><div class="node"><span>Upload SFTP <small>action</small></span><span class="badge">verified</span></div><div class="arrow">↓</div><div class="node"><span>Notify HR on failure <small>error</small></span><span class="badge">proposed</span></div></div></div><div class="card"><h3>Validation</h3><div class="ok">3 steps verified against connector contracts</div><div class="notice" style="margin-top:10px">1 mapping needs review: bank_account_number is encrypted at rest</div><button class="btn primary" style="margin-top:12px" data-tabgoto="flow">เปิด Flow editor</button></div></div></div>
+      <div id="tab-flow" class="tabpane" style="display:none"><div class="card"><h3>Flow editor</h3><div class="flow"><div class="node"><span>Payroll approved</span><span class="badge">trigger</span></div><div class="arrow">↓</div><div class="node"><span>Payroll CSV → bank format</span><span class="badge">map 5 fields</span></div><div class="arrow">↓</div><div class="node"><span>SFTP upload</span><span class="badge">retry ×3</span></div><div class="arrow">↓</div><div class="node"><span>Notify HR</span><span class="badge warn">approval required</span></div></div><div class="row"><button class="btn">Simulate</button><button class="btn primary">Publish</button></div></div></div>
+      <div id="tab-monitor" class="tabpane" style="display:none"><div class="grid g3"><div class="card"><div class="muted">Runs (24h)</div><div class="kpi">18</div></div><div class="card"><div class="muted">Success rate</div><div class="kpi">94%</div></div><div class="card"><div class="muted">Open errors</div><div class="kpi">2</div></div></div><div class="card" style="margin-top:14px"><table class="table"><thead><tr><th>Run</th><th>Flow</th><th>Status</th><th>Duration</th></tr></thead><tbody><tr><td>#1842</td><td>Payroll → BBank</td><td><span class="badge">success</span></td><td>1.2s</td></tr><tr><td>#1841</td><td>Payroll → BBank</td><td><span class="badge bad">failed</span></td><td>0.4s</td></tr><tr><td>#1840</td><td>Payroll → BBank</td><td><span class="badge">success</span></td><td>1.1s</td></tr></tbody></table><div class="notice" style="margin-top:10px">Run #1841: SFTP timeout after 3 retries. <button class="btn">Retry</button> <button class="btn">Investigate</button></div></div></div>
+      <div id="tab-approval" class="tabpane" style="display:none"><div class="card"><h3>ขออนุมัติ publish</h3><p class="muted">Flow “Payroll → BBank” เปลี่ยนแปลง 5 mapping fields</p><div class="ok">ผ่าน validation · ไม่มี secret ใน blueprint</div><div class="row" style="margin-top:12px"><button class="btn danger">Reject</button><button class="btn primary">Approve &amp; publish</button></div><p class="muted" style="margin-top:10px">หลัง publish: rollback ได้ทันทีด้วย version ก่อนหน้า</p></div></div>
+    </section>
+
+    <section class="section" id="view-people"><h1 class="h1">พนักงาน</h1><p class="sub">128 คน · 4 แผนก</p><div class="card"><table class="table"><thead><tr><th>รหัส</th><th>ชื่อ</th><th>ตำแหน่ง</th><th>สถานะ</th></tr></thead><tbody><tr><td>EMP001</td><td>สมชาย ทดสอบ</td><td>Engineer</td><td><span class="badge">ทำงานอยู่</span></td></tr><tr><td>EMP002</td><td>สมสรี ลูกทีม</td><td>Junior Engineer</td><td><span class="badge">ทดลองงาน</span></td></tr></tbody></table></div></section>
+    <section class="section" id="view-payroll"><h1 class="h1">รอบเงินเดือน</h1><p class="sub">ตรวจ อนุมัติ และติดตามการจ่าย</p><div class="card"><table class="table"><thead><tr><th>รอบ</th><th>สถานะ</th><th>ยอดสุทธิ</th></tr></thead><tbody><tr><td>1–30 พ.ย. 2569</td><td><span class="badge warn">รออนุมัติ</span></td><td>฿4,820,000</td></tr></tbody></table></div></section>
+    <section class="section" id="view-approvals"><h1 class="h1">รายการรออนุมัติ</h1><p class="sub">7 รายการ</p><div class="card"><div class="ok">ลำดับความสำคัญ: OT 3 · ลา 2 · ค่าใช้จ่าย 2</div></div></section>
+    <section class="section" id="view-settings"><h1 class="h1">ตั้งค่า</h1><p class="sub">องค์กร เงินเดือน และ AI</p><div class="card"><p>OIDC: configured <span class="badge">verified existing</span></p><p>AI providers: 1 configured <span class="badge warn">secret in OpenBao</span></p></div></section>
+  </main>
+</div>
+<script>
+  const nav=document.getElementById("nav");
+  const mobile=document.getElementById("mobilebar");
+  nav.querySelectorAll("button").forEach(b=>{const c=b.cloneNode(true);c.onclick=()=>show(b.dataset.view);mobile.appendChild(c);b.onclick=()=>show(b.dataset.view)});
+  function show(id){document.querySelectorAll(".section").forEach(s=>s.classList.toggle("active",s.id==="view-"+id));nav.querySelectorAll("button").forEach(b=>b.classList.toggle("active",b.dataset.view===id));window.scrollTo(0,0)}
+  document.querySelectorAll("[data-goto]").forEach(b=>b.onclick=()=>show(b.dataset.goto));
+  document.querySelectorAll("#studiotabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll("#studiotabs button").forEach(x=>x.classList.remove("active"));b.classList.add("active");document.querySelectorAll(".tabpane").forEach(p=>p.style.display="none");document.getElementById("tab-"+b.dataset.tab).style.display="block"});
+  document.querySelectorAll("[data-tabgoto]").forEach(b=>b.onclick=()=>document.querySelector(`#studiotabs [data-tab="${b.dataset.tabgoto}"]`).click());
+  document.getElementById("testconn").onclick=()=>{const r=document.getElementById("testresult");r.innerHTML='<div class="ok">เชื่อมต่อสำเร็จ · 42 ms · secret reference ถูกต้อง (mocked)</div>'}
+</script>
+</body>
+</html>

@@ -1,3 +1,6 @@
+import { currentLanguage, tNow } from "@/lib/i18n";
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -17,7 +20,9 @@ export async function gw<T>(path: string, init?: RequestInit): Promise<T> {
     let message = res.statusText || `HTTP ${res.status}`;
     try {
       const body = await res.json();
-      message = body.message || body.error || message;
+      message = body.error === "gateway_unreachable"
+        ? tNow("common.serverUnreachable")
+        : body.message || body.error || message;
     } catch {
       // non-JSON error body
     }
@@ -37,30 +42,33 @@ export async function gql<T>(query: string, variables?: Record<string, unknown>)
 }
 
 export const thb = (value: string | number) =>
-  new Intl.NumberFormat("th-TH", {
+  new Intl.NumberFormat(currentLanguage() === "en" ? "en-GB" : "th-TH", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Number(value));
 
 export const thbShort = (value: string | number) =>
-  new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(Number(value));
+  new Intl.NumberFormat(currentLanguage() === "en" ? "en-GB" : "th-TH", {
+    maximumFractionDigits: 0,
+  }).format(Number(value));
 
-export const thDate = (iso: string) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+export const thDate = (iso: string) => {
+  const lang = currentLanguage();
+  return new Date(`${iso}T00:00:00`).toLocaleDateString(
+    lang === "en" ? "en-GB" : "th-TH",
+    { day: "numeric", month: "short", year: "numeric" },
+  );
+};
 
-export const RUN_STATUS: Record<string, { label: string; tone: string }> = {
-  draft: { label: "ฉบับร่าง", tone: "" },
-  calculating: { label: "กำลังคำนวณ", tone: "warning" },
-  calculated: { label: "คำนวณแล้ว", tone: "accent" },
-  pending_approval: { label: "รออนุมัติ", tone: "warning" },
-  approved: { label: "อนุมัติแล้ว", tone: "success" },
-  paid: { label: "จ่ายแล้ว", tone: "success" },
-  completed: { label: "จ่ายแล้ว", tone: "success" },
-  failed: { label: "ล้มเหลว", tone: "danger" },
+export const RUN_STATUS: Record<string, { labelKey: TranslationKey; tone: string }> = {
+  draft: { labelKey: "payroll.status.draft", tone: "" },
+  calculating: { labelKey: "payroll.status.calculating", tone: "warning" },
+  calculated: { labelKey: "payroll.status.calculated", tone: "accent" },
+  pending_approval: { labelKey: "payroll.status.pending_approval", tone: "warning" },
+  approved: { labelKey: "payroll.status.approved", tone: "success" },
+  paid: { labelKey: "payroll.status.paid", tone: "success" },
+  completed: { labelKey: "payroll.status.completed", tone: "success" },
+  failed: { labelKey: "payroll.status.failed", tone: "danger" },
 };
 
 export type Me = {
@@ -130,5 +138,5 @@ export function handleApiError(e: unknown, setError: (message: string) => void) 
     window.location.href = "/login";
     return;
   }
-  setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+  setError(e instanceof Error ? e.message : tNow("common.error"));
 }

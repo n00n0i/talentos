@@ -3994,11 +3994,13 @@ dependencies = [
  "async-graphql",
  "async-trait",
  "axum 0.7.9",
+ "base64 0.22.1",
  "chrono",
  "dotenvy",
  "fred",
  "futures-util",
  "hex",
+ "jsonwebtoken",
  "rand 0.8.8",
  "reqwest",
  "rust_decimal",
@@ -4027,6 +4029,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "url",
  "uuid",
 ]
 
@@ -4055,10 +4058,12 @@ name = "talentos-hr-runner"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "hex",
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "talentos-attendance",
  "talentos-compliance",

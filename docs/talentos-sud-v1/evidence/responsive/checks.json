@@ -1,0 +1,986 @@
+[
+  {
+    "role": "admin",
+    "route": "/",
+    "width": 1440,
+    "h1": [
+      "ภาพรวม"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_.png"
+  },
+  {
+    "role": "admin",
+    "route": "/employees",
+    "width": 1440,
+    "h1": [
+      "พนักงาน"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/1440_employees.png"
+  },
+  {
+    "role": "admin",
+    "route": "/team",
+    "width": 1440,
+    "h1": [
+      "ทีมของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_team.png"
+  },
+  {
+    "role": "admin",
+    "route": "/documents",
+    "width": 1440,
+    "h1": [
+      "เอกสารพนักงาน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_documents.png"
+  },
+  {
+    "role": "admin",
+    "route": "/onboarding",
+    "width": 1440,
+    "h1": [
+      "Onboarding พนักงาน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_onboarding.png"
+  },
+  {
+    "role": "admin",
+    "route": "/recruitment",
+    "width": 1440,
+    "h1": [
+      "สรรหาบุคลากร"
+    ],
+    "overflow": 0,
+    "labels": 6,
+    "console": [],
+    "file": "admin/1440_recruitment.png"
+  },
+  {
+    "role": "admin",
+    "route": "/training",
+    "width": 1440,
+    "h1": [
+      "อบรมและใบรับรอง"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_training.png"
+  },
+  {
+    "role": "admin",
+    "route": "/performance",
+    "width": 1440,
+    "h1": [
+      "ประเมินผลการทำงาน"
+    ],
+    "overflow": 0,
+    "labels": 10,
+    "console": [],
+    "file": "admin/1440_performance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/goals",
+    "width": 1440,
+    "h1": [
+      "เป้าหมายและ OKR"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_goals.png"
+  },
+  {
+    "role": "admin",
+    "route": "/attendance",
+    "width": 1440,
+    "h1": [
+      "เวลาและ OT"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/1440_attendance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/attendance/shifts",
+    "width": 1440,
+    "h1": [
+      "กะทำงาน"
+    ],
+    "overflow": 0,
+    "labels": 12,
+    "console": [],
+    "file": "admin/1440_attendance_shifts.png"
+  },
+  {
+    "role": "admin",
+    "route": "/calendar",
+    "width": 1440,
+    "h1": [
+      "ปฏิทินทีม"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_calendar.png"
+  },
+  {
+    "role": "admin",
+    "route": "/clock",
+    "width": 1440,
+    "h1": [
+      "ลงเวลา"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_clock.png"
+  },
+  {
+    "role": "admin",
+    "route": "/leave",
+    "width": 1440,
+    "h1": [
+      "การลา"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "admin/1440_leave.png"
+  },
+  {
+    "role": "admin",
+    "route": "/ot",
+    "width": 1440,
+    "h1": [
+      "ขอ OT"
+    ],
+    "overflow": 0,
+    "labels": 5,
+    "console": [],
+    "file": "admin/1440_ot.png"
+  },
+  {
+    "role": "admin",
+    "route": "/claims",
+    "width": 1440,
+    "h1": [
+      "ค่าใช้จ่าย"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_claims.png"
+  },
+  {
+    "role": "admin",
+    "route": "/payroll",
+    "width": 1440,
+    "h1": [
+      "รอบเงินเดือน"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "admin/1440_payroll.png"
+  },
+  {
+    "role": "admin",
+    "route": "/loans",
+    "width": 1440,
+    "h1": [
+      "สินเชื่อ/เงินกู้"
+    ],
+    "overflow": 0,
+    "labels": 9,
+    "console": [],
+    "file": "admin/1440_loans.png"
+  },
+  {
+    "role": "admin",
+    "route": "/final-settlement",
+    "width": 1440,
+    "h1": [
+      "พนักงานลาออก"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "admin/1440_final_settlement.png"
+  },
+  {
+    "role": "admin",
+    "route": "/reports",
+    "width": 1440,
+    "h1": [
+      "รายงาน"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "admin/1440_reports.png"
+  },
+  {
+    "role": "admin",
+    "route": "/payslip",
+    "width": 1440,
+    "h1": [
+      "แบบฟอร์มสลิป"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_payslip.png"
+  },
+  {
+    "role": "admin",
+    "route": "/me/payslips",
+    "width": 1440,
+    "h1": [
+      "สลิปของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_me_payslips.png"
+  },
+  {
+    "role": "admin",
+    "route": "/me/reviews",
+    "width": 1440,
+    "h1": [
+      "ผลประเมินของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_me_reviews.png"
+  },
+  {
+    "role": "admin",
+    "route": "/privacy",
+    "width": 1440,
+    "h1": [
+      "ความเป็นส่วนตัวและข้อมูลส่วนบุคคล"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_privacy.png"
+  },
+  {
+    "role": "admin",
+    "route": "/users",
+    "width": 1440,
+    "h1": [
+      "ผู้ใช้"
+    ],
+    "overflow": 0,
+    "labels": 18,
+    "console": [],
+    "file": "admin/1440_users.png"
+  },
+  {
+    "role": "admin",
+    "route": "/settings",
+    "width": 1440,
+    "h1": [
+      "ตั้งค่า"
+    ],
+    "overflow": 0,
+    "labels": 229,
+    "console": [],
+    "file": "admin/1440_settings.png"
+  },
+  {
+    "role": "admin",
+    "route": "/settings/ai",
+    "width": 1440,
+    "h1": [
+      "ตั้งค่า AI"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_settings_ai.png"
+  },
+  {
+    "role": "admin",
+    "route": "/settings/ai/graph",
+    "width": 1440,
+    "h1": [
+      "กราฟความรู้ขององค์กร"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1440_settings_ai_graph.png"
+  },
+  {
+    "role": "admin",
+    "route": "/forms",
+    "width": 1440,
+    "h1": [
+      "แบบฟอร์ม"
+    ],
+    "overflow": 0,
+    "labels": 30,
+    "console": [],
+    "file": "admin/1440_forms.png"
+  },
+  {
+    "role": "admin",
+    "route": "/audit",
+    "width": 1440,
+    "h1": [
+      "ประวัติการใช้งาน"
+    ],
+    "overflow": 0,
+    "labels": 250,
+    "console": [],
+    "file": "admin/1440_audit.png"
+  },
+  {
+    "role": "admin",
+    "route": "/",
+    "width": 390,
+    "h1": [
+      "ภาพรวม"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/390_.png"
+  },
+  {
+    "role": "admin",
+    "route": "/",
+    "width": 760,
+    "h1": [
+      "ภาพรวม"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/760_.png"
+  },
+  {
+    "role": "admin",
+    "route": "/",
+    "width": 1024,
+    "h1": [
+      "ภาพรวม"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1024_.png"
+  },
+  {
+    "role": "admin",
+    "route": "/employees",
+    "width": 390,
+    "h1": [
+      "พนักงาน"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/390_employees.png"
+  },
+  {
+    "role": "admin",
+    "route": "/employees",
+    "width": 760,
+    "h1": [
+      "พนักงาน"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/760_employees.png"
+  },
+  {
+    "role": "admin",
+    "route": "/employees",
+    "width": 1024,
+    "h1": [
+      "พนักงาน"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/1024_employees.png"
+  },
+  {
+    "role": "admin",
+    "route": "/team",
+    "width": 390,
+    "h1": [
+      "ทีมของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/390_team.png"
+  },
+  {
+    "role": "admin",
+    "route": "/team",
+    "width": 760,
+    "h1": [
+      "ทีมของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/760_team.png"
+  },
+  {
+    "role": "admin",
+    "route": "/team",
+    "width": 1024,
+    "h1": [
+      "ทีมของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1024_team.png"
+  },
+  {
+    "role": "admin",
+    "route": "/users",
+    "width": 390,
+    "h1": [
+      "ผู้ใช้"
+    ],
+    "overflow": 0,
+    "labels": 18,
+    "console": [],
+    "file": "admin/390_users.png"
+  },
+  {
+    "role": "admin",
+    "route": "/users",
+    "width": 760,
+    "h1": [
+      "ผู้ใช้"
+    ],
+    "overflow": 0,
+    "labels": 18,
+    "console": [],
+    "file": "admin/760_users.png"
+  },
+  {
+    "role": "admin",
+    "route": "/users",
+    "width": 1024,
+    "h1": [
+      "ผู้ใช้"
+    ],
+    "overflow": 0,
+    "labels": 18,
+    "console": [],
+    "file": "admin/1024_users.png"
+  },
+  {
+    "role": "admin",
+    "route": "/payroll",
+    "width": 390,
+    "h1": [
+      "รอบเงินเดือน"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "admin/390_payroll.png"
+  },
+  {
+    "role": "admin",
+    "route": "/payroll",
+    "width": 760,
+    "h1": [
+      "รอบเงินเดือน"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "admin/760_payroll.png"
+  },
+  {
+    "role": "admin",
+    "route": "/payroll",
+    "width": 1024,
+    "h1": [
+      "รอบเงินเดือน"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "admin/1024_payroll.png"
+  },
+  {
+    "role": "admin",
+    "route": "/recruitment",
+    "width": 390,
+    "h1": [
+      "สรรหาบุคลากร"
+    ],
+    "overflow": 0,
+    "labels": 6,
+    "console": [],
+    "file": "admin/390_recruitment.png"
+  },
+  {
+    "role": "admin",
+    "route": "/recruitment",
+    "width": 760,
+    "h1": [
+      "สรรหาบุคลากร"
+    ],
+    "overflow": 0,
+    "labels": 6,
+    "console": [],
+    "file": "admin/760_recruitment.png"
+  },
+  {
+    "role": "admin",
+    "route": "/recruitment",
+    "width": 1024,
+    "h1": [
+      "สรรหาบุคลากร"
+    ],
+    "overflow": 0,
+    "labels": 6,
+    "console": [],
+    "file": "admin/1024_recruitment.png"
+  },
+  {
+    "role": "admin",
+    "route": "/performance",
+    "width": 390,
+    "h1": [
+      "ประเมินผลการทำงาน"
+    ],
+    "overflow": 0,
+    "labels": 10,
+    "console": [],
+    "file": "admin/390_performance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/performance",
+    "width": 760,
+    "h1": [
+      "ประเมินผลการทำงาน"
+    ],
+    "overflow": 0,
+    "labels": 10,
+    "console": [],
+    "file": "admin/760_performance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/performance",
+    "width": 1024,
+    "h1": [
+      "ประเมินผลการทำงาน"
+    ],
+    "overflow": 0,
+    "labels": 10,
+    "console": [],
+    "file": "admin/1024_performance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/goals",
+    "width": 390,
+    "h1": [
+      "เป้าหมายและ OKR"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/390_goals.png"
+  },
+  {
+    "role": "admin",
+    "route": "/goals",
+    "width": 760,
+    "h1": [
+      "เป้าหมายและ OKR"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/760_goals.png"
+  },
+  {
+    "role": "admin",
+    "route": "/goals",
+    "width": 1024,
+    "h1": [
+      "เป้าหมายและ OKR"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "admin/1024_goals.png"
+  },
+  {
+    "role": "admin",
+    "route": "/attendance",
+    "width": 390,
+    "h1": [
+      "เวลาและ OT"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/390_attendance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/attendance",
+    "width": 760,
+    "h1": [
+      "เวลาและ OT"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/760_attendance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/attendance",
+    "width": 1024,
+    "h1": [
+      "เวลาและ OT"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "admin/1024_attendance.png"
+  },
+  {
+    "role": "admin",
+    "route": "/settings",
+    "width": 390,
+    "h1": [
+      "ตั้งค่า"
+    ],
+    "overflow": 0,
+    "labels": 229,
+    "console": [],
+    "file": "admin/390_settings.png"
+  },
+  {
+    "role": "admin",
+    "route": "/settings",
+    "width": 760,
+    "h1": [
+      "ตั้งค่า"
+    ],
+    "overflow": 0,
+    "labels": 229,
+    "console": [],
+    "file": "admin/760_settings.png"
+  },
+  {
+    "role": "admin",
+    "route": "/settings",
+    "width": 1024,
+    "h1": [
+      "ตั้งค่า"
+    ],
+    "overflow": 0,
+    "labels": 229,
+    "console": [],
+    "file": "admin/1024_settings.png"
+  },
+  {
+    "role": "en",
+    "route": "/",
+    "width": 1440,
+    "h1": [
+      "Overview"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "en/1440_.png"
+  },
+  {
+    "role": "en",
+    "route": "/claims",
+    "width": 1440,
+    "h1": [
+      "Expenses"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "en/1440_claims.png"
+  },
+  {
+    "role": "en",
+    "route": "/recruitment",
+    "width": 1440,
+    "h1": [
+      "Recruitment"
+    ],
+    "overflow": 0,
+    "labels": 6,
+    "console": [],
+    "file": "en/1440_recruitment.png"
+  },
+  {
+    "role": "en",
+    "route": "/team",
+    "width": 1440,
+    "h1": [
+      "My team"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "en/1440_team.png"
+  },
+  {
+    "role": "en",
+    "route": "/settings",
+    "width": 1440,
+    "h1": [
+      "Settings"
+    ],
+    "overflow": 0,
+    "labels": 229,
+    "console": [],
+    "file": "en/1440_settings.png"
+  },
+  {
+    "role": "employee",
+    "route": "/",
+    "width": 1440,
+    "h1": [
+      "ภาพรวม"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "employee/1440_.png"
+  },
+  {
+    "role": "employee",
+    "route": "/clock",
+    "width": 1440,
+    "h1": [
+      "ลงเวลา"
+    ],
+    "overflow": 0,
+    "labels": 10,
+    "console": [],
+    "file": "employee/1440_clock.png"
+  },
+  {
+    "role": "employee",
+    "route": "/leave",
+    "width": 1440,
+    "h1": [
+      "การลา"
+    ],
+    "overflow": 0,
+    "labels": 36,
+    "console": [],
+    "file": "employee/1440_leave.png"
+  },
+  {
+    "role": "employee",
+    "route": "/ot",
+    "width": 1440,
+    "h1": [
+      "ขอ OT"
+    ],
+    "overflow": 0,
+    "labels": 15,
+    "console": [],
+    "file": "employee/1440_ot.png"
+  },
+  {
+    "role": "employee",
+    "route": "/claims",
+    "width": 1440,
+    "h1": [
+      "ค่าใช้จ่าย"
+    ],
+    "overflow": 0,
+    "labels": 7,
+    "console": [],
+    "file": "employee/1440_claims.png"
+  },
+  {
+    "role": "employee",
+    "route": "/me/payslips",
+    "width": 1440,
+    "h1": [
+      "สลิปของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 6,
+    "console": [],
+    "file": "employee/1440_me_payslips.png"
+  },
+  {
+    "role": "employee",
+    "route": "/me/reviews",
+    "width": 1440,
+    "h1": [
+      "ผลประเมินของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "employee/1440_me_reviews.png"
+  },
+  {
+    "role": "employee",
+    "route": "/privacy",
+    "width": 1440,
+    "h1": [
+      "ความเป็นส่วนตัวและข้อมูลส่วนบุคคล"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "employee/1440_privacy.png"
+  },
+  {
+    "role": "employee",
+    "route": "/clock",
+    "width": 390,
+    "h1": [
+      "ลงเวลา"
+    ],
+    "overflow": 0,
+    "labels": 10,
+    "console": [],
+    "file": "employee/390_clock.png"
+  },
+  {
+    "role": "employee",
+    "route": "/leave",
+    "width": 390,
+    "h1": [
+      "การลา"
+    ],
+    "overflow": 0,
+    "labels": 36,
+    "console": [],
+    "file": "employee/390_leave.png"
+  },
+  {
+    "role": "employee",
+    "route": "/me/reviews",
+    "width": 390,
+    "h1": [
+      "ผลประเมินของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "employee/390_me_reviews.png"
+  },
+  {
+    "role": "manager",
+    "route": "/",
+    "width": 1440,
+    "h1": [
+      "ภาพรวม"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "manager/1440_.png"
+  },
+  {
+    "role": "manager",
+    "route": "/team",
+    "width": 1440,
+    "h1": [
+      "ทีมของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "manager/1440_team.png"
+  },
+  {
+    "role": "manager",
+    "route": "/performance",
+    "width": 1440,
+    "h1": [
+      "ประเมินผลการทำงาน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "manager/1440_performance.png"
+  },
+  {
+    "role": "manager",
+    "route": "/goals",
+    "width": 1440,
+    "h1": [
+      "เป้าหมายและ OKR"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "manager/1440_goals.png"
+  },
+  {
+    "role": "manager",
+    "route": "/attendance",
+    "width": 1440,
+    "h1": [
+      "เวลาและ OT"
+    ],
+    "overflow": 0,
+    "labels": 24,
+    "console": [],
+    "file": "manager/1440_attendance.png"
+  },
+  {
+    "role": "manager",
+    "route": "/team",
+    "width": 390,
+    "h1": [
+      "ทีมของฉัน"
+    ],
+    "overflow": 0,
+    "labels": 0,
+    "console": [],
+    "file": "manager/390_team.png"
+  }
+]

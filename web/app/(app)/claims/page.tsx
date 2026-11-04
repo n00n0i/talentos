@@ -1,5 +1,11 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { gw, handleApiError, Me, thb, thDate } from "@/lib/api";
 
@@ -19,42 +25,47 @@ type Pending = Claim & {
   employee_name: string;
 };
 
-const CATEGORIES: { key: string; label: string }[] = [
-  { key: "travel", label: "เดินทาง" },
-  { key: "meal", label: "อาหาร" },
-  { key: "supplies", label: "เครื่องใช้สำนักงาน" },
-  { key: "other", label: "อื่น ๆ" },
+const CATEGORIES: { key: string; labelKey: TranslationKey }[] = [
+  { key: "travel", labelKey: "claims.travel" },
+  { key: "meal", labelKey: "claims.food" },
+  { key: "supplies", labelKey: "claims.office-supplies" },
+  { key: "other", labelKey: "claims.other" },
 ];
 
-const CLAIM_ERRORS: { [k: string]: string } = {
-  "category must be one of: travel, meal, supplies, other": "เลือกประเภทค่าใช้จ่ายไม่ถูกต้อง",
-  "amount must be greater than 0": "จำนวนเงินต้องมากกว่า 0",
-  "expense_date is required": "ระบุวันที่ค่าใช้จ่าย",
-  "description must be at most 500 characters": "รายละเอียดต้องไม่เกิน 500 ตัวอักษร",
-  "expense claim cannot be cancelled in its current status": "ไม่สามารถยกเลิกรายการนี้ได้",
-  "expense claim cannot be changed in its current status": "รายการนี้ไม่ได้อยู่ในสถานะรออนุมัติ",
-  "expense claim is not in pending status": "รายการนี้ไม่ได้อยู่ในสถานะรออนุมัติ",
-  "expense claim not found": "ไม่พบรายการค่าใช้จ่าย",
-  "not found": "ไม่พบรายการค่าใช้จ่าย",
-  "no active employee record for this account": "ไม่พบข้อมูลพนักงานที่ใช้งานอยู่สำหรับบัญชีนี้",
-  "receipt is too large; maximum size is 5 MB": "ไฟล์ใหญ่เกิน 5 MB",
-  "receipt type must be image/jpeg, image/png, or application/pdf": "รองรับเฉพาะ JPG, PNG หรือ PDF",
-  "receipt already uploaded for this claim": "แนบใบเสร็จแล้ว",
+const CLAIM_ERRORS: Record<string, TranslationKey> = {
+  "category must be one of: travel, meal, supplies, other": "claims.selected-incorrect-expense-type",
+  "amount must be greater than 0": "claims.amount-must-be-greater-than-0",
+  "expense_date is required": "claims.specify-the-date-of-the-expense",
+  "description must be at most 500 characters": "claims.description-must-not-exceed-500-characters",
+  "expense claim cannot be cancelled in its current status": "claims.this-item-cannot-be-canceled",
+  "expense claim cannot be changed in its current status": "claims.this-item-is-not-in-pending",
+  "expense claim is not in pending status": "claims.this-item-is-not-in-pending",
+  "expense claim not found": "claims.expense-item-not-found",
+  "not found": "claims.expense-item-not-found",
+  "no active employee record for this account": "claims.no-active-employee-information-found-for",
+  "receipt is too large; maximum size is 5 MB": "claims.file-larger-than-5-mb",
+  "receipt type must be image/jpeg, image/png, or application/pdf": "claims.only-jpg-png-or-pdf-are",
+  "receipt already uploaded for this claim": "claims.attached-receipt",
 };
 
-const thClaimError = (message: string) => CLAIM_ERRORS[message] ?? message;
+const thClaimError = (message: string, t: (key: TranslationKey) => string) =>
+  CLAIM_ERRORS[message] ? t(CLAIM_ERRORS[message]) : message;
 
-const STATUS: { [k: string]: { label: string; tone: string } } = {
-  pending: { label: "รออนุมัติ", tone: "warning" },
-  approved: { label: "อนุมัติแล้ว", tone: "success" },
-  rejected: { label: "ไม่อนุมัติ", tone: "danger" },
-  cancelled: { label: "ยกเลิกแล้ว", tone: "" },
-  paid: { label: "จ่ายแล้ว", tone: "success" },
+const STATUS: Record<string, { labelKey: TranslationKey; tone: string }> = {
+  pending: { labelKey: "claims.pending-approval", tone: "warning" },
+  approved: { labelKey: "claims.approved", tone: "success" },
+  rejected: { labelKey: "claims.reject", tone: "danger" },
+  cancelled: { labelKey: "claims.canceled", tone: "" },
+  paid: { labelKey: "claims.paid", tone: "success" },
 };
 
-const categoryLabel = (key: string) => CATEGORIES.find((c) => c.key === key)?.label ?? key;
+const categoryLabel = (key: string) => {
+  const found = CATEGORIES.find((c) => c.key === key);
+  return found ? tNow(found.labelKey) : key;
+};
 
 export default function ClaimsPage() {
+  const { t: tr } = useI18N();
   const [isHr, setIsHr] = useState(false);
   const [linked, setLinked] = useState(true);
   const [claims, setClaims] = useState<Claim[] | null>(null);
@@ -83,7 +94,7 @@ export default function ClaimsPage() {
   }, []);
 
   useEffect(() => {
-    load().catch((e) => handleApiError(e, (m) => setError(thClaimError(m))));
+    load().catch((e) => handleApiError(e, (m) => setError(thClaimError(m, tr))));
   }, [load]);
 
   async function act(done: string, path: string, body?: object) {
@@ -96,7 +107,7 @@ export default function ClaimsPage() {
       await load();
       return true;
     } catch (e) {
-      handleApiError(e, (m) => setError(thClaimError(m)));
+      handleApiError(e, (m) => setError(thClaimError(m, tr)));
       return false;
     } finally {
       setBusy(false);
@@ -118,7 +129,7 @@ export default function ClaimsPage() {
       } catch {
         // non-JSON error body
       }
-      throw new Error(thClaimError(message));
+      throw new Error(thClaimError(message, tr));
     }
   }
 
@@ -139,9 +150,9 @@ export default function ClaimsPage() {
       });
       if (file) {
         await uploadReceipt(claim.id, file);
-        setNotice("ส่งคำขอเบิกค่าใช้จ่ายและแนบใบเสร็จแล้ว");
+        setNotice(tr("claims.submit-expense-reimbursement-request-and-attach"));
       } else {
-        setNotice("ส่งคำขอเบิกค่าใช้จ่ายแล้ว");
+        setNotice(tr("claims.expense-reimbursement-request-sent"));
       }
       setCategory("meal");
       setAmount("");
@@ -151,49 +162,49 @@ export default function ClaimsPage() {
       if (receiptRef.current) receiptRef.current.value = "";
       await load();
     } catch (e) {
-      handleApiError(e, (m) => setError(thClaimError(m)));
+      handleApiError(e, (m) => setError(thClaimError(m, tr)));
     } finally {
       setBusy(false);
     }
   }
 
   const badge = (status: string) => {
-    const st = STATUS[status] ?? { label: status, tone: "" };
-    return <span className={`badge ${st.tone}`}>{st.label}</span>;
+    const st = STATUS[status];
+    return <span className={`badge ${st?.tone ?? ""}`}>{st ? tr(st.labelKey) : status}</span>;
   };
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>ค่าใช้จ่าย</h1>
-          <p className="page-sub">ยื่นคำขอเบิกค่าใช้จ่าย พร้อมใบเสร็จ และติดตามสถานะ</p>
+          <h1>{tr("claims.expenses")}</h1>
+          <p className="page-sub">{tr("claims.submit-an-expense-reimbursement-request-with")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       {isHr && (
         <div className="card">
           <div className="card-head">
-            <h2>รออนุมัติ</h2>
-            <span className="hint">{pending.length} รายการ</span>
+            <h2>{tr("claims.pending-approval")}</h2>
+            <span className="hint">{pending.length} {tr("claims.items")}</span>
           </div>
           {pending.length === 0 ? (
-            <div className="empty">ไม่มีคำขอเบิกค่าใช้จ่ายที่รออนุมัติ</div>
+            <div className="empty">{tr("claims.there-are-no-expense-reimbursement-requests")}</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>พนักงาน</th>
-                    <th>ประเภท</th>
-                    <th>วันที่</th>
-                    <th className="num">จำนวนเงิน</th>
-                    <th>รายละเอียด</th>
-                    <th>ใบเสร็จ</th>
-                    <th />
+                    <th scope="col">{tr("claims.employee")}</th>
+                    <th scope="col">{tr("claims.type")}</th>
+                    <th scope="col">{tr("claims.date")}</th>
+                    <th scope="col" className="num">{tr("claims.amount")}</th>
+                    <th scope="col">{tr("claims.details")}</th>
+                    <th scope="col">{tr("claims.receipt")}</th>
+                    <th scope="col" />
                   </tr>
                 </thead>
                 <tbody>
@@ -209,10 +220,10 @@ export default function ClaimsPage() {
                       <td>
                         {r.has_receipt ? (
                           <a href={`/api/gw/api/v1/claims/${r.id}/receipt`} target="_blank" rel="noreferrer">
-                            ดูใบเสร็จ
+                            {tr("claims.view-receipt")}
                           </a>
                         ) : (
-                          <span className="hint">ไม่มี</span>
+                          <span className="hint">{tr("claims.do-not-have")}</span>
                         )}
                       </td>
                       <td className="num">
@@ -222,20 +233,20 @@ export default function ClaimsPage() {
                             data-testid="reject-claim"
                             disabled={busy}
                             onClick={() =>
-                              act("ไม่อนุมัติคำขอเบิกค่าใช้จ่ายแล้ว", `api/v1/claims/${r.id}/decision`, { approve: false })
+                              act(tr("claims.the-expense-reimbursement-request-has-not"), `api/v1/claims/${r.id}/decision`, { approve: false })
                             }
                           >
-                            ไม่อนุมัติ
+                            {tr("claims.reject")}
                           </button>
                           <button
                             className="btn btn-sm btn-primary"
                             data-testid="approve-claim"
                             disabled={busy}
                             onClick={() =>
-                              act("อนุมัติคำขอเบิกค่าใช้จ่ายแล้ว", `api/v1/claims/${r.id}/decision`, { approve: true })
+                              act(tr("claims.expense-reimbursement-request-approved"), `api/v1/claims/${r.id}/decision`, { approve: true })
                             }
                           >
-                            อนุมัติ
+                            {tr("claims.approve")}
                           </button>
                         </span>
                       </td>
@@ -249,20 +260,20 @@ export default function ClaimsPage() {
       )}
 
       {claims === null ? (
-        <div className="spinner">กำลังโหลด…</div>
+        <div className="spinner">{tr("claims.loading")}</div>
       ) : !linked ? (
         <div className="card">
           <div className="empty">
-            ยังไม่ได้ผูกบัญชีนี้กับข้อมูลพนักงาน — ติดต่อ HR เพื่อเชื่อมบัญชี
+            {tr("claims.this-account-has-not-been-linked")}
           </div>
         </div>
       ) : (
         <>
           <form className="card card-pad" onSubmit={submit} style={{ display: "grid", gap: 12 }}>
-            <h2>ยื่นคำขอเบิกค่าใช้จ่าย</h2>
+            <h2>{tr("claims.submit-a-request-for-expense-reimbursement")}</h2>
             <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
               <div className="field">
-                <label htmlFor="claim-category">ประเภท</label>
+                <label htmlFor="claim-category">{tr("claims.type")}</label>
                 <select
                   id="claim-category"
                   data-testid="claim-category"
@@ -271,13 +282,13 @@ export default function ClaimsPage() {
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c.key} value={c.key}>
-                      {c.label}
+                      {tr(c.labelKey)}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="claim-amount">จำนวนเงิน</label>
+                <label htmlFor="claim-amount">{tr("claims.amount")}</label>
                 <input
                   id="claim-amount"
                   data-testid="claim-amount"
@@ -290,19 +301,12 @@ export default function ClaimsPage() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="claim-date">วันที่ค่าใช้จ่าย</label>
-                <input
-                  id="claim-date"
-                  data-testid="claim-date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                />
+                <label htmlFor="claim-date">{tr("claims.expense-date")}</label>
+                <ThaiDateInput id="claim-date" testId="claim-date" value={date} onChange={(v) => setDate(v)} required />
               </div>
             </div>
             <div className="field">
-              <label htmlFor="claim-description">รายละเอียด</label>
+              <label htmlFor="claim-description">{tr("claims.details")}</label>
               <input
                 id="claim-description"
                 data-testid="claim-description"
@@ -310,10 +314,10 @@ export default function ClaimsPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
               />
-              <span className="hint">ไม่เกิน 500 ตัวอักษร</span>
+              <span className="hint">{tr("claims.max-500-characters")}</span>
             </div>
             <div className="field">
-              <label htmlFor="claim-receipt">ใบเสร็จ</label>
+              <label htmlFor="claim-receipt">{tr("claims.receipt")}</label>
               <input
                 id="claim-receipt"
                 ref={receiptRef}
@@ -322,33 +326,33 @@ export default function ClaimsPage() {
                 accept="image/jpeg,image/png,application/pdf"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
-              <span className="hint">JPG, PNG หรือ PDF ไม่เกิน 5 MB</span>
+              <span className="hint">{tr("claims.jpg-png-or-pdf-no-more")}</span>
             </div>
             <div>
               <button className="btn btn-primary btn-sm" data-testid="submit-claim" type="submit" disabled={busy}>
-                ส่งคำขอ
+                {tr("claims.submit-request")}
               </button>
             </div>
           </form>
 
           <div className="card">
             <div className="card-head">
-              <h2>ประวัติค่าใช้จ่าย</h2>
+              <h2>{tr("claims.expense-history")}</h2>
             </div>
             {claims.length === 0 ? (
-              <div className="empty">ยังไม่มีคำขอเบิกค่าใช้จ่าย</div>
+              <div className="empty">{tr("claims.there-has-been-no-request-for")}</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>ประเภท</th>
-                      <th>วันที่</th>
-                      <th className="num">จำนวนเงิน</th>
-                      <th>รายละเอียด</th>
-                      <th>สถานะ</th>
-                      <th>ใบเสร็จ</th>
-                      <th />
+                      <th scope="col">{tr("claims.type")}</th>
+                      <th scope="col">{tr("claims.date")}</th>
+                      <th scope="col" className="num">{tr("claims.amount")}</th>
+                      <th scope="col">{tr("claims.details")}</th>
+                      <th scope="col">{tr("claims.status")}</th>
+                      <th scope="col">{tr("claims.receipt")}</th>
+                      <th scope="col" />
                     </tr>
                   </thead>
                   <tbody>
@@ -362,10 +366,10 @@ export default function ClaimsPage() {
                         <td>
                           {r.has_receipt ? (
                             <a href={`/api/gw/api/v1/me/claims/${r.id}/receipt`} target="_blank" rel="noreferrer">
-                              ดูใบเสร็จ
+                              {tr("claims.view-receipt")}
                             </a>
                           ) : (
-                            <span className="hint">ไม่มี</span>
+                            <span className="hint">{tr("claims.do-not-have")}</span>
                           )}
                         </td>
                         <td className="num">
@@ -374,9 +378,9 @@ export default function ClaimsPage() {
                               className="btn btn-sm"
                               data-testid="cancel-claim"
                               disabled={busy}
-                              onClick={() => act("ยกเลิกคำขอเบิกค่าใช้จ่ายแล้ว", `api/v1/me/claims/${r.id}/cancel`)}
+                              onClick={() => act(tr("claims.expense-reimbursement-request-canceled"), `api/v1/me/claims/${r.id}/cancel`)}
                             >
-                              ยกเลิก
+                              {tr("claims.cancel")}
                             </button>
                           )}
                         </td>

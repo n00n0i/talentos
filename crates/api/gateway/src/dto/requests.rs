@@ -93,3 +93,23 @@ mod tests {
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
+
+/// PUT /api/v1/ai/settings — only cross-cutting flags; providers and keys live
+/// in `ai_providers` / OpenBao.
+#[derive(Debug, Deserialize)]
+pub struct AiSettingsUpdate {
+    #[serde(default = "default_true")]
+    pub mcp_enabled: bool,
+    #[serde(default = "empty_skills")]
+    pub skills: serde_json::Value,
+    #[serde(default = "empty_skills")]
+    pub agents: serde_json::Value,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn empty_skills() -> serde_json::Value {
+    serde_json::json!([])
+}

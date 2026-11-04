@@ -19,7 +19,6 @@ use crate::state::AppState;
 use talentos_hr_runner::recruitment::{
     self, CandidateFile, CandidateInput, InterviewInput, JobInput, OfferInput, RecruitmentError,
 };
-
 #[derive(Debug, Deserialize)]
 pub struct CreateJobBody {
     pub title: String,
@@ -154,7 +153,7 @@ pub async fn list_candidates(
     if let Err(forbidden) = require(&ctx, "employee", "read_all") {
         return forbidden;
     }
-    match recruitment::list_candidates(&state.pool, ctx.tenant_id, id).await {
+    match recruitment::list_candidates(&state.pool, ctx.tenant_id, id, &state.pii).await {
         Ok(candidates) => Json(json!({ "candidates": candidates })).into_response(),
         Err(e) => map_error(e),
     }
@@ -178,7 +177,15 @@ pub async fn create_candidate(
         source: body.source,
         note: body.note,
     };
-    match recruitment::create_candidate(&state.pool, ctx.tenant_id, ctx.user_id.0, id, &input).await
+    match recruitment::create_candidate(
+        &state.pool,
+        ctx.tenant_id,
+        ctx.user_id.0,
+        id,
+        &input,
+        &state.pii,
+    )
+    .await
     {
         Ok(candidate) => {
             (StatusCode::CREATED, Json(json!({ "candidate": candidate }))).into_response()
@@ -203,6 +210,7 @@ pub async fn update_candidate(
         ctx.user_id.0,
         id,
         &body.stage,
+        &state.pii,
     )
     .await
     {
@@ -277,6 +285,61 @@ pub async fn remove_offer(
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => map_error(e),
     }
+}
+
+/// GET /api/v1/offers/:id/pdf
+pub async fn offer_sign(
+    State(state): State<AppState>,
+    Authed(ctx): Authed,
+    Path(id): Path<Uuid>,
+    Json(body): Json<OfferSignBody>,
+) -> Response {
+    if let Err(forbidden) = require(&ctx, "employee", "update") {
+        return forbidden;
+    }
+    if let Some(name) = state.esign_provider() {
+        let _ = talentos_hr_runner::esign::external_provider(&name).await;
+    }
+    match talentos_hr_runner::esign::sign_document(
+        &state.pool,
+        ctx.tenant_id,
+        talentos_hr_runner::DocumentType::Offer,
+        id,
+        ctx.user_id.0,
+        &body.typed_name,
+    )
+    .await
+    {
+        Ok(sig) => (
+            StatusCode::OK,
+            Json(json!({
+                "id": sig.id,
+                "typed_name": sig.typed_name,
+                "doc_hash_sha256": sig.doc_hash_sha256,
+                "signed_at": sig.signed_at.to_rfc3339(),
+                "provider": sig.provider,
+            })),
+        )
+            .into_response(),
+        Err(talentos_hr_runner::EsignError::OfferNotFound) => (
+            StatusCode::NOT_FOUND,
+            Json(envelope("not_found", "offer not found")),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!(error = %e, "offer sign failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(envelope("internal_error", "An unexpected error occurred")),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OfferSignBody {
+    pub typed_name: String,
 }
 
 /// GET /api/v1/offers/:id/pdf
@@ -565,7 +628,7 @@ fn map_error(e: RecruitmentError) -> Response {
             Json(envelope("invalid_request", &e.to_string())),
         )
             .into_response(),
-        Io(_) | Db(_) => {
+        Io(_) | Db(_) | Pii(_) => {
             tracing::error!(error = %e, "recruitment endpoint failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

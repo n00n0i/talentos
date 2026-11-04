@@ -9,6 +9,7 @@ pub mod auth;
 pub mod payroll;
 pub mod rls;
 pub mod health;
+pub mod oidc;
 
 use std::sync::Once;
 use tracing_subscriber::{EnvFilter, fmt};

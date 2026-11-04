@@ -1,5 +1,7 @@
 "use client";
 
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   gw,
@@ -12,6 +14,7 @@ import {
   thb,
   thDate,
 } from "@/lib/api";
+import { useI18N } from "@/lib/i18n";
 
 function monthDefaults() {
   const now = new Date();
@@ -25,6 +28,7 @@ const RUNS_QUERY =
   "{ payrollRuns(limit: 24) { id periodStart periodEnd paymentDate status totalEmployees totalGross totalNet totalTax totalSso totalPf paidAt paymentReference } }";
 
 export default function PayrollPage() {
+  const { t, tDynamic } = useI18N();
   const defaults = useRef(monthDefaults());
   const [runs, setRuns] = useState<PayrollRun[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -72,7 +76,7 @@ export default function PayrollPage() {
       };
       if (entityId.trim()) body.entity_id = entityId.trim();
       await gw("api/v1/payroll/runs", { method: "POST", body: JSON.stringify(body) });
-      setNotice("สร้างรอบเงินเดือนแล้ว — ระบบกำลังคำนวณ");
+      setNotice(t("payroll.createdNotice"));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -110,7 +114,7 @@ export default function PayrollPage() {
     setError("");
     try {
       await gw(`api/v1/payroll/runs/${run.id}/anomalies/review`, { method: "POST" });
-      setNotice("ตรวจสอบความผิดปกติแล้ว");
+      setNotice(t("payroll.anomaliesReviewedNotice"));
       const a = await gw<PayrollAnomalies>(`api/v1/payroll/runs/${run.id}/anomalies`);
       setAnomalies((prev) => ({ ...prev, [run.id]: a }));
     } catch (e) {
@@ -128,7 +132,7 @@ export default function PayrollPage() {
         method: "POST",
         body: JSON.stringify({ reason: null }),
       });
-      setNotice("อนุมัติรอบเงินเดือนแล้ว");
+      setNotice(t("payroll.approvedNotice"));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -146,7 +150,7 @@ export default function PayrollPage() {
         { method: "POST" },
       );
       setPfStates((prev) => ({ ...prev, [run.id]: { status: r.status, last_error: r.last_error } }));
-      setNotice(r.status === "sent" ? "ส่งข้อมูล PF แล้ว" : "การส่งข้อมูล PF ล้มเหลว");
+      setNotice(r.status === "sent" ? t("payroll.pfSentNotice") : t("payroll.pfFailedNotice"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -155,7 +159,7 @@ export default function PayrollPage() {
   }
 
   async function markPaid(run: PayrollRun) {
-    const raw = window.prompt("อ้างอิงการจ่าย (ไม่บังคับ)");
+    const raw = window.prompt(t("payroll.markPaid"));
     if (raw === null) return;
     const reference = raw.trim();
     setBusy(true);
@@ -165,7 +169,7 @@ export default function PayrollPage() {
         method: "POST",
         body: JSON.stringify({ reference: reference || null }),
       });
-      setNotice("ทำเครื่องหมายจ่ายแล้ว");
+      setNotice(t("payroll.markedPaidNotice"));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -178,43 +182,43 @@ export default function PayrollPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>รอบเงินเดือน</h1>
-          <p className="page-sub">สร้าง ตรวจสอบ และอนุมัติรอบจ่าย</p>
+          <h1>{t("payroll.title")}</h1>
+          <p className="page-sub">{t("payroll.subtitle")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       <form className="card card-pad" onSubmit={createRun}>
-        <h2 style={{ marginBottom: 14 }}>สร้างรอบใหม่</h2>
+        <h2 style={{ marginBottom: 14 }}>{t("payroll.createTitle")}</h2>
         <div className="form-row">
           <div className="field">
-            <label htmlFor="start">เริ่มงวด</label>
-            <input id="start" type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} required />
+            <label htmlFor="start" data-testid="create-start-label">{t("payroll.periodStart")}</label>
+            <ThaiDateInput id="start" testId="create-start" value={periodStart} onChange={(v) => setPeriodStart(v)} required />
           </div>
           <div className="field">
-            <label htmlFor="end">สิ้นสุดงวด</label>
-            <input id="end" type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} required />
+            <label htmlFor="end">{t("payroll.periodEnd")}</label>
+            <ThaiDateInput id="end" testId="create-end" value={periodEnd} onChange={(v) => setPeriodEnd(v)} required />
           </div>
           <div className="field">
-            <label htmlFor="pay">วันจ่าย</label>
-            <input id="pay" type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} required />
+            <label htmlFor="pay">{t("payroll.paymentDate")}</label>
+            <ThaiDateInput id="pay" value={paymentDate} onChange={(v) => setPaymentDate(v)} required />
           </div>
         </div>
         <div className="form-row" style={{ marginTop: 12, gridTemplateColumns: "1fr auto" }}>
           <div className="field">
-            <label htmlFor="entity">รหัสนิติบุคคล (ไม่บังคับ)</label>
+            <label htmlFor="entity">{t("payroll.entityId")}</label>
             <input
               id="entity"
-              placeholder="เว้นว่างได้เมื่อโทเคนผูกกับนิติบุคคลเดียว"
+              placeholder={t("payroll.this-can-be-left-blank-when")}
               value={entityId}
               onChange={(e) => setEntityId(e.target.value)}
             />
           </div>
           <div style={{ display: "flex", alignItems: "end" }}>
             <button className="btn btn-primary" data-testid="create-run" type="submit" disabled={busy}>
-              {busy ? "กำลังสร้าง…" : "สร้างรอบ"}
+              {busy ? t("common.loading") : t("payroll.createRun")}
             </button>
           </div>
         </div>
@@ -222,29 +226,29 @@ export default function PayrollPage() {
 
       <div className="card">
         <div className="card-head">
-          <h2>รอบทั้งหมด</h2>
-          <span className="hint">{runs ? `${runs.length} รอบ` : ""}</span>
+          <h2>{t("payroll.allRuns")}</h2>
+          <span className="hint">{runs ? t("payroll.runsCount", { n: runs.length }) : ""}</span>
         </div>
         {runs === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{t("common.loading")}</div>
         ) : runs.length === 0 ? (
-          <div className="empty">ยังไม่มีรอบเงินเดือน</div>
+          <div className="empty">{t("payroll.emptyRuns")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>งวด</th>
-                <th>วันจ่าย</th>
-                <th>สถานะ</th>
-                <th className="num">คน</th>
-                <th className="num">ยอดรวม</th>
-                <th className="num">สุทธิ</th>
-                <th />
+                <th scope="col">{t("payroll.thPeriod")}</th>
+                <th scope="col">{t("payroll.paymentDate")}</th>
+                <th scope="col">{t("payroll.thStatus")}</th>
+                <th scope="col" className="num">{t("payroll.thEmployees")}</th>
+                <th scope="col" className="num">{t("payroll.thGross")}</th>
+                <th scope="col" className="num">{t("payroll.thNet")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
               {runs.map((run) => {
-                const status = RUN_STATUS[run.status] ?? { label: run.status, tone: "" };
+                const status = RUN_STATUS[run.status];
                 const open = expanded === run.id;
                 return (
                   <RunRow
@@ -287,7 +291,7 @@ function RunRow({
   onMarkPaid,
 }: {
   run: PayrollRun;
-  status: { label: string; tone: string };
+  status?: { labelKey: import("@/lib/i18n-catalog").TranslationKey; tone: string };
   open: boolean;
   payslips: Payslip[] | undefined;
   anomalies: PayrollAnomalies | undefined;
@@ -299,24 +303,25 @@ function RunRow({
   onSendPf: () => void;
   onMarkPaid: () => void;
 }) {
+  const { t, tDynamic } = useI18N();
   const anomalyCount = anomalies ? anomalies.counts.error + anomalies.counts.warning : 0;
   const needsReview = anomalyCount > 0 && !anomalies?.reviewed_at;
   return (
     <>
-      <tr className="clickable" onClick={onToggle}>
+      <tr className="clickable" data-testid="run-row" onClick={onToggle}>
         <td>
           {thDate(run.periodStart)} – {thDate(run.periodEnd)}
         </td>
         <td>{thDate(run.paymentDate)}</td>
         <td>
-          <span className={`badge ${status.tone}`}>
+          <span className={`badge ${status?.tone ?? ""}`}>
             <span className="dot" />
-            {status.label}
+            {status ? t(status.labelKey) : run.status}
           </span>
         </td>
         <td className="num">{run.totalEmployees}</td>
-        <td className="num">฿{thb(run.totalGross)}</td>
-        <td className="num">฿{thb(run.totalNet)}</td>
+        <td className="num">{t("payroll.text")}{thb(run.totalGross)}</td>
+        <td className="num">{t("payroll.text")}{thb(run.totalNet)}</td>
         <td className="num" onClick={(e) => e.stopPropagation()}>
           <a
             className="badge accent"
@@ -334,7 +339,7 @@ function RunRow({
               href={`/api/gw/api/v1/payroll/runs/${run.id}/bank-payout.csv`}
               style={{ marginRight: 6 }}
             >
-              ดาวน์โหลดไฟล์โอน
+                {t("payroll.bankPayout")}
             </a>
           )}
           {run.status === "approved" && (
@@ -346,7 +351,7 @@ function RunRow({
                 onClick={onMarkPaid}
                 style={{ marginRight: 6 }}
               >
-                ทำเครื่องหมายจ่ายแล้ว
+                {t("payroll.markPaid")}
               </button>
               <a
                 className="badge accent"
@@ -355,7 +360,7 @@ function RunRow({
                 rel="noreferrer"
                 style={{ marginRight: 6 }}
               >
-                ดาวน์โหลด GL (CSV)
+                {t("payroll.glDownload")}
               </a>
               <a
                 className="badge accent"
@@ -364,7 +369,7 @@ function RunRow({
                 rel="noreferrer"
                 style={{ marginRight: 6 }}
               >
-                ดาวน์โหลด PF (CSV)
+                {t("payroll.pfDownload")}
               </a>
               <button
                 className="btn btn-sm btn-primary"
@@ -372,7 +377,7 @@ function RunRow({
                 disabled={busy || pfState?.status === "sent"}
                 onClick={onSendPf}
               >
-                ส่ง PF
+                {t("payroll.sendPf")}
               </button>
               {pfState && (
                 <span
@@ -380,14 +385,14 @@ function RunRow({
                   data-testid="pf-status"
                   style={{ marginLeft: 6 }}
                 >
-                  {pfState.status === "sent" ? "ส่งแล้ว" : "ส่งไม่สำเร็จ"}
+                  {pfState.status === "sent" ? t("payroll.pfSent") : t("payroll.pfFailed")}
                 </span>
               )}
             </>
           )}
           {run.status === "completed" && (
             <span className="badge" data-testid="paid-info" style={{ marginLeft: 6 }}>
-              จ่ายแล้ว
+              {t("payroll.paidInfo")}
               {run.paidAt ? ` · ${thDate(run.paidAt.slice(0, 10))}` : ""}
               {run.paymentReference ? ` · ${run.paymentReference}` : ""}
             </span>
@@ -400,11 +405,11 @@ function RunRow({
                 disabled={busy || needsReview}
                 onClick={onApprove}
               >
-                อนุมัติ
+                {t("payroll.approve")}
               </button>
               {needsReview && (
                 <span className="badge danger" style={{ marginLeft: 6 }} data-testid="needs-review">
-                  ตรวจความผิดปกติก่อนอนุมัติ
+                  {t("payroll.reviewBeforeApprove")}
                 </span>
               )}
             </>
@@ -416,19 +421,19 @@ function RunRow({
           <td colSpan={7} style={{ background: "#fbfbfd" }}>
             <AnomalyPanel anomalies={anomalies} busy={busy} onReview={onReviewAnomalies} />
             {!payslips ? (
-              <div className="spinner">กำลังโหลดสลิป…</div>
+              <div className="spinner">{t("payroll.payslipLoading")}</div>
             ) : payslips.length === 0 ? (
-              <div className="empty">รอบนี้ยังไม่มีสลิป</div>
+              <div className="empty">{t("payroll.noPayslips")}</div>
             ) : (
               <table className="table">
                 <thead>
                   <tr>
-                    <th>พนักงาน</th>
-                    <th className="num">เงินเดือน</th>
-                    <th className="num">ภาษี</th>
-                    <th className="num">ประกันสังคม</th>
-                    <th className="num">สุทธิ</th>
-                    <th>สลิป</th>
+                    <th scope="col">{t("payroll.payslipEmployee")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipSalary")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipTax")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipSso")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipNet")}</th>
+                    <th scope="col">{t("payroll.payslipSlip")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -438,10 +443,10 @@ function RunRow({
                         <div style={{ fontWeight: 500 }}>{p.employee_name}</div>
                         <div className="hint">{p.employee_code}</div>
                       </td>
-                      <td className="num">฿{thb(p.base_salary)}</td>
-                      <td className="num">฿{thb(p.tax_withheld)}</td>
-                      <td className="num">฿{thb(p.sso_employee)}</td>
-                      <td className="num">฿{thb(p.net_pay)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.base_salary)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.tax_withheld)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.sso_employee)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.net_pay)}</td>
                       <td>
                         <a
                           className="badge accent"
@@ -472,38 +477,39 @@ function AnomalyPanel({
   busy: boolean;
   onReview: () => void;
 }) {
+  const { t, tDynamic } = useI18N();
   if (!anomalies) return null;
   const total = anomalies.counts.error + anomalies.counts.warning;
   return (
     <div className="card card-pad" style={{ marginBottom: 12 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h3 style={{ margin: 0 }}>ตรวจความผิดปกติ</h3>
+        <h3 style={{ margin: 0 }}>{t("payroll.anomalyTitle")}</h3>
         {total > 0 &&
           (anomalies.reviewed_at ? (
             <span className="badge success" data-testid="anomaly-reviewed">
-              ตรวจสอบแล้ว · {thDate(anomalies.reviewed_at.slice(0, 10))}
+              {t("payroll.reviewAnomalies")}
             </span>
           ) : (
             <button className="btn btn-sm btn-primary" data-testid="review-anomalies" disabled={busy} onClick={onReview}>
-              ตรวจสอบแล้ว
+              {t("payroll.reviewAnomalies")}
             </button>
           ))}
       </div>
       {total === 0 ? (
-        <div className="empty">ไม่พบความผิดปกติ</div>
+        <div className="empty">{t("payroll.noAnomalies")}</div>
       ) : (
         <>
           <div style={{ margin: "8px 0" }}>
-            <span className="badge danger">ข้อผิดพลาด {anomalies.counts.error}</span>{" "}
-            <span className="badge warning">คำเตือน {anomalies.counts.warning}</span>
+            <span className="badge danger">{t("payroll.errorBadge")} {anomalies.counts.error}</span>{" "}
+            <span className="badge warning">{t("payroll.warningBadge")} {anomalies.counts.warning}</span>
           </div>
           <table className="table">
             <thead>
               <tr>
-                <th>พนักงาน</th>
-                <th>ระดับ</th>
-                <th>รหัส</th>
-                <th>รายละเอียด</th>
+                <th scope="col">{t("payroll.anomalyEmployee")}</th>
+                <th scope="col">{t("payroll.anomalySeverity")}</th>
+                <th scope="col">{t("payroll.anomalyCode")}</th>
+                <th scope="col">{t("payroll.anomalyDetail")}</th>
               </tr>
             </thead>
             <tbody>
@@ -515,7 +521,7 @@ function AnomalyPanel({
                   </td>
                   <td>
                     <span className={`badge ${a.severity === "error" ? "danger" : "warning"}`}>
-                      {a.severity === "error" ? "ข้อผิดพลาด" : "คำเตือน"}
+                      {a.severity === "error" ? t("payroll.errorBadge") : t("payroll.warningBadge")}
                     </span>
                   </td>
                   <td className="hint">{a.code}</td>

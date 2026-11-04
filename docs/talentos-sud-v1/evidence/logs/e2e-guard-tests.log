@@ -1,0 +1,7 @@
+PASS  missing E2E_ALLOW_DESTRUCTIVE    refused (exit 2)
+PASS  E2E_DB=talentos                  refused (exit 1)
+PASS  E2E_DB=prod_x                    refused (exit 1)
+PASS  DATABASE_URL -> talentos         refused (exit 1)
+PASS  demo tenant present              refused (exit 1)
+
+RESULT: PASS (5/5 guard cases refused)

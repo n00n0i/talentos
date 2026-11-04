@@ -164,6 +164,35 @@ pub async fn export_personal_data(
     .fetch_one(&mut *tx)
     .await?;
 
+    // Candidate records this user applied through: email/phone stored encrypted,
+    // decrypted for the export (legacy plaintext passes through).
+    let candidate_rows = sqlx::query(
+        r#"SELECT c.id, c.first_name, c.last_name, c.email, c.phone, c.stage,
+                  j.title AS job_title
+             FROM candidates c
+             JOIN job_openings j ON j.id = c.job_opening_id AND j.tenant_id = c.tenant_id
+            WHERE c.tenant_id = $1 AND c.created_by = $2
+            ORDER BY c.created_at"#,
+    )
+    .bind(tenant_id.0)
+    .bind(user_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let candidates: Vec<Value> = candidate_rows
+        .iter()
+        .map(|row| {
+            json!({
+                "id": row.get::<Uuid, _>("id"),
+                "first_name": row.get::<String, _>("first_name"),
+                "last_name": row.get::<String, _>("last_name"),
+                "email": plain(pii, row.get("email")),
+                "phone": plain(pii, row.get("phone")),
+                "stage": row.get::<String, _>("stage"),
+                "job_title": row.get::<String, _>("job_title"),
+            })
+        })
+        .collect();
+
     // No status filter: a terminated employee still has the right to their data.
     let employee_rows = sqlx::query(
         r#"SELECT id, employee_code, first_name_th, last_name_th, first_name_en, last_name_en,
@@ -379,6 +408,7 @@ pub async fn export_personal_data(
         "roles": roles,
         "consents": consents,
         "notifications": notifications,
+        "candidates": candidates,
         "employees": employees,
     }))
 }

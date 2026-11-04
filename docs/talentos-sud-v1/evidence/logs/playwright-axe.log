@@ -1,0 +1,9 @@
+
+Running 4 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 390px (25.8s)
+  ✓  2 [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 760px (25.6s)
+  ✓  3 [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 1440px (26.7s)
+  ✓  4 [chromium] › e2e/a11y.spec.ts:112:5 › axe WCAG 2.1 AA in English mode (9.8s)
+
+  4 passed (1.5m)

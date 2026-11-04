@@ -82,6 +82,7 @@ test("HR admin can open every admin module", async ({ page }) => {
     "/performance",
     "/goals",
     "/me/reviews",
+    "/team",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
@@ -90,7 +91,7 @@ test("HR admin can open every admin module", async ({ page }) => {
 
 test("payroll manager is limited to payroll, reports, people", async ({ page }) => {
   await login(page, PAYROLL);
-  for (const path of ["/payroll", "/reports", "/employees", "/privacy", "/documents", "/onboarding", "/recruitment", "/training", "/performance", "/goals", "/me/reviews"]) {
+  for (const path of ["/payroll", "/reports", "/employees", "/privacy", "/documents", "/onboarding", "/recruitment", "/training", "/performance", "/goals", "/me/reviews", "/team"]) {
     await page.goto(path);
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
   }
@@ -110,11 +111,26 @@ test("payroll manager is limited to payroll, reports, people", async ({ page }) 
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
   }
+  await page.goto("/");
+  await expect(page.getByTestId("dash-title")).toBeVisible();
+  await expect(page.getByTestId("run-summary")).toBeVisible();
+  await expect(page.getByTestId("approvals-grid")).toHaveCount(0);
 });
 
 test("manager is limited to team and self-service areas", async ({ page }) => {
   await login(page, MANAGER);
-  for (const path of ["/attendance", "/leave", "/ot", "/claims", "/clock", "/privacy", "/me/reviews"]) {
+  for (const path of [
+    "/attendance",
+    "/leave",
+    "/ot",
+    "/claims",
+    "/clock",
+    "/privacy",
+    "/me/reviews",
+    "/performance",
+    "/goals",
+    "/team",
+  ]) {
     await page.goto(path);
     await expect(page).toHaveURL(new RegExp(`${path.replace("/", "\\/")}$`));
   }
@@ -132,12 +148,13 @@ test("manager is limited to team and self-service areas", async ({ page }) => {
     "/onboarding",
     "/recruitment",
     "/training",
-    "/performance",
-    "/goals",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
   }
+  await page.goto("/");
+  await expect(page.getByTestId("approvals-grid")).toBeVisible();
+  await expect(page.getByTestId("run-summary")).toHaveCount(0);
 });
 
 test("employee is limited to self-service areas", async ({ page }) => {
@@ -164,10 +181,14 @@ test("employee is limited to self-service areas", async ({ page }) => {
     "/training",
     "/performance",
     "/goals",
+    "/team",
   ]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/clock$/);
   }
+  await page.goto("/");
+  await expect(page.getByTestId("mine-grid")).toBeVisible();
+  await expect(page.getByTestId("approvals-grid")).toHaveCount(0);
 });
 
 test("employee cannot open calendar; manager can", async ({ page }) => {

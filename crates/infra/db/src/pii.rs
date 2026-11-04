@@ -57,6 +57,20 @@ impl PiiCipher {
         Ok(format!("{PREFIX}{}", hex::encode(blob)))
     }
 
+    /// Deterministic variant with a fixed nonce, so the ciphertext of a given
+    /// plaintext is always the same string and can be used to index/look up
+    /// rows (candidate email search).
+    pub fn encrypt_deterministic(&self, plaintext: &str) -> Result<String, PiiError> {
+        let nonce = Nonce::from_slice(&[0u8; NONCE_LEN]);
+        let ciphertext = self
+            .cipher
+            .encrypt(nonce, plaintext.as_bytes())
+            .map_err(|_| PiiError::Encrypt)?;
+        let mut blob = vec![0u8; NONCE_LEN];
+        blob.extend_from_slice(&ciphertext);
+        Ok(format!("{PREFIX}{}", hex::encode(blob)))
+    }
+
     /// Decrypt a stored value. Legacy plaintext (no prefix) is returned intact.
     pub fn decrypt(&self, stored: &str) -> Result<String, PiiError> {
         let Some(body) = stored.strip_prefix(PREFIX) else {
@@ -144,6 +158,27 @@ mod tests {
     fn mask_keeps_only_last_four_digits() {
         assert_eq!(mask_secret("123-4-56789-0"), "****7890");
         assert_eq!(mask_secret("123"), "****");
+    }
+
+    #[test]
+    fn candidate_email_phone_round_trip() {
+        let c = cipher();
+        let email = c.encrypt("alice@example.com").unwrap();
+        assert!(email.starts_with("v1:"));
+        assert!(!email.contains("alice@example.com"));
+        assert_eq!(c.decrypt(&email).unwrap(), "alice@example.com");
+
+        let phone = c.encrypt("0801234567").unwrap();
+        assert!(phone.starts_with("v1:"));
+        assert!(!phone.contains("0801234567"));
+        assert_eq!(c.decrypt(&phone).unwrap(), "0801234567");
+
+        // Legacy plaintext still reads back unchanged.
+        assert_eq!(
+            c.decrypt("legacy@example.com").unwrap(),
+            "legacy@example.com"
+        );
+        assert_eq!(c.decrypt("0801111111").unwrap(), "0801111111");
     }
 
     #[test]

@@ -1,21 +1,13 @@
-mod cli;
-mod dto;
-mod handlers;
-mod metrics;
-mod middleware;
-mod notify_worker;
-mod ratelimit;
-mod router;
-mod state;
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use fred::prelude::*;
 
-use state::AppState;
 use talentos_db::TenantPool;
+use talentos_gateway::secrets::SecretsClient;
+use talentos_gateway::state::AppState;
+use talentos_gateway::{cli, metrics, metrics_alert, notify_worker, router};
 
 #[tokio::main]
 async fn main() {
@@ -134,6 +126,16 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // Fail closed: enabled but missing address/token must not start silently.
+    let secrets = match SecretsClient::from_env() {
+        Ok(Some(client)) => Some(Arc::new(client)),
+        Ok(None) => None,
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let state = AppState {
         pool: pool.clone(),
         auth_pool: auth_pool.clone(),
@@ -148,6 +150,12 @@ async fn main() {
             pool.clone(),
             talentos_model_gw::HuakatiClient::new().ok().map(Arc::new),
         )),
+        base_url: std::env::var("APP_URL")
+            .ok()
+            .filter(|s| !s.trim().is_empty()),
+        http: reqwest::Client::new(),
+        oidc_cache: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+        secrets,
         started_at: std::time::Instant::now(),
     };
 
@@ -227,7 +235,15 @@ async fn main() {
     }
 
     metrics::init();
-    let app = router::build(state);
+    let app = router::build(state.clone());
+
+    // Business-metric alert sweep: POST to METRICS_ALERT_WEBHOOK when
+    // notification backlog or stuck-run age crosses the configured thresholds.
+    {
+        let alert_http = reqwest::Client::new();
+        let alert_cfg = metrics_alert::AlertConfig::from_env();
+        metrics_alert::spawn_worker(auth_pool.clone(), alert_http, alert_cfg);
+    }
 
     let listener = tokio::net::TcpListener::bind(bind_addr)
         .await

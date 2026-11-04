@@ -1,0 +1,1041 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.30s
+     Running unittests src/lib.rs (target/debug/deps/talentos_agent-18fc46d15aa69f2c)
+
+running 7 tests
+test activities::tests::all_success_scores_high_and_stops ... ok
+test activities::tests::destructive_tools_are_marked ... ok
+test activities::tests::failure_scores_low_and_replans ... ok
+test activities::tests::empty_results_scope_zero ... ok
+test activities::tests::fenced_json_is_parsed ... ok
+test activities::tests::junk_falls_back_to_heuristics ... ok
+test activities::tests::reflection_json_is_parsed ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_attendance-0c9afc45a0e87555)
+
+running 10 tests
+test shift::tests::duplicate_in_uses_latest_before_out ... ok
+test shift::tests::early_arrival_alone_is_not_ot ... ok
+test shift::tests::early_arrival_and_late_leave_weekday_ot_is_after_shift_end ... ok
+test shift::tests::early_leave ... ok
+test shift::tests::holiday_short_stint_is_all_ot_without_break ... ok
+test shift::tests::late_with_grace ... ok
+test shift::tests::missing_out_is_incomplete ... ok
+test shift::tests::normal_day_nine_to_six ... ok
+test shift::tests::timezone_plus_seven_and_utc_normalised_to_bangkok ... ok
+test shift::tests::overnight_shift_weekday_ot ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_authz-9a364054b4ec6564)
+
+running 46 tests
+test jwt::tests::garbage_string_is_malformed ... ok
+test jwt::tests::refresh_token_shape ... ok
+test jwt::tests::expired_token_rejected ... ok
+test jwt::tests::cross_entity_admin_null_eid_round_trips ... ok
+test jwt::tests::slightly_future_nbf_accepted_within_leeway ... ok
+test jwt::tests::round_trip_issue_verify ... ok
+test jwt::tests::wrong_key_rejected ... ok
+test jwt::tests::tampered_payload_rejected ... ok
+test password::tests::malformed_hash_surfaces_as_error ... ok
+test rbac::tests::employee_cannot_approve_attendance_day ... ok
+test rbac::tests::all_roles_can_punch_self ... ok
+test rbac::tests::employee_and_manager_cannot_manage_shifts ... ok
+test rbac::tests::ai_permissions_follow_role_lists ... ok
+test rbac::tests::all_roles_can_view_own_payslip ... ok
+test rbac::tests::employee_cannot_create_employee ... ok
+test rbac::tests::empty_roles_denied_everything ... ok
+test rbac::tests::expand_permissions_for_employee_only ... ok
+test rbac::tests::hr_admin_and_payroll_manager_can_manage_shifts ... ok
+test rbac::tests::expand_permissions_for_hr_admin ... ok
+test rbac::tests::hr_admin_can_create_employee ... ok
+test rbac::tests::hr_admin_payroll_manager_and_manager_can_approve_attendance_day ... ok
+test rbac::tests::integration_permissions_are_split_read_and_manage ... ok
+test rbac::tests::manager_can_manage_direct_performance_but_employee_cannot ... ok
+test rbac::tests::manager_cannot_export_payroll_report ... ok
+test rbac::tests::only_hr_admin_and_manager_manage_approval_delegations ... ok
+test rbac::tests::only_hr_admin_creates_payout_templates ... ok
+test rbac::tests::only_hr_admin_manages_oidc_settings ... ok
+test rbac::tests::only_hr_admin_purges_privacy ... ok
+test rbac::tests::only_hr_admin_reads_audit_log ... ok
+test rbac::tests::payroll_manager_can_calculate_payroll ... ok
+test rbac::tests::unknown_resource_denied ... ok
+test recovery_codes::tests::hash_code_is_stable_and_normalized ... ok
+test recovery_codes::tests::invalid_formats_are_rejected ... ok
+test recovery_codes::tests::normalize_strips_dashes_spaces_and_lowercase ... ok
+test recovery_codes::tests::generated_codes_are_eight_base32_chars_formatted ... ok
+test totp::tests::code_at_round_trips_and_rejects_malformed_secret ... ok
+test totp::tests::otpauth_url_contains_account_secret_and_issuer ... ok
+test totp::tests::generate_secret_is_valid_base32_secret ... ok
+test totp::tests::otpauth_url_encodes_the_account ... ok
+test totp::tests::rfc6238_vectors ... ok
+test totp::tests::verify_rejects_garbage_secrets_and_codes ... ok
+test totp::tests::verify_accepts_current_and_adjacent_steps ... ok
+test totp::tests::verify_rejects_two_step_drift ... ok
+test password::tests::wrong_password_returns_false_not_error ... ok
+test password::tests::hash_verify_roundtrip ... ok
+test password::tests::dummy_hash_verifies_and_has_similar_cost ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.30s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_compliance-f499fe315d89b02d)
+
+running 6 tests
+test ot::tests::test_ot_calculation ... ok
+test ot::tests::test_ot_max_hours_enforcement ... ok
+test pf::tests::test_pf_calculation ... ok
+test severance::tests::test_severance_tiers ... ok
+test sso::tests::test_sso_calculations ... ok
+test tax::tests::test_pnd_tax_brackets ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_db-5db15e575e9c8bce)
+
+running 6 tests
+test pii::tests::mask_keeps_only_last_four_digits ... ok
+test pii::tests::legacy_plaintext_still_reads ... ok
+test pii::tests::rejects_short_keys ... ok
+test pii::tests::candidate_email_phone_round_trip ... ok
+test pii::tests::round_trips_and_never_stores_plaintext ... ok
+test pii::tests::wrong_key_and_tampering_fail ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_gateway-51d435895e206ead)
+
+running 98 tests
+test dto::requests::tests::absent_totp_code_is_valid ... ok
+test dto::requests::tests::non_six_digit_totp_code_is_invalid ... ok
+test dto::requests::tests::recovery_code_format_is_valid ... ok
+test dto::requests::tests::six_digit_totp_code_is_valid ... ok
+test handlers::ai::tests::chat_request_uses_the_resolved_role_model ... ok
+test handlers::ai::tests::prompt_has_ontology_header_and_each_triple_once ... ok
+test handlers::ai_providers::tests::normalises_bare_and_models_arrays ... ok
+test handlers::ai_providers::tests::normalises_openai_model_list ... ok
+test handlers::ai_providers::tests::presets_include_ollama_without_key_requirement ... ok
+test handlers::attendance::tests::holiday_wins_over_weekday_and_weekend ... ok
+test handlers::attendance::tests::parses_hhmm_and_hhmmss_time_strings ... ok
+test handlers::attendance::tests::weekend_is_detected_without_a_calendar ... ok
+test handlers::employees::tests::import_accepts_max_salary ... ok
+test handlers::employees::tests::import_accepts_common_boolean_strings ... ok
+test handlers::employees::tests::import_accepts_salary_with_2_decimals ... ok
+test handlers::attendance::tests::rejects_invalid_time_strings ... ok
+test handlers::employees::tests::import_preserves_entity_id_in_parsed_row ... ok
+test handlers::employees::tests::import_detects_duplicate_code_inside_file ... ok
+test handlers::employees::tests::import_rejects_bad_date ... ok
+test handlers::employees::tests::import_detects_duplicates_even_when_other_fields_invalid ... ok
+test handlers::employees::tests::import_rejects_blank_employee_code ... ok
+test handlers::employees::tests::import_rejects_blank_required_cell ... ok
+test handlers::employees::tests::import_rejects_bad_tax_filing_status_number ... ok
+test handlers::employees::tests::import_rejects_negative_salary ... ok
+test handlers::employees::tests::import_rejects_non_numeric_salary ... ok
+test handlers::employees::tests::import_rejects_non_numeric_tax_filing_status ... ok
+test handlers::employees::tests::import_rejects_salary_over_maximum ... ok
+test handlers::employees::tests::import_rejects_salary_with_more_than_2_decimals ... ok
+test handlers::employees::tests::import_treats_whitespace_variants_as_duplicates ... ok
+test handlers::employees::tests::import_valid_rows_pass ... ok
+test handlers::employees::tests::report_counts_are_correct ... ok
+test handlers::employees::tests::report_from_rows_commit_with_invalid_yields_zero_created ... ok
+test handlers::leave::balance_import_merge_tests::mixed_parse_and_service_rows_merge_without_panicking ... ok
+test handlers::leave::tests::employee_can_create_for_self ... ok
+test handlers::leave::tests::manager_can_create_for_another_employee ... ok
+test handlers::leave::tests::employee_cannot_create_for_another_employee ... ok
+test handlers::leave::tests::unlinked_employee_cannot_create_for_another ... ok
+test handlers::leave::tests::unlinked_hr_can_create_for_another ... ok
+test handlers::notifications::tests::falls_back_for_unknown_channel ... ok
+test handlers::notifications::tests::masks_email ... ok
+test handlers::notifications::tests::masks_line ... ok
+test handlers::notifications::tests::validates_status ... ok
+test handlers::oidc::tests::base64_url_is_url_safe_and_unpadded ... ok
+test handlers::oidc::tests::empty_client_secret_preserves_stored_blob ... ok
+test handlers::oidc::tests::discovery_cache_hit_avoids_network ... ok
+test handlers::oidc::tests::discovery_error_returns_err ... ok
+test handlers::oidc::tests::discovery_fetch_and_cache ... ok
+test handlers::oidc::tests::id_token_rejected_when_aud_missing ... ok
+test handlers::oidc::tests::pkce_pair_is_deterministic_s256 ... ok
+test handlers::oidc::tests::id_token_rejected_when_signature_mismatch ... ok
+test handlers::oidc::tests::resolve_user_info_503_when_no_jwks_and_no_userinfo ... ok
+test handlers::oidc::tests::sign_and_read_state_roundtrip ... ok
+test handlers::oidc::tests::tampered_state_rejected ... ok
+test handlers::oidc::tests::id_token_rejected_when_expired ... ok
+test handlers::payroll::anomaly_tests::parse_anomaly_array_flattens_and_defaults_severity ... ok
+test handlers::payroll::anomaly_tests::parse_anomaly_array_handles_null_and_empty ... ok
+test handlers::payroll::csv_tests::csv_neutralizes_formula_injection ... ok
+test handlers::payroll::csv_tests::csv_has_bom_header_rows_and_totals ... ok
+test handlers::pf::tests::config_requires_base_and_token ... ok
+test handlers::oidc::tests::id_token_verified_via_jwks ... ok
+test handlers::oidc::tests::db_inactive_user_is_rejected ... ok
+test handlers::oidc::tests::db_link_existing_active_user_by_email ... ok
+test handlers::users::tests::line_user_id_shape ... ok
+test metrics::tests::counts_status_classes_and_duration ... ok
+test handlers::oidc::tests::db_link_or_create_new_user_in_empty_tenant ... ok
+test handlers::pf::tests::failure_records_error_and_allows_retry ... ok
+test metrics::tests::no_alerts_when_all_clear ... ok
+test metrics::tests::webhook_payload_shape_matches_spec ... ok
+test metrics::tests::webhook_payload_shape_single_alert ... ok
+test metrics_alert::tests::both_alerts_fire_simultaneously ... ok
+test metrics_alert::tests::no_alerts_when_all_clear ... ok
+test metrics_alert::tests::no_webhook_means_post_alert_returns_true ... ok
+test metrics_alert::tests::pending_backlog_does_not_fire_at_or_below_threshold ... ok
+test metrics_alert::tests::pending_backlog_fires_above_threshold ... ok
+test metrics_alert::tests::stuck_run_does_not_fire_below_threshold ... ok
+test metrics_alert::tests::stuck_run_fires_when_older_than_threshold ... ok
+test middleware::auth::tests::employee_is_refused_all_payslips_and_payroll_runs ... ok
+test middleware::auth::tests::hr_admin_can_manage_attendance_shifts_employee_cannot ... ok
+test middleware::auth::tests::hr_admin_passes_payroll_and_payslip_gates ... ok
+test middleware::auth::tests::manager_can_approve_attendance_employee_cannot ... ok
+test middleware::auth::tests::manager_cannot_approve_payroll_but_can_view_team ... ok
+test metrics::tests::gauge_queries_handle_no_stuck_runs ... ok
+test notify_worker::tests::email_requires_key_and_from ... ok
+test metrics::tests::gauge_queries_return_expected_counts ... ok
+test handlers::pf::tests::non_approved_run_is_rejected ... ok
+test notify_worker::tests::no_config_enables_no_channels ... ok
+test notify_worker::tests::email_path_header_and_body_are_correct ... ok
+test notify_worker::tests::empty_config_claims_nothing_and_leaves_rows_pending ... ok
+test handlers::pf::tests::already_sent_is_conflict ... ok
+test secrets::tests::disabled_when_flag_unset_or_false ... ok
+test secrets::tests::path_is_kv_v2_layout ... ok
+test handlers::pf::tests::run_is_invisible_to_other_tenant ... ok
+test notify_worker::tests::line_path_header_and_body_are_correct ... ok
+test handlers::pf::tests::sends_path_header_and_body_and_marks_sent ... ok
+test notify_worker::tests::null_user_id_is_marked_failed_without_sending ... ok
+test notify_worker::tests::stale_email_recipient_is_marked_failed_without_sending ... ok
+test notify_worker::tests::transient_failure_retries_then_fails_on_third_attempt ... ok
+test cli::tests::provisions_a_tenant_with_an_hr_admin ... ok
+
+test result: ok. 98 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.31s
+
+     Running unittests src/main.rs (target/debug/deps/talentos_gateway-90953227abe97b74)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ai_chat.rs (target/debug/deps/ai_chat-2ce6bccb818d8dbe)
+
+running 2 tests
+test chat_requires_role_and_permission ... ok
+test chat_uses_the_chat_role_model_and_persists ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/ai_providers.rs (target/debug/deps/ai_providers-62dd0fd2a3f9f7f6)
+
+running 6 tests
+test model_role_upsert_and_get ... ok
+test employee_is_forbidden_from_provider_settings ... ok
+test presets_include_ollama_without_key_requirement ... ok
+test fetch_models_unreachable_provider_is_502 ... ok
+test fetch_models_normalises_and_caches_without_key_header ... ok
+test provider_crud_never_returns_the_key ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/ai_settings.rs (target/debug/deps/ai_settings-dc27c22ed5f617c2)
+
+running 1 test
+test ai_settings_flags_roundtrip_and_rbac ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/integration.rs (target/debug/deps/integration-90280c37b2acb293)
+
+running 3 tests
+test tenant_isolation_and_rbac ... ok
+test connections_crud_and_secret_ref_never_echoed ... ok
+test connector_lifecycle_listing_and_pagination ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/kg.rs (target/debug/deps/kg-531b121e5a767a2e)
+
+running 2 tests
+test kg_node_listing_search_and_class_filter ... ok
+test kg_rebuild_and_read_endpoints ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_graphql-ba3071755a5d4b59)
+
+running 3 tests
+test tests::rbac_gates_payroll_and_payslip_reads ... ok
+test tests::money_is_a_string_not_a_float ... ok
+test tests::schema_exposes_the_read_model ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_hr_runner-2e6387adbfc5d77c)
+
+running 28 tests
+test attendance::effective_ot_tests::request_raises_but_never_adds ... ok
+test approval_rules::tests::chain_validation_matches_default_rules ... ok
+test attendance::tests::break_minutes_out_of_range_is_invalid ... ok
+test claims::tests::category_allowlist ... ok
+test attendance::tests::grace_minutes_out_of_range_is_invalid ... ok
+test claims::tests::description_too_long_is_rejected ... ok
+test claims::tests::extension_by_content_type ... ok
+test claims::tests::receipt_type_allowlist ... ok
+test claims::tests::zero_amount_is_rejected ... ok
+test forms::tests::html_and_csv_escape ... ok
+test forms::tests::validates_annual_sources ... ok
+test forms::tests::validates_empty_label ... ok
+test forms::tests::validates_header_source_or_value ... ok
+test forms::tests::validates_row_bounds ... ok
+test forms::tests::validates_pnd_column_forms ... ok
+test forms::tests::validates_unknown_source ... ok
+test leave::tests::leave_type_whitelist_matches_statutory_set ... ok
+test leave::tests::normalise_chain_defaults_invalid_chains ... ok
+test leave::tests::over_a_year_is_rejected ... ok
+test leave::tests::range_is_inclusive ... ok
+test leave::tests::reversed_range_is_rejected ... ok
+test leave::tests::single_day_request_counts_as_one ... ok
+test notify::tests::leave_submitted_rendering_contains_no_pii_or_salary ... ok
+test notify::tests::payslip_ready_rendering_contains_period_and_link ... ok
+test notify::tests::thai_decision_status_renders_approved_and_rejected ... ok
+test pf::tests::default_and_bounds ... ok
+test reports::tests::csv_field_escapes_and_prefixes_injection_chars ... ok
+test reports::tests::format_decimal_rounds_to_two_places ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/approval_rules.rs (target/debug/deps/approval_rules-eae5f492d24e88aa)
+
+running 5 tests
+test type_specific_rule_beats_generic ... ok
+test request_keeps_chain_after_rule_deleted ... ok
+test priority_breaks_tie_between_equivalent_rules ... ok
+test min_days_threshold_and_below_threshold_uses_default ... ok
+test crud_is_tenant_scoped_and_validated ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/attendance_approve.rs (target/debug/deps/attendance_approve-829f8975b0105475)
+
+running 6 tests
+test incomplete_day_cannot_be_approved ... ok
+test pending_day_is_not_paid ... ok
+test list_days_filters_by_date_range_employee_and_status ... ok
+test approve_writes_payroll_row_with_hours_and_ot_kind ... ok
+test correction_resets_approved_day_and_withdraws_payroll_row_until_reapproval ... ok
+test tenant_b_cannot_approve_tenant_a_day ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/attendance_import.rs (target/debug/deps/attendance_import-d5d779a8f3ceed9e)
+
+running 5 tests
+test no_shift_reports_error ... ok
+test two_valid_rows_and_unknown_employee ... ok
+test overnight_row_puts_out_on_next_day_and_keeps_start_work_date ... ok
+test mobile_punched_day_is_skipped ... ok
+test reimport_does_not_duplicate_events ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/attendance_punch.rs (target/debug/deps/attendance_punch-3c0bd12c38dec3d4)
+
+running 15 tests
+test negative_accuracy_is_rejected ... ok
+test client_time_preserves_offline_punch_instant ... ok
+test early_arrival_and_late_leave_count_with_ot_after_shift_end ... ok
+test overnight_punch_lands_on_previous_work_date ... ok
+test holiday_punch_marks_day_holiday ... ok
+test client_id_replay_is_idempotent ... ok
+test overnight_shift_out_after_shift_end_counts_ot_on_start_date ... ok
+test new_punch_resets_approved_day_to_pending ... ok
+test unlinked_user_is_rejected ... ok
+test punch_outside_geofence_is_rejected ... ok
+test punch_inside_geofence_is_accepted ... ok
+test punch_without_geofence_is_rejected ... ok
+test punch_within_accuracy_tolerance_is_accepted ... ok
+test two_punches_same_second_stay_consistent ... ok
+test replay_after_approval_keeps_day_approved ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+
+     Running tests/attendance_schema.rs (target/debug/deps/attendance_schema-aae3f8f19faa686a)
+
+running 1 test
+test another_tenant_cannot_see_shift_rows ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/attendance_self.rs (target/debug/deps/attendance_self-b7b74d9d96d9dfaa)
+
+running 1 test
+test linked_user_sees_only_own_days ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/attendance_shifts.rs (target/debug/deps/attendance_shifts-2a67fa5784dc14bb)
+
+running 5 tests
+test invalid_geofence_radius_is_rejected ... ok
+test assign_employee_to_shift_from_different_entity_fails ... ok
+test create_and_assign_shift_round_trip ... ok
+test two_entities_in_one_tenant_stay_isolated ... ok
+test shifts_are_isolated_by_tenant ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/bank_templates.rs (target/debug/deps/bank_templates-7d5e96ce0a1c0101)
+
+running 4 tests
+test create_defaults_unverified_true_and_writes_audit_row ... ok
+test create_rejects_unknown_source ... ok
+test list_is_tenant_isolated ... ok
+test get_returns_tenant_rows_only ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/calendar.rs (target/debug/deps/calendar-16cb11eb7e916311)
+
+running 2 tests
+test rejects_too_wide_and_inverted_ranges ... ok
+test buckets_holidays_leave_and_ot_by_day ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/claims.rs (target/debug/deps/claims-ce77fd6ccc8d796e)
+
+running 11 tests
+test cancel_pending_succeeds ... ok
+test missing_receipt_download_returns_none ... ok
+test hr_inbox_lists_pending_with_code_and_name ... ok
+test cancel_approved_claim_returns_conflict ... ok
+test receipt_upload_generates_uuid_filename_and_download_roundtrips ... ok
+test decide_once_then_decide_again_returns_conflict ... ok
+test create_and_list_own_claims ... ok
+test cancel_other_employees_claim_returns_not_found ... ok
+test unlinked_user_gets_empty_claims ... ok
+test receipt_upload_validates_size_and_type ... ok
+test tenant_isolation_hides_cross_tenant_claim ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+     Running tests/delegation.rs (target/debug/deps/delegation-3d0de885d18c203f)
+
+running 5 tests
+test self_delegation_is_rejected ... ok
+test delete_stops_delegated_rights ... ok
+test delegate_approves_manager_step ... ok
+test hr_creates_delegation_for_another_manager ... ok
+test expired_delegation_is_ignored ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/documents.rs (target/debug/deps/documents-b707477454db31fd)
+
+running 4 tests
+test upload_get_replace_and_delete_removes_files ... ok
+test self_service_lists_and_downloads_only_own_documents ... ok
+test documents_are_not_reachable_from_another_tenant ... ok
+test create_list_and_expiry_alerts ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/escalation.rs (target/debug/deps/escalation-d399f4eec6828c24)
+
+running 6 tests
+test sla_out_of_range_is_rejected_by_db_check ... ok
+test fresh_and_decided_steps_are_ignored ... ok
+test sla_zero_disables_escalation ... ok
+test overdue_step_notifies_each_active_hr_admin_and_stamps_escalated_at ... ok
+test second_run_does_not_duplicate ... ok
+test escalation_is_tenant_scoped ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/esign.rs (target/debug/deps/esign-9cfa99ee34701f58)
+
+running 4 tests
+test sign_payslip_not_owned_rejected ... ok
+test empty_name_rejected ... ok
+test sign_is_idempotent_per_signer ... ok
+test sign_payslip_stores_hash_and_audit ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/forms.rs (target/debug/deps/forms-93c92b6a4f46de1d)
+
+running 15 tests
+test pnd1_csv_rows_and_totals ... ok
+test bank_payout_csv_rejects_unapproved_run ... ok
+test pnd1_csv_rejects_unapproved_run ... ok
+test mark_paid_transition_only_from_approved ... ok
+test bank_payout_csv_legacy_plaintext_account ... ok
+test bank_payout_csv_columns_order_and_decrypt ... ok
+test pnd1a_csv_aggregates_only_requested_year ... ok
+test pnd1a_csv_is_tenant_scoped ... ok
+test tenant_override_and_global_fallback ... ok
+test sso_csv_rejects_unapproved_run ... ok
+test save_increments_version_and_keeps_old ... ok
+test render_50tawi_uses_edited_labels_and_values ... ok
+test sso_header_resolves_entity_account_and_branch ... ok
+test sso_csv_honors_columns_order_and_totals ... ok
+test tenant_template_is_not_visible_to_other_tenant ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/goals.rs (target/debug/deps/goals-3a33d296d9a090c3)
+
+running 3 tests
+test validation ... ok
+test goal_check_ins_manager_only_and_audited ... ok
+test goals_crud_cycle_filter_and_isolation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/integration.rs (target/debug/deps/integration-cd34723b36f2ab05)
+
+running 3 tests
+test connection_view_has_no_secret_ref_field ... ok
+test connector_lifecycle_and_published_immutability ... ok
+test connection_crud_secret_handling_and_isolation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/kg.rs (target/debug/deps/kg-68b0c0fbfc79a016)
+
+running 1 test
+test kg_upsert_traversal_and_counts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/kg_sync.rs (target/debug/deps/kg_sync-691b4a61a281c848)
+
+running 4 tests
+test node_cap_is_five_thousand ... ok
+test kg_sync_empty_tenant_has_org_and_entity_only ... ok
+test kg_sync_two_employees_one_department ... ok
+test kg_sync_is_idempotent ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/leave_approval.rs (target/debug/deps/leave_approval-f145032c6b38fe4f)
+
+running 12 tests
+test legacy_pending_request_approves_via_single_hr_step ... ok
+test final_reject_restores_balance_once ... ok
+test default_chain_is_single_hr_step ... ok
+test employee_without_role_cannot_approve ... ok
+test cancel_skips_pending_steps ... ok
+test hr_can_override_manager_step ... ok
+test manager_cannot_decide_hr_step ... ok
+test intermediate_approval_does_not_change_balance ... ok
+test pending_approvals_shows_current_step ... ok
+test two_step_chain_advances_then_approves ... ok
+test reject_at_step_one_skips_remaining_steps ... ok
+test request_uses_chain_snapshot_from_creation ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/leave_balances_import.rs (target/debug/deps/leave_balances_import-529df0604641ca5e)
+
+running 6 tests
+test unknown_employee_is_invalid ... ok
+test dry_run_writes_nothing ... ok
+test duplicate_in_file_marks_both_invalid ... ok
+test used_greater_than_total_is_invalid ... ok
+test second_import_updates_same_row ... ok
+test valid_row_upserts_balance ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/leave_self.rs (target/debug/deps/leave_self-f48b5a54a467c931)
+
+running 15 tests
+test decided_request_creates_notification_for_employee ... ok
+test cancel_approved_request_returns_conflict ... ok
+test concurrent_create_prevents_overspending ... ok
+test hr_inbox_lists_pending_with_code_and_name ... ok
+test cancelled_request_creates_no_decision_notification ... ok
+test cancel_another_employees_request_returns_not_found ... ok
+test cancel_pending_succeeds_and_restores_balance ... ok
+test approve_keeps_balance_debited_and_reject_restores ... ok
+test unlinked_user_gets_empty_balances_and_requests ... ok
+test legacy_pending_request_cancels_without_touching_balance ... ok
+test rejected_request_creates_notification_for_employee ... ok
+test submitted_request_creates_email_rows_for_hr_and_line_only_when_line_id_exists ... ok
+test pagination_orders_and_pages_requests ... ok
+test linked_user_sees_only_own_balances_and_requests ... ok
+test unprovisioned_balance_shows_default_total_and_not_provisioned ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/loans.rs (target/debug/deps/loans-f49a9112e35860b3)
+
+running 12 tests
+test over_balance_is_rejected_and_balance_unchanged ... ok
+test full_payoff_closes_loan ... ok
+test partial_payoff_reduces_balance_and_records_payment ... ok
+test reversal_restores_principal_only_and_writes_off_interest ... ok
+test reverse_approved_run_is_rejected ... ok
+test reversal_caps_at_principal ... ok
+test closed_loan_rejects_payoff ... ok
+test duplicate_reversal_is_rejected ... ok
+test reverse_pending_restores_balance_and_reopens ... ok
+test zero_amount_is_rejected ... ok
+test tenant_scope_blocks_cross_tenant_reversal ... ok
+test tenant_scope_blocks_cross_tenant_payoff ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+     Running tests/notify.rs (target/debug/deps/notify-209c413daec01a9f)
+
+running 1 test
+test payslip_ready_enqueues_one_row_per_active_linked_user ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/onboarding.rs (target/debug/deps/onboarding-9376952d43479c20)
+
+running 3 tests
+test standard_checklist_is_idempotent_and_dates_from_hire ... ok
+test completion_duplicates_and_validation ... ok
+test self_service_and_cross_tenant_are_scoped ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/ot_approval.rs (target/debug/deps/ot_approval-32616bb2d6f1eeec)
+
+running 10 tests
+test legacy_pending_request_shows_default_step ... ok
+test legacy_pending_request_approves_via_single_hr_step ... ok
+test default_chain_is_single_hr_step ... ok
+test cancel_skips_pending_steps ... ok
+test pending_approvals_shows_current_step ... ok
+test hr_can_override_manager_step ... ok
+test reject_at_step_one_skips_remaining_steps ... ok
+test manager_cannot_decide_hr_step ... ok
+test two_step_chain_advances_then_approves ... ok
+test request_uses_chain_snapshot_from_creation ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+
+     Running tests/ot_self.rs (target/debug/deps/ot_self-3f9116a12cd5429d)
+
+running 18 tests
+test cancel_another_employees_request_returns_not_found ... ok
+test cancelled_request_keeps_pending_day_at_derived ... ok
+test cancel_pending_succeeds ... ok
+test cancel_approved_request_returns_not_pending ... ok
+test duplicate_live_date_returns_conflict ... ok
+test approved_request_raises_pending_day_ot ... ok
+test decide_twice_returns_not_pending ... ok
+test approved_day_blocks_request_that_would_raise_ot ... ok
+test minutes_out_of_bounds_are_rejected ... ok
+test reason_length_is_validated ... ok
+test linked_user_creates_and_lists_own_requests ... ok
+test hr_inbox_lists_pending_with_code_and_name ... ok
+test rejected_request_frees_the_date ... ok
+test request_not_exceeding_derived_is_no_op_on_approved_day ... ok
+test tenant_requests_can_filter_by_status ... ok
+test rejected_request_keeps_pending_day_at_derived ... ok
+test unlinked_user_gets_empty_requests ... ok
+test tenant_requests_clamps_limit_and_rejects_bad_status ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests/pdpa.rs (target/debug/deps/pdpa-a1becef8b158b466)
+
+running 6 tests
+test policy_defaults_and_purge_anonymises_pii_and_retains_payslips ... ok
+test purge_keeps_recent_ops_data_and_is_idempotent ... ok
+test old_unexpiring_doc_purged ... ok
+test recent_unexpiring_doc_not_purged ... ok
+test retention_purge_touches_only_expired_terminated_employees ... ok
+test purge_is_tenant_scoped ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+     Running tests/performance.rs (target/debug/deps/performance-3a771988130ce0ff)
+
+running 4 tests
+test set_employee_manager_assigns_and_audits ... ok
+test cycle_populates_active_employees_and_submits_reviews ... ok
+test validation_and_tenant_isolation ... ok
+test manager_scoped_cycles_and_calibrations ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/pf.rs (target/debug/deps/pf-66683e37ac4be2d2)
+
+running 6 tests
+test defaults_to_five_percent_without_history ... ok
+test rate_out_of_bounds_is_rejected ... ok
+test future_rate_is_ignored ... ok
+test upsert_same_date_replaces_the_rate ... ok
+test latest_rate_not_later_than_as_of_wins ... ok
+test rates_are_scoped_to_the_tenant ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/privacy.rs (target/debug/deps/privacy-3b6da5cf184858f7)
+
+running 4 tests
+test export_without_employee_returns_account_only ... ok
+test consent_is_idempotent_versioned_and_per_user ... ok
+test export_decrypts_candidate_email_phone ... ok
+test export_contains_all_linked_employees_and_no_one_else ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/recruitment.rs (target/debug/deps/recruitment-e6249a4de96c3861)
+
+running 6 tests
+test job_and_candidate_pipeline ... ok
+test candidate_pii_encrypted_at_rest_and_email_lookup ... ok
+test interviews_schedule_status_and_scope ... ok
+test offers_create_status_and_letter_data ... ok
+test validation_and_tenant_isolation ... ok
+test cv_lifecycle_and_cleanup ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/reports.rs (target/debug/deps/reports-7f82d79c4ba6257e)
+
+running 14 tests
+test draft_runs_are_excluded_from_payroll_cost ... ok
+test gl_export_splits_loan_principal_and_interest ... ok
+test gl_export_balances_with_loan_deduction ... ok
+test gl_export_balances_with_reimbursement ... ok
+test gl_export_rejects_draft_run ... ok
+test gl_export_balances_and_is_deterministic ... ok
+test gl_export_groups_by_cost_center_with_department_fallback ... ok
+test gl_export_is_not_visible_to_other_tenant ... ok
+test pf_remittance_csv_rejects_draft_run ... ok
+test gl_export_uses_custom_account_codes ... ok
+test payroll_cost_groups_approved_runs_by_department ... ok
+test ot_trend_groups_approved_days_by_month ... ok
+test headcount_counts_active_probation_leave_and_terminated_last_12m ... ok
+test pf_remittance_csv_includes_only_pf_members_and_totals ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/settlement.rs (target/debug/deps/settlement-b8619366600e7de2)
+
+running 10 tests
+test negative_days_are_rejected ... ok
+test proration_on_day_15 ... ok
+test unknown_employee_returns_not_found ... ok
+test severance_tier_two_years ... ok
+test totals_round_to_two_decimal_places ... ok
+test notice_pay ... ok
+test termination_before_hire_is_rejected ... ok
+test tenant_isolation_hides_cross_tenant_settlement ... ok
+test unused_leave_pay ... ok
+test zero_severance_when_excluded ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/team.rs (target/debug/deps/team-49870827012762b6)
+
+running 1 test
+test returns_only_direct_reports_with_safe_fields ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/training.rs (target/debug/deps/training-409058eed65b81d0)
+
+running 2 tests
+test create_list_and_expiry_alerts ... ok
+test self_service_and_cross_tenant_are_scoped ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_kernel-f6e2ab07c233037a)
+
+running 5 tests
+test money::tests::display_shows_thai_baht_symbol ... ok
+test money::tests::satang_roundtrip ... ok
+test money::tests::money_rounds_half_away_from_zero ... ok
+test money::tests::money_addition_preserves_precision ... ok
+test money::tests::serialization_is_string_not_float ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_mcp-03b778446eb74e71)
+
+running 5 tests
+test tests::guard_blocks_unknown_and_unapproved_destructive_tools ... ok
+test tests::initialize_falls_back_to_latest_for_unknown_versions ... ok
+test tests::initialize_negotiates_a_supported_version ... ok
+test tests::notifications_get_no_response ... ok
+test tests::tools_list_carries_schema_and_destructive_hint ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_memory-20d260621107a620)
+
+running 3 tests
+test tests::layers_round_trip_and_reject_unknown_names ... ok
+test tests::pgvector_literal_is_a_bracket_list ... ok
+test tests::working_memory_expires_by_default_but_durable_layers_do_not ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/recall.rs (target/debug/deps/recall-f43fa1d02542a924)
+
+running 3 tests
+test saves_and_recalls_by_tenant ... ok
+test layer_filter_and_expiry_are_enforced ... ok
+test stats_count_live_rows_per_layer ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_model_gw-d8045db58f31a403)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_payroll-23f3d00ca964cc2c)
+
+running 27 tests
+test dag::tests::loan_deduction_reduces_net_and_total ... ok
+test dag::tests::monthly_tax_is_not_divided_twice ... ok
+test dag::tests::net_equals_gross_minus_deductions_plus_reimbursement ... ok
+test dag::tests::oversized_loan_installment_rejects_negative_net ... ok
+test dag::tests::deterministic_same_input_same_output ... ok
+test dag::tests::sso_exempt_employee_pays_no_sso ... ok
+test dag::tests::pf_is_member_only_and_independent_of_sso ... ok
+test dag::tests::sso_is_capped_at_15000_wage_base ... ok
+test dag::tests::sso_is_proportional_below_cap ... ok
+test dag::tests::trace_has_nine_steps ... ok
+test dag::tests::reimbursement_increases_net_pay ... ok
+test dag::tests::unpaid_leave_never_makes_net_pay_negative ... ok
+test dag::tests::unpaid_leave_reduces_gross_by_salary_over_30_per_day ... ok
+test render::tests::custom_branding_is_used ... ok
+test render::tests::rejects_unsafe_or_unknown_config ... ok
+test render::tests::hidden_fields_are_not_rendered ... ok
+test render::tests::renders_loan_deduction_line_when_present ... ok
+test render::tests::renders_loan_principal_and_interest_split_when_interest_present ... ok
+test render::tests::renders_totals_and_period ... ok
+test render::tests::renders_reimbursement_line_when_present ... ok
+test render::tests::user_content_is_escaped ... ok
+test settings::tests::rejects_bad_approval_chains ... ok
+test settings::tests::defaults_are_thai_standard ... ok
+test settings::tests::rejects_bad_gl_accounts ... ok
+test settings::tests::rejects_bad_ot_approval_chains ... ok
+test settings::tests::rejects_impossible_policies ... ok
+test settings::tests::rejects_out_of_range_approval_sla ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_payroll_runner-c1a2d06bfed8e186)
+
+running 4 tests
+test tests::final_payoff_uses_whole_balance_plus_accrued_interest ... ok
+test tests::interest_splits_from_principal ... ok
+test tests::principal_never_exceeds_balance ... ok
+test tests::zero_rate_pays_principal_only ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/anomaly_review.rs (target/debug/deps/anomaly_review-4e98fc51c5ef90f3)
+
+running 3 tests
+test recalc_clears_anomaly_review ... ok
+test high_salary_records_sso_cap_warning ... ok
+test anomalies_are_tenant_scoped ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/attendance_scale.rs (target/debug/deps/attendance_scale-4584b67234e0bc0e)
+
+running 1 test
+test attendance_scale_employees_feed_payroll ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running tests/claims_payroll.rs (target/debug/deps/claims_payroll-c30d35061231df34)
+
+running 5 tests
+test failed_payslip_leaves_claim_approved ... ok
+test rejected_claim_is_ignored ... ok
+test claim_outside_period_is_ignored ... ok
+test rerun_does_not_double_reimburse ... ok
+test approved_claim_in_period_is_reimbursed_and_marked_paid ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/execute_run.rs (target/debug/deps/execute_run-9df1e67e3ed8d48b)
+
+running 10 tests
+test missing_renderer_reports_unavailable_not_a_broken_file ... ok
+test stuck_run_is_recovered_and_completed ... ok
+test pf_rate_uses_period_end_effective_rate ... ok
+test second_execution_is_rejected_by_state_machine ... ok
+test execute_run_writes_payslips_and_totals ... ok
+test attendance_ot_and_unpaid_leave_feed_the_run ... ok
+test tenant_policy_overrides_divisor_and_ot_rates ... ok
+test attendance_ot_uses_approved_records_and_ignores_pending_days ... ok
+test tenant_template_round_trips_and_renders_payslip ... ok
+test payslip_pdf_is_real_pdf_with_thai_text ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.93s
+
+     Running tests/load.rs (target/debug/deps/load-933d10194f423eed)
+
+running 1 test
+test payroll_handles_many_employees ... ignored, load test; run explicitly with LOAD_EMPLOYEES and --ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/loans.rs (target/debug/deps/loans-d84f2762e111dd51)
+
+running 8 tests
+test final_installment_caps_at_balance_and_closes ... ok
+test failed_payslip_skips_loan_deduction ... ok
+test final_installment_with_interest_pays_off ... ok
+test execute_run_deducts_loan_installment_and_reduces_balance ... ok
+test execute_run_splits_interest_and_principal ... ok
+test rerun_does_not_double_deduct ... ok
+test installment_amortizes_across_runs_without_negative_balance ... ok
+test recalc_after_reversal_creates_new_installment_and_deducts_once ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_rag-41101f4a2eef3dfd)
+
+running 7 tests
+test chunker::tests::long_text_splits_under_chunk_size ... ok
+test chunker::tests::content_hash_is_stable_and_distinct ... ok
+test chunker::tests::short_text_is_one_chunk ... ok
+test search::tests::rrf_empty_inputs_yield_empty ... ok
+test search::tests::rrf_is_deterministic ... ok
+test search::tests::rrf_prefers_chunk_present_in_both_arms ... ok
+test search::tests::rrf_respects_top_k ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_tools-c7bdaa0c074e3f44)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/talentos_wasm_host-5c92d3c4cbdbe19e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/host.rs (target/debug/deps/host-a993069671335a45)
+
+running 6 tests
+test non_wasm_bytes_are_rejected ... ok
+test registration_is_refused_without_the_granted_capability ... ok
+test invocation_is_tenant_scoped ... ok
+test full_year_bonus_is_base_times_months ... ok
+test bad_input_surfaces_a_plugin_error_not_a_panic ... ok
+test under_a_year_of_service_gets_no_bonus ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests talentos_agent
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_attendance
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_authz
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_compliance
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_db
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_gateway
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_graphql
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_hr_runner
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_kernel
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_mcp
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_memory
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_model_gw
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_payroll
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_payroll_runner
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_rag
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_tools
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests talentos_wasm_host
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

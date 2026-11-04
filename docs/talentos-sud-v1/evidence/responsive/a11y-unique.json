@@ -1,0 +1,327 @@
+{
+  "checks": [
+    {
+      "width": 320,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 320,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 320,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 320,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 320,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 320,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 320,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 320,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 390,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 760,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1024,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    },
+    {
+      "width": 1440,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "small": 0,
+      "unlabeled": 0
+    }
+  ],
+  "uniqueSmallTargets": 0,
+  "uniqueUnlabeledInputs": 0,
+  "unlabeledSamples": []
+}

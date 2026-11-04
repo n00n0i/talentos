@@ -3,44 +3,16 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Icon, { IconName } from "@/components/Icon";
+import Icon from "@/components/Icon";
+import TableLabels from "@/components/TableLabels";
 import { gw, Me } from "@/lib/api";
+import { useI18N } from "@/lib/i18n";
+import { activeHref, visibleNav } from "@/lib/nav";
 
-const NAV: { href: string; label: string; icon: IconName }[] = [
-  { href: "/", label: "ภาพรวม", icon: "overview" },
-  { href: "/employees", label: "พนักงาน", icon: "users" },
-  { href: "/documents", label: "เอกสาร", icon: "file" },
-  { href: "/onboarding", label: "เริ่มงาน", icon: "users" },
-  { href: "/recruitment", label: "สรรหาบุคลากร", icon: "users" },
-  { href: "/training", label: "อบรม", icon: "file" },
-  { href: "/performance", label: "ประเมินผล", icon: "file" },
-  { href: "/goals", label: "เป้าหมาย", icon: "file" },
-  { href: "/me/reviews", label: "ผลประเมินของฉัน", icon: "file" },
-  { href: "/attendance", label: "เวลาและ OT", icon: "clock" },
-  { href: "/calendar", label: "ปฏิทินทีม", icon: "clock" },
-  { href: "/clock", label: "ลงเวลา", icon: "clock" },
-  { href: "/leave", label: "การลา", icon: "clock" },
-  { href: "/ot", label: "OT", icon: "clock" },
-  { href: "/claims", label: "ค่าใช้จ่าย", icon: "wallet" },
-  { href: "/payroll", label: "รอบเงินเดือน", icon: "wallet" },
-  { href: "/payslip", label: "แบบฟอร์มสลิป", icon: "file" },
-  { href: "/me/payslips", label: "สลิปของฉัน", icon: "file" },
-  { href: "/privacy", label: "ความเป็นส่วนตัว", icon: "file" },
-];
-
-const ADMIN_NAV: { href: string; label: string; icon: IconName }[] = [
-  { href: "/users", label: "ผู้ใช้", icon: "user" },
-  { href: "/settings", label: "ตั้งค่า", icon: "settings" },
-  { href: "/forms", label: "แบบฟอร์ม", icon: "file" },
-  { href: "/audit", label: "ประวัติ", icon: "file" },
-];
-
-const ROLE_LABEL: Record<string, string> = {
-  hr_admin: "ผู้ดูแล HR",
-  payroll_manager: "ผู้จัดการเงินเดือน",
-  manager: "หัวหน้างาน",
-  employee: "พนักงาน",
-};
+/** Case- and diacritic-insensitive fold: "Käse" → "kase", Thai marks stripped too. */
+function fold(value: string) {
+  return value.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -54,6 +26,9 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [today, setToday] = useState("");
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const { lang, setLang, t, tDynamic } = useI18N();
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
@@ -65,13 +40,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setToday(
-      new Intl.DateTimeFormat("th-TH", {
+      new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "th-TH", {
         day: "numeric",
         month: "short",
         year: "numeric",
       }).format(new Date()),
     );
-  }, []);
+  }, [lang]);
 
   // Register the offline service worker (network-first, cache fallback for
   // navigations). Best-effort: failures must never affect the app.
@@ -81,6 +56,17 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  useEffect(() => setOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   async function logout() {
     await fetch("/api/session/logout", { method: "POST" });
     router.replace("/login");
@@ -88,99 +74,157 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   const isAdmin = me?.roles.includes("hr_admin") ?? false;
   const canHr = me?.permissions.includes("employee.read_all") ?? true;
+  const canDirect = me?.permissions.includes("performance.manage_direct") ?? false;
   const canReports = me?.roles.some((r) => ["hr_admin", "payroll_manager"].includes(r)) ?? false;
 
   // Direct URLs must not render admin screens for roles that only see the
-  // error state. The API still enforces permissions; this keeps the UI honest.
-  useEffect(() => {
-    if (!me) return;
-    const adminOnly = ["/users", "/settings", "/forms", "/audit", "/loans", "/final-settlement", "/payslip"];
-    const payrollOnly = ["/payroll", "/reports"];
-    const hrOnly = [
-      "/employees",
-      "/documents",
-      "/onboarding",
-      "/recruitment",
-      "/training",
-      "/performance",
-      "/goals",
-    ];
-    const attendanceOnly = ["/attendance", "/calendar"];
-    const denied =
-      (adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
-      (payrollOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canReports) ||
-      (hrOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canHr) ||
-      (attendanceOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
-        !me.permissions.includes("attendance.read"));
-    if (denied) router.replace("/clock");
-  }, [me, pathname, router, isAdmin, canHr, canReports]);
-  const displayName = me?.full_name_th || me?.email || "TalentOS";
-  const roleLabel = me?.roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ") || "";
-  const baseNav = canReports
-    ? [
-        ...NAV,
-        ...(isAdmin
-          ? [
-              { href: "/loans", label: "เงินกู้", icon: "wallet" as IconName },
-              { href: "/final-settlement", label: "พนักงานลาออก", icon: "users" as IconName },
-            ]
-          : []),
-        { href: "/reports", label: "รายงาน", icon: "file" as IconName },
-      ]
-    : NAV;
-  const employeeNav = [
-    "/clock",
-    "/leave",
-    "/ot",
-    "/claims",
-    "/me/payslips",
-    "/privacy",
-    "/me/reviews",
+  // error state. Gate the page itself so a denied page never fires its data
+  // requests (and logs a 403) before the redirect.
+  const adminOnly = ["/users", "/settings", "/forms", "/audit", "/loans", "/final-settlement", "/payslip"];
+  const payrollOnly = ["/payroll", "/reports"];
+  const hrOnly = [
+    "/employees",
+    "/documents",
+    "/onboarding",
+    "/recruitment",
+    "/training",
+    "/performance",
+    "/goals",
   ];
-  const items = !me
-    ? baseNav
-    : canHr
-      ? [...baseNav, ...(isAdmin ? ADMIN_NAV : [])]
-      : baseNav.filter(
-          (i) =>
-            employeeNav.includes(i.href) ||
-            ((i.href === "/attendance" || i.href === "/calendar") &&
-              me.permissions.includes("attendance.read")),
-        );
+  const attendanceOnly = ["/attendance", "/calendar"];
+  const teamOnly = ["/team"];
+  // /performance and /goals are reachable only by managers with manage_direct.
+  const directOnly = ["/performance", "/goals"];
+  const denied =
+    me !== null &&
+    ((adminOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !isAdmin) ||
+      (payrollOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) && !canReports) ||
+      (hrOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+        !canHr &&
+        !(
+          canDirect &&
+          directOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+        )) ||
+      (attendanceOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+        !me.permissions.includes("attendance.read")) ||
+      (teamOnly.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+        !me.permissions.includes("employee.read_own_team")));
+  useEffect(() => {
+    if (denied) router.replace("/clock");
+  }, [denied, router]);
+
+  const displayName = me?.full_name_th || me?.email || "TalentOS";
+  const roleLabel =
+    me?.roles
+      .map((r) => {
+        const key = `role.${r}`;
+        const label = tDynamic(key);
+        return label === key ? r : label; // unknown role → show the raw role
+      })
+      .join(" · ") || "";
+  const active = activeHref(pathname);
+  const needle = fold(q.trim());
+  const groups = visibleNav(me)
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((i) => fold(t(i.labelKey)).includes(needle)),
+    }))
+    .filter((g) => g.items.length > 0);
 
   return (
-    <div className="shell">
-      <header className="appbar">
-        <Link href="/" className="brand" aria-label="TalentOS">
-          <span className="brand-mark">
-            <Icon name="clover" size={22} />
+    <div className="app-shell">
+      <aside className={open ? "side open" : "side"} data-testid="side-nav">
+        <Link href="/" className="side-brand">
+          <span className="side-brand-mark">
+            <Icon name="clover" size={18} />
+          </span>
+          <span className="side-brand-name">
+            TalentOS
+            {me?.tenant_name ? <span className="side-brand-sub">{me.tenant_name}</span> : null}
           </span>
         </Link>
-
-        <nav className="pills" aria-label="เมนูหลัก">
-          {items.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={pathname === item.href ? "active" : undefined}
-            >
-              {item.label}
-            </Link>
+        <nav className="side-nav" id="side-nav-menu" aria-label={t("shell.menu")}>
+          {groups.map((g) => (
+            <div className="side-group" key={g.id}>
+              {g.labelKey && <span className="side-group-label">{t(g.labelKey)}</span>}
+              {g.items.map((i) => (
+                <Link key={i.href} href={i.href} className={i.href === active ? "active" : undefined}>
+                  <span className="ico">
+                    <Icon name={i.icon} size={10} />
+                  </span>
+                  {t(i.labelKey)}
+                </Link>
+              ))}
+            </div>
           ))}
+          {groups.length === 0 && <p className="side-empty">{t("shell.noResults")}</p>}
         </nav>
-
-        <div className="appbar-right">
-          <span className="date-chip">{today}</span>
-          <div className="avatar" title={`${displayName} · ${roleLabel}`}>
-            {initials(displayName)}
+        <div className="side-user">
+          <div className="avatar">{initials(displayName)}</div>
+          <div className="side-user-text">
+            <span className="side-user-name">{displayName}</span>
+            {roleLabel && <span className="side-user-role">{roleLabel}</span>}
           </div>
-          <button className="icon-btn" onClick={logout} title="ออกจากระบบ" aria-label="ออกจากระบบ">
-            <Icon name="logout" size={15} />
-          </button>
         </div>
-      </header>
-
-      <main className="content">{children}</main>
+      </aside>
+      {open && (
+        <button
+          className="side-backdrop"
+          data-testid="side-backdrop"
+          aria-label={t("shell.closeMenu")}
+          onClick={() => setOpen(false)}
+        />
+      )}
+      <div className="main">
+        <div className="topbar">
+          <button
+            className="menu-btn"
+            data-testid="menu-toggle"
+            aria-label={t("shell.menu")}
+            aria-expanded={open}
+            aria-controls="side-nav-menu"
+            onClick={() => setOpen((v) => !v)}
+          >
+            ☰
+          </button>
+          <label className="search">
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder={t("shell.searchPlaceholder")}
+              aria-label={t("shell.searchPlaceholder")}
+            />
+          </label>
+          <span className="date-chip">{today}</span>
+          <div className="topbar-right">
+            <button
+              data-testid="lang-toggle"
+              className="lang-toggle"
+              onClick={() => setLang(lang === "th" ? "en" : "th")}
+              aria-label={`${lang === "th" ? "EN" : "TH"} — ${t("shell.toggleLang")}`}
+              title={t("shell.toggleLang")}
+            >
+              {lang === "th" ? "EN" : "TH"}
+            </button>
+            <div className="avatar" title={`${displayName} · ${roleLabel}`}>
+              {initials(displayName)}
+            </div>
+            <button className="icon-btn" onClick={logout} title={t("shell.logout")} aria-label={t("shell.logout")}>
+              <Icon name="logout" size={15} />
+            </button>
+          </div>
+        </div>
+        <main className="content">
+          {!me || denied ? (
+            <div className="spinner">{t("common.loading")}</div>
+          ) : (
+            <>
+              <TableLabels />
+              {children}
+            </>
+          )}
+        </main>
+      </div>
     </div>
   );
 }

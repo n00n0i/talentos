@@ -1,0 +1,1679 @@
+table:_sqlx_migrations
+table:ai_agent_runs
+table:ai_conversations
+table:ai_cost_tracking
+table:ai_document_chunks
+table:ai_documents
+table:ai_memory
+table:ai_model_roles
+table:ai_providers
+table:ai_settings
+table:ai_tool_calls
+table:approval_delegations
+table:attendance_days
+table:attendance_events
+table:attendance_records
+table:audit_log
+table:bank_templates
+table:candidate_interviews
+table:candidate_offers
+table:candidate_stage_events
+table:candidates
+table:document_signatures
+table:employee_documents
+table:employee_loans
+table:employee_onboarding_tasks
+table:employee_training_records
+table:employees
+table:entities
+table:expense_claims
+table:final_settlements
+table:form_templates
+table:job_openings
+table:kg_edges
+table:kg_nodes
+table:leave_approval_rules
+table:leave_approval_steps
+table:leave_balances
+table:leave_requests
+table:leave_types
+table:loan_installments
+table:loan_payments
+table:notifications
+table:ot_approval_steps
+table:ot_requests
+table:ot_rules
+table:password_resets
+table:payroll_events
+table:payroll_runs
+table:payslip_acknowledgements
+table:payslip_lines
+table:payslip_templates
+table:payslips
+table:performance_calibrations
+table:performance_cycles
+table:performance_goal_check_ins
+table:performance_goals
+table:performance_reviews
+table:pf_rate_history
+table:pf_remittances
+table:pf_rules
+table:privacy_consents
+table:refresh_tokens
+table:roles
+table:severance_rules
+table:shift_assignments
+table:sso_rules
+table:tax_brackets
+table:tenant_api_keys
+table:tenant_holidays
+table:tenant_oidc_config
+table:tenant_payroll_settings
+table:tenant_pdpa_policy
+table:tenant_plugins
+table:tenants
+table:totp_recovery_codes
+table:user_invites
+table:user_roles
+table:users
+table:work_shifts
+rls:_sqlx_migrations:false:false
+rls:ai_agent_runs:true:true
+rls:ai_conversations:true:true
+rls:ai_cost_tracking:true:true
+rls:ai_document_chunks:true:true
+rls:ai_documents:true:true
+rls:ai_memory:true:true
+rls:ai_model_roles:true:true
+rls:ai_providers:true:true
+rls:ai_settings:true:true
+rls:ai_tool_calls:true:true
+rls:approval_delegations:true:true
+rls:attendance_days:true:true
+rls:attendance_events:true:true
+rls:attendance_records:true:true
+rls:audit_log:true:true
+rls:bank_templates:true:true
+rls:candidate_interviews:true:true
+rls:candidate_offers:true:true
+rls:candidate_stage_events:true:true
+rls:candidates:true:true
+rls:document_signatures:true:true
+rls:employee_documents:true:true
+rls:employee_loans:true:true
+rls:employee_onboarding_tasks:true:true
+rls:employee_training_records:true:true
+rls:employees:true:true
+rls:entities:true:true
+rls:expense_claims:true:true
+rls:final_settlements:true:true
+rls:form_templates:true:true
+rls:job_openings:true:true
+rls:kg_edges:true:true
+rls:kg_nodes:true:true
+rls:leave_approval_rules:true:true
+rls:leave_approval_steps:true:true
+rls:leave_balances:true:true
+rls:leave_requests:true:true
+rls:leave_types:true:true
+rls:loan_installments:true:true
+rls:loan_payments:true:true
+rls:notifications:true:true
+rls:ot_approval_steps:true:true
+rls:ot_requests:true:true
+rls:ot_rules:false:false
+rls:password_resets:true:true
+rls:payroll_events:true:true
+rls:payroll_runs:true:true
+rls:payslip_acknowledgements:true:true
+rls:payslip_lines:true:true
+rls:payslip_templates:true:true
+rls:payslips:true:true
+rls:performance_calibrations:true:true
+rls:performance_cycles:true:true
+rls:performance_goal_check_ins:true:true
+rls:performance_goals:true:true
+rls:performance_reviews:true:true
+rls:pf_rate_history:true:true
+rls:pf_remittances:true:true
+rls:pf_rules:false:false
+rls:privacy_consents:true:true
+rls:refresh_tokens:true:true
+rls:roles:true:true
+rls:severance_rules:false:false
+rls:shift_assignments:true:true
+rls:sso_rules:false:false
+rls:tax_brackets:false:false
+rls:tenant_api_keys:true:true
+rls:tenant_holidays:true:true
+rls:tenant_oidc_config:true:true
+rls:tenant_payroll_settings:true:true
+rls:tenant_pdpa_policy:true:true
+rls:tenant_plugins:true:true
+rls:tenants:true:true
+rls:totp_recovery_codes:true:true
+rls:user_invites:true:true
+rls:user_roles:true:true
+rls:users:true:true
+rls:work_shifts:true:true
+column:_sqlx_migrations:version:bigint::64:0:NO::1
+column:_sqlx_migrations:description:text::::NO::2
+column:_sqlx_migrations:installed_on:timestamp with time zone::::NO:now():3
+column:_sqlx_migrations:success:boolean::::NO::4
+column:_sqlx_migrations:checksum:bytea::::NO::5
+column:_sqlx_migrations:execution_time:bigint::64:0:NO::6
+column:ai_agent_runs:id:uuid::::NO:gen_random_uuid():1
+column:ai_agent_runs:agent_type:text::::NO::2
+column:ai_agent_runs:task:text::::NO::3
+column:ai_agent_runs:state:text::::NO:'running'::text:4
+column:ai_agent_runs:context:jsonb::::NO:'{}'::jsonb:5
+column:ai_agent_runs:result:jsonb::::YES::6
+column:ai_agent_runs:human_approver:uuid::::YES::7
+column:ai_agent_runs:approved_at:timestamp with time zone::::YES::8
+column:ai_agent_runs:created_at:timestamp with time zone::::NO:now():9
+column:ai_agent_runs:updated_at:timestamp with time zone::::NO:now():10
+column:ai_agent_runs:tenant_id:uuid::::NO::11
+column:ai_conversations:id:uuid::::NO:gen_random_uuid():1
+column:ai_conversations:agent_id:text::::NO::2
+column:ai_conversations:tenant_id:uuid::::NO::3
+column:ai_conversations:entity_id:uuid::::YES::4
+column:ai_conversations:messages:jsonb::::NO:'[]'::jsonb:5
+column:ai_conversations:state:text::::NO:'active'::text:6
+column:ai_conversations:created_at:timestamp with time zone::::NO:now():7
+column:ai_conversations:updated_at:timestamp with time zone::::NO:now():8
+column:ai_cost_tracking:id:bigint::64:0:NO:nextval('ai_cost_tracking_id_seq'::regclass):1
+column:ai_cost_tracking:tenant_id:uuid::::NO::2
+column:ai_cost_tracking:model:text::::NO::3
+column:ai_cost_tracking:input_tokens:bigint::64:0:NO:0:4
+column:ai_cost_tracking:output_tokens:bigint::64:0:NO:0:5
+column:ai_cost_tracking:cached_tokens:bigint::64:0:NO:0:6
+column:ai_cost_tracking:cost_usd:numeric::12:6:NO:0:7
+column:ai_cost_tracking:date:date::::NO:CURRENT_DATE:8
+column:ai_cost_tracking:created_at:timestamp with time zone::::NO:now():9
+column:ai_document_chunks:id:bigint::64:0:NO:nextval('ai_document_chunks_id_seq'::regclass):1
+column:ai_document_chunks:document_id:uuid::::NO::2
+column:ai_document_chunks:chunk_index:integer::32:0:NO::3
+column:ai_document_chunks:content:text::::NO::4
+column:ai_document_chunks:embedding:USER-DEFINED::::YES::5
+column:ai_document_chunks:word_count:integer::32:0:NO::6
+column:ai_document_chunks:tsv:tsvector::::YES::7
+column:ai_document_chunks:created_at:timestamp with time zone::::NO:now():8
+column:ai_documents:id:uuid::::NO:gen_random_uuid():1
+column:ai_documents:tenant_id:uuid::::NO::2
+column:ai_documents:entity_id:uuid::::YES::3
+column:ai_documents:content_hash:text::::NO::4
+column:ai_documents:doc_type:text::::NO::5
+column:ai_documents:source_path:text::::NO::6
+column:ai_documents:metadata:jsonb::::NO:'{}'::jsonb:7
+column:ai_documents:created_at:timestamp with time zone::::NO:now():8
+column:ai_documents:updated_at:timestamp with time zone::::NO:now():9
+column:ai_memory:id:uuid::::NO:gen_random_uuid():1
+column:ai_memory:tenant_id:uuid::::NO::2
+column:ai_memory:entity_id:uuid::::YES::3
+column:ai_memory:user_id:uuid::::YES::4
+column:ai_memory:layer:text::::NO::5
+column:ai_memory:scope_key:text::::NO:''::text:6
+column:ai_memory:content:text::::NO::7
+column:ai_memory:metadata:jsonb::::NO:'{}'::jsonb:8
+column:ai_memory:importance:numeric::3:2:NO:0.50:9
+column:ai_memory:embedding:USER-DEFINED::::YES::10
+column:ai_memory:tsv:tsvector::::YES::11
+column:ai_memory:access_count:integer::32:0:NO:0:12
+column:ai_memory:last_accessed:timestamp with time zone::::YES::13
+column:ai_memory:expires_at:timestamp with time zone::::YES::14
+column:ai_memory:created_at:timestamp with time zone::::NO:now():15
+column:ai_memory:updated_at:timestamp with time zone::::NO:now():16
+column:ai_model_roles:tenant_id:uuid::::NO::1
+column:ai_model_roles:role:text::::NO::2
+column:ai_model_roles:provider_id:uuid::::NO::3
+column:ai_model_roles:model:text::::NO::4
+column:ai_model_roles:params:jsonb::::NO:'{}'::jsonb:5
+column:ai_model_roles:updated_at:timestamp with time zone::::NO:now():6
+column:ai_providers:id:uuid::::NO:gen_random_uuid():1
+column:ai_providers:tenant_id:uuid::::NO::2
+column:ai_providers:name:text::::NO::3
+column:ai_providers:kind:text::::NO::4
+column:ai_providers:base_url:text::::NO::5
+column:ai_providers:api_key_ref:text::::YES::6
+column:ai_providers:models_cache:jsonb::::NO:'[]'::jsonb:7
+column:ai_providers:models_fetched_at:timestamp with time zone::::YES::8
+column:ai_providers:enabled:boolean::::NO:true:9
+column:ai_providers:created_at:timestamp with time zone::::NO:now():10
+column:ai_settings:tenant_id:uuid::::NO::1
+column:ai_settings:mcp_enabled:boolean::::NO:true:2
+column:ai_settings:skills:jsonb::::NO:'[]'::jsonb:3
+column:ai_settings:updated_at:timestamp with time zone::::NO:now():4
+column:ai_settings:agents:jsonb::::NO:'[]'::jsonb:5
+column:ai_tool_calls:id:uuid::::NO:gen_random_uuid():1
+column:ai_tool_calls:run_id:uuid::::NO::2
+column:ai_tool_calls:tool_name:text::::NO::3
+column:ai_tool_calls:input:jsonb::::NO::4
+column:ai_tool_calls:output:jsonb::::YES::5
+column:ai_tool_calls:duration_ms:bigint::64:0:NO:0:6
+column:ai_tool_calls:status:text::::NO::7
+column:ai_tool_calls:error:jsonb::::YES::8
+column:ai_tool_calls:created_at:timestamp with time zone::::NO:now():9
+column:approval_delegations:id:uuid::::NO:gen_random_uuid():1
+column:approval_delegations:tenant_id:uuid::::NO::2
+column:approval_delegations:delegator_user_id:uuid::::NO::3
+column:approval_delegations:delegate_user_id:uuid::::NO::4
+column:approval_delegations:starts_on:date::::NO::5
+column:approval_delegations:ends_on:date::::NO::6
+column:approval_delegations:created_by:uuid::::YES::7
+column:approval_delegations:created_at:timestamp with time zone::::NO:now():8
+column:attendance_days:id:uuid::::NO:gen_random_uuid():1
+column:attendance_days:tenant_id:uuid::::NO::2
+column:attendance_days:employee_id:uuid::::NO::3
+column:attendance_days:work_date:date::::NO::4
+column:attendance_days:shift_id:uuid::::YES::5
+column:attendance_days:worked_minutes:integer::32:0:NO:0:6
+column:attendance_days:late_minutes:integer::32:0:NO:0:7
+column:attendance_days:early_leave_minutes:integer::32:0:NO:0:8
+column:attendance_days:ot_minutes:integer::32:0:NO:0:9
+column:attendance_days:ot_kind:text::::NO:'weekday'::text:10
+column:attendance_days:incomplete:boolean::::NO:false:11
+column:attendance_days:status:text::::NO:'pending'::text:12
+column:attendance_days:approved_by:uuid::::YES::13
+column:attendance_days:approved_at:timestamp with time zone::::YES::14
+column:attendance_days:computed_at:timestamp with time zone::::NO:now():15
+column:attendance_days:created_at:timestamp with time zone::::NO:now():16
+column:attendance_days:updated_at:timestamp with time zone::::NO:now():17
+column:attendance_days:derived_ot_minutes:integer::32:0:NO:0:18
+column:attendance_events:id:uuid::::NO:gen_random_uuid():1
+column:attendance_events:tenant_id:uuid::::NO::2
+column:attendance_events:employee_id:uuid::::NO::3
+column:attendance_events:kind:text::::NO::4
+column:attendance_events:source:text::::NO::5
+column:attendance_events:occurred_at:timestamp with time zone::::NO::6
+column:attendance_events:created_at:timestamp with time zone::::NO:now():7
+column:attendance_events:distance_m:numeric::10:2:YES::8
+column:attendance_events:accuracy_m:numeric::10:2:YES::9
+column:attendance_events:work_date:date::::NO::10
+column:attendance_events:client_id:text::::YES::11
+column:attendance_records:id:uuid::::NO:gen_random_uuid():1
+column:attendance_records:tenant_id:uuid::::NO::2
+column:attendance_records:employee_id:uuid::::NO::3
+column:attendance_records:work_date:date::::NO::4
+column:attendance_records:hours_worked:numeric::4:2:NO:8.00:5
+column:attendance_records:ot_hours:numeric::4:2:NO:0.00:6
+column:attendance_records:ot_kind:text::::NO:'weekday'::text:7
+column:attendance_records:note:text::::YES::8
+column:attendance_records:created_by:uuid::::YES::9
+column:attendance_records:created_at:timestamp with time zone::::NO:now():10
+column:attendance_records:updated_at:timestamp with time zone::::NO:now():11
+column:audit_log:id:bigint::64:0:NO:nextval('audit_log_id_seq'::regclass):1
+column:audit_log:tenant_id:uuid::::NO::2
+column:audit_log:actor_type:text::::NO::3
+column:audit_log:actor_id:text::::NO::4
+column:audit_log:action:text::::NO::5
+column:audit_log:resource_type:text::::NO::6
+column:audit_log:resource_id:text::::NO::7
+column:audit_log:before_state:jsonb::::YES::8
+column:audit_log:after_state:jsonb::::YES::9
+column:audit_log:correlation_id:uuid::::YES::10
+column:audit_log:ip_address:inet::::YES::11
+column:audit_log:created_at:timestamp with time zone::::NO:now():12
+column:bank_templates:id:uuid::::NO:gen_random_uuid():1
+column:bank_templates:tenant_id:uuid::::YES::2
+column:bank_templates:bank_name:text::::NO::3
+column:bank_templates:layout_name:text::::NO::4
+column:bank_templates:field_order:ARRAY::::NO::5
+column:bank_templates:header_row:text::::YES::6
+column:bank_templates:unverified:boolean::::NO:true:7
+column:bank_templates:sign_off_note:text::::YES::8
+column:bank_templates:created_at:timestamp with time zone::::NO:now():9
+column:candidate_interviews:id:uuid::::NO:gen_random_uuid():1
+column:candidate_interviews:tenant_id:uuid::::NO::2
+column:candidate_interviews:candidate_id:uuid::::NO::3
+column:candidate_interviews:scheduled_at:timestamp with time zone::::NO::4
+column:candidate_interviews:mode:text::::NO::5
+column:candidate_interviews:location:text::::YES::6
+column:candidate_interviews:interviewer_user_id:uuid::::YES::7
+column:candidate_interviews:status:text::::NO:'scheduled'::text:8
+column:candidate_interviews:notes:text::::YES::9
+column:candidate_interviews:created_by:uuid::::YES::10
+column:candidate_interviews:created_at:timestamp with time zone::::NO:now():11
+column:candidate_interviews:updated_at:timestamp with time zone::::NO:now():12
+column:candidate_offers:id:uuid::::NO:gen_random_uuid():1
+column:candidate_offers:tenant_id:uuid::::NO::2
+column:candidate_offers:candidate_id:uuid::::NO::3
+column:candidate_offers:position_title:text::::NO::4
+column:candidate_offers:salary:numeric::12:2:NO::5
+column:candidate_offers:start_date:date::::NO::6
+column:candidate_offers:notes:text::::YES::7
+column:candidate_offers:status:text::::NO:'draft'::text:8
+column:candidate_offers:created_by:uuid::::YES::9
+column:candidate_offers:created_at:timestamp with time zone::::NO:now():10
+column:candidate_offers:updated_at:timestamp with time zone::::NO:now():11
+column:candidate_offers:signature_id:uuid::::YES::12
+column:candidate_stage_events:id:bigint::64:0:NO:nextval('candidate_stage_events_id_seq'::regclass):1
+column:candidate_stage_events:tenant_id:uuid::::NO::2
+column:candidate_stage_events:candidate_id:uuid::::NO::3
+column:candidate_stage_events:from_stage:text::::YES::4
+column:candidate_stage_events:to_stage:text::::NO::5
+column:candidate_stage_events:changed_by:uuid::::YES::6
+column:candidate_stage_events:changed_at:timestamp with time zone::::NO:now():7
+column:candidates:id:uuid::::NO:gen_random_uuid():1
+column:candidates:tenant_id:uuid::::NO::2
+column:candidates:job_opening_id:uuid::::NO::3
+column:candidates:first_name:text::::NO::4
+column:candidates:last_name:text::::NO::5
+column:candidates:email:text::::YES::6
+column:candidates:phone:text::::YES::7
+column:candidates:stage:text::::NO:'applied'::text:8
+column:candidates:source:text::::YES::9
+column:candidates:note:text::::YES::10
+column:candidates:created_by:uuid::::YES::11
+column:candidates:created_at:timestamp with time zone::::NO:now():12
+column:candidates:updated_at:timestamp with time zone::::NO:now():13
+column:candidates:cv_path:text::::YES::14
+column:candidates:cv_type:text::::YES::15
+column:document_signatures:id:uuid::::NO:gen_random_uuid():1
+column:document_signatures:tenant_id:uuid::::NO::2
+column:document_signatures:document_type:text::::NO::3
+column:document_signatures:document_id:uuid::::NO::4
+column:document_signatures:signer_user_id:uuid::::NO::5
+column:document_signatures:typed_name:text::::NO::6
+column:document_signatures:doc_hash_sha256:text::::NO::7
+column:document_signatures:signed_at:timestamp with time zone::::NO:now():8
+column:document_signatures:provider:text::::NO:'internal'::text:9
+column:document_signatures:created_at:timestamp with time zone::::NO:now():10
+column:employee_documents:id:uuid::::NO:gen_random_uuid():1
+column:employee_documents:tenant_id:uuid::::NO::2
+column:employee_documents:employee_id:uuid::::NO::3
+column:employee_documents:doc_type:text::::NO::4
+column:employee_documents:title:text::::NO::5
+column:employee_documents:doc_number:text::::YES::6
+column:employee_documents:issued_date:date::::YES::7
+column:employee_documents:expiry_date:date::::YES::8
+column:employee_documents:file_path:text::::YES::9
+column:employee_documents:file_type:text::::YES::10
+column:employee_documents:uploaded_by:uuid::::YES::11
+column:employee_documents:created_at:timestamp with time zone::::NO:now():12
+column:employee_documents:updated_at:timestamp with time zone::::NO:now():13
+column:employee_loans:id:uuid::::NO:gen_random_uuid():1
+column:employee_loans:tenant_id:uuid::::NO::2
+column:employee_loans:employee_id:uuid::::NO::3
+column:employee_loans:principal:numeric::12:2:NO::4
+column:employee_loans:balance:numeric::12:2:NO::5
+column:employee_loans:installment_amount:numeric::12:2:NO::6
+column:employee_loans:start_date:date::::NO::7
+column:employee_loans:status:text::::NO:'active'::text:8
+column:employee_loans:note:text::::YES::9
+column:employee_loans:created_by:uuid::::NO::10
+column:employee_loans:created_at:timestamp with time zone::::NO:now():11
+column:employee_loans:updated_at:timestamp with time zone::::NO:now():12
+column:employee_loans:interest_rate:numeric::5:4:NO:0:13
+column:employee_onboarding_tasks:id:uuid::::NO:gen_random_uuid():1
+column:employee_onboarding_tasks:tenant_id:uuid::::NO::2
+column:employee_onboarding_tasks:employee_id:uuid::::NO::3
+column:employee_onboarding_tasks:title:text::::NO::4
+column:employee_onboarding_tasks:notes:text::::YES::5
+column:employee_onboarding_tasks:due_date:date::::YES::6
+column:employee_onboarding_tasks:status:text::::NO:'pending'::text:7
+column:employee_onboarding_tasks:completed_at:timestamp with time zone::::YES::8
+column:employee_onboarding_tasks:completed_by:uuid::::YES::9
+column:employee_onboarding_tasks:created_by:uuid::::YES::10
+column:employee_onboarding_tasks:created_at:timestamp with time zone::::NO:now():11
+column:employee_onboarding_tasks:updated_at:timestamp with time zone::::NO:now():12
+column:employee_training_records:id:uuid::::NO:gen_random_uuid():1
+column:employee_training_records:tenant_id:uuid::::NO::2
+column:employee_training_records:employee_id:uuid::::NO::3
+column:employee_training_records:title:text::::NO::4
+column:employee_training_records:provider:text::::YES::5
+column:employee_training_records:completed_on:date::::YES::6
+column:employee_training_records:expires_on:date::::YES::7
+column:employee_training_records:created_by:uuid::::YES::8
+column:employee_training_records:created_at:timestamp with time zone::::NO:now():9
+column:employees:id:uuid::::NO:gen_random_uuid():1
+column:employees:tenant_id:uuid::::NO::2
+column:employees:entity_id:uuid::::NO::3
+column:employees:user_id:uuid::::YES::4
+column:employees:employee_code:text::::NO::5
+column:employees:first_name_th:text::::NO::6
+column:employees:last_name_th:text::::NO::7
+column:employees:first_name_en:text::::YES::8
+column:employees:last_name_en:text::::YES::9
+column:employees:national_id:text::::YES::10
+column:employees:birth_date:date::::YES::11
+column:employees:hire_date:date::::NO::12
+column:employees:termination_date:date::::YES::13
+column:employees:position_title:text::::NO::14
+column:employees:department:text::::YES::15
+column:employees:base_salary:numeric::12:2:NO::16
+column:employees:bank_account_number:text::::YES::17
+column:employees:bank_name:text::::YES::18
+column:employees:tax_filing_status:smallint::16:0:NO:1:19
+column:employees:sso_number:text::::YES::20
+column:employees:pf_member:boolean::::NO:false:21
+column:employees:status:text::::NO:'active'::text:22
+column:employees:metadata:jsonb::::NO:'{}'::jsonb:23
+column:employees:created_at:timestamp with time zone::::NO:now():24
+column:employees:updated_at:timestamp with time zone::::NO:now():25
+column:employees:sso_enrolled:boolean::::NO:true:26
+column:employees:cost_center:text::::YES::27
+column:employees:manager_id:uuid::::YES::28
+column:employees:pii_purged_at:timestamp with time zone::::YES::29
+column:entities:id:uuid::::NO:gen_random_uuid():1
+column:entities:tenant_id:uuid::::NO::2
+column:entities:name:text::::NO::3
+column:entities:tax_id:text::::YES::4
+column:entities:address:jsonb::::NO:'{}'::jsonb:5
+column:entities:is_active:boolean::::NO:true:6
+column:entities:created_at:timestamp with time zone::::NO:now():7
+column:entities:updated_at:timestamp with time zone::::NO:now():8
+column:entities:geofence_lat:numeric::9:6:YES::9
+column:entities:geofence_lng:numeric::9:6:YES::10
+column:entities:geofence_radius_m:integer::32:0:NO:200:11
+column:entities:sso_account:text::::YES::12
+column:entities:branch:text::::NO:'000000'::text:13
+column:expense_claims:id:uuid::::NO:gen_random_uuid():1
+column:expense_claims:tenant_id:uuid::::NO::2
+column:expense_claims:entity_id:uuid::::NO::3
+column:expense_claims:employee_id:uuid::::NO::4
+column:expense_claims:category:text::::NO::5
+column:expense_claims:amount:numeric::12:2:NO::6
+column:expense_claims:expense_date:date::::NO::7
+column:expense_claims:description:text::::YES::8
+column:expense_claims:receipt_path:text::::YES::9
+column:expense_claims:receipt_type:text::::YES::10
+column:expense_claims:status:text::::NO:'pending'::text:11
+column:expense_claims:decided_by:uuid::::YES::12
+column:expense_claims:decided_at:timestamp with time zone::::YES::13
+column:expense_claims:created_at:timestamp with time zone::::NO:now():14
+column:expense_claims:updated_at:timestamp with time zone::::NO:now():15
+column:expense_claims:payroll_run_id:uuid::::YES::16
+column:expense_claims:paid_at:timestamp with time zone::::YES::17
+column:final_settlements:id:uuid::::NO:gen_random_uuid():1
+column:final_settlements:tenant_id:uuid::::NO::2
+column:final_settlements:employee_id:uuid::::NO::3
+column:final_settlements:termination_date:date::::NO::4
+column:final_settlements:unused_leave_days:integer::32:0:NO::5
+column:final_settlements:notice_days:integer::32:0:NO::6
+column:final_settlements:include_severance:boolean::::NO::7
+column:final_settlements:years_of_service:numeric::8:4:NO::8
+column:final_settlements:last_month_pay:numeric::12:2:NO::9
+column:final_settlements:leave_pay:numeric::12:2:NO::10
+column:final_settlements:notice_pay:numeric::12:2:NO::11
+column:final_settlements:severance_pay:numeric::12:2:NO::12
+column:final_settlements:total_gross:numeric::12:2:NO::13
+column:final_settlements:breakdown:jsonb::::NO:'{}'::jsonb:14
+column:final_settlements:status:text::::NO:'draft'::text:15
+column:final_settlements:created_by:uuid::::YES::16
+column:final_settlements:created_at:timestamp with time zone::::NO:now():17
+column:final_settlements:updated_at:timestamp with time zone::::NO:now():18
+column:form_templates:id:bigint::64:0:NO:nextval('form_templates_id_seq'::regclass):1
+column:form_templates:tenant_id:uuid::::YES::2
+column:form_templates:form_type:text::::NO::3
+column:form_templates:version:integer::32:0:NO:1:4
+column:form_templates:config:jsonb::::NO::5
+column:form_templates:is_active:boolean::::NO:true:6
+column:form_templates:created_by:uuid::::YES::7
+column:form_templates:created_at:timestamp with time zone::::NO:now():8
+column:form_templates:updated_at:timestamp with time zone::::NO:now():9
+column:job_openings:id:uuid::::NO:gen_random_uuid():1
+column:job_openings:tenant_id:uuid::::NO::2
+column:job_openings:title:text::::NO::3
+column:job_openings:department:text::::YES::4
+column:job_openings:employment_type:text::::NO:'full_time'::text:5
+column:job_openings:headcount:integer::32:0:NO:1:6
+column:job_openings:status:text::::NO:'open'::text:7
+column:job_openings:description:text::::YES::8
+column:job_openings:created_by:uuid::::YES::9
+column:job_openings:created_at:timestamp with time zone::::NO:now():10
+column:job_openings:updated_at:timestamp with time zone::::NO:now():11
+column:kg_edges:id:uuid::::NO:gen_random_uuid():1
+column:kg_edges:tenant_id:uuid::::NO::2
+column:kg_edges:from_id:uuid::::NO::3
+column:kg_edges:to_id:uuid::::NO::4
+column:kg_edges:relation:text::::NO::5
+column:kg_edges:properties:jsonb::::NO:'{}'::jsonb:6
+column:kg_nodes:id:uuid::::NO:gen_random_uuid():1
+column:kg_nodes:tenant_id:uuid::::NO::2
+column:kg_nodes:class:text::::NO::3
+column:kg_nodes:key:text::::NO::4
+column:kg_nodes:label_th:text::::NO::5
+column:kg_nodes:label_en:text::::YES::6
+column:kg_nodes:properties:jsonb::::NO:'{}'::jsonb:7
+column:kg_nodes:embedding:USER-DEFINED::::YES::8
+column:kg_nodes:source:text::::NO:'sync'::text:9
+column:kg_nodes:updated_at:timestamp with time zone::::NO:now():10
+column:leave_approval_rules:id:bigint::64:0:NO:nextval('leave_approval_rules_id_seq'::regclass):1
+column:leave_approval_rules:tenant_id:uuid::::NO::2
+column:leave_approval_rules:leave_type:text::::YES::3
+column:leave_approval_rules:min_days:numeric::6:2:YES::4
+column:leave_approval_rules:chain:ARRAY::::NO::5
+column:leave_approval_rules:priority:integer::32:0:NO:0:6
+column:leave_approval_rules:created_by:uuid::::YES::7
+column:leave_approval_rules:created_at:timestamp with time zone::::NO:now():8
+column:leave_approval_steps:id:uuid::::NO:gen_random_uuid():1
+column:leave_approval_steps:tenant_id:uuid::::NO::2
+column:leave_approval_steps:leave_request_id:uuid::::NO::3
+column:leave_approval_steps:step_no:integer::32:0:NO::4
+column:leave_approval_steps:approver_role:text::::NO::5
+column:leave_approval_steps:status:text::::NO:'pending'::text:6
+column:leave_approval_steps:decided_by:uuid::::YES::7
+column:leave_approval_steps:decided_at:timestamp with time zone::::YES::8
+column:leave_approval_steps:created_at:timestamp with time zone::::NO:now():9
+column:leave_approval_steps:escalated_at:timestamp with time zone::::YES::10
+column:leave_balances:id:bigint::64:0:NO:nextval('leave_balances_id_seq'::regclass):1
+column:leave_balances:tenant_id:uuid::::NO::2
+column:leave_balances:employee_id:uuid::::NO::3
+column:leave_balances:leave_type_id:integer::32:0:NO::4
+column:leave_balances:year:integer::32:0:NO::5
+column:leave_balances:total_days:numeric::6:2:NO:0:6
+column:leave_balances:used_days:numeric::6:2:NO:0:7
+column:leave_balances:created_at:timestamp with time zone::::NO:now():8
+column:leave_balances:updated_at:timestamp with time zone::::NO:now():9
+column:leave_requests:id:uuid::::NO:gen_random_uuid():1
+column:leave_requests:tenant_id:uuid::::NO::2
+column:leave_requests:entity_id:uuid::::NO::3
+column:leave_requests:employee_id:uuid::::NO::4
+column:leave_requests:leave_type:text::::NO::5
+column:leave_requests:start_date:date::::NO::6
+column:leave_requests:end_date:date::::NO::7
+column:leave_requests:days:numeric::6:2:NO::8
+column:leave_requests:reason:text::::YES::9
+column:leave_requests:status:text::::NO:'pending'::text:10
+column:leave_requests:requested_by:uuid::::YES::11
+column:leave_requests:approver_id:uuid::::YES::12
+column:leave_requests:approved_at:timestamp with time zone::::YES::13
+column:leave_requests:created_at:timestamp with time zone::::NO:now():14
+column:leave_requests:updated_at:timestamp with time zone::::NO:now():15
+column:leave_requests:balance_debited:boolean::::NO:false:16
+column:leave_types:id:integer::32:0:NO:nextval('leave_types_id_seq'::regclass):1
+column:leave_types:tenant_id:uuid::::YES::2
+column:leave_types:name:text::::NO::3
+column:leave_types:label_th:text::::NO::4
+column:leave_types:label_en:text::::NO::5
+column:leave_types:max_days_per_year:numeric::6:2:NO::6
+column:leave_types:carry_forward:boolean::::NO:false:7
+column:loan_installments:id:bigint::64:0:NO:nextval('loan_installments_id_seq'::regclass):1
+column:loan_installments:tenant_id:uuid::::NO::2
+column:loan_installments:loan_id:uuid::::NO::3
+column:loan_installments:payroll_run_id:uuid::::NO::4
+column:loan_installments:amount:numeric::12:2:NO::5
+column:loan_installments:created_at:timestamp with time zone::::NO:now():6
+column:loan_installments:reversed_at:timestamp with time zone::::YES::7
+column:loan_installments:reversed_by:uuid::::YES::8
+column:loan_installments:principal_amount:numeric::12:2:NO:0:9
+column:loan_installments:interest_amount:numeric::12:2:NO:0:10
+column:loan_payments:id:bigint::64:0:NO:nextval('loan_payments_id_seq'::regclass):1
+column:loan_payments:tenant_id:uuid::::NO::2
+column:loan_payments:loan_id:uuid::::NO::3
+column:loan_payments:amount:numeric::12:2:NO::4
+column:loan_payments:paid_at:timestamp with time zone::::NO:now():5
+column:loan_payments:note:text::::YES::6
+column:loan_payments:created_by:uuid::::NO::7
+column:notifications:id:uuid::::NO:gen_random_uuid():1
+column:notifications:tenant_id:uuid::::NO::2
+column:notifications:user_id:uuid::::YES::3
+column:notifications:channel:text::::NO::4
+column:notifications:recipient:text::::NO::5
+column:notifications:subject:text::::NO::6
+column:notifications:body:text::::NO::7
+column:notifications:status:text::::NO:'pending'::text:8
+column:notifications:attempts:integer::32:0:NO:0:9
+column:notifications:last_error:text::::YES::10
+column:notifications:sent_at:timestamp with time zone::::YES::11
+column:notifications:created_at:timestamp with time zone::::NO:now():12
+column:ot_approval_steps:id:bigint::64:0:NO:nextval('ot_approval_steps_id_seq'::regclass):1
+column:ot_approval_steps:tenant_id:uuid::::NO::2
+column:ot_approval_steps:ot_request_id:uuid::::NO::3
+column:ot_approval_steps:step_no:integer::32:0:NO::4
+column:ot_approval_steps:approver_role:text::::NO::5
+column:ot_approval_steps:status:text::::NO:'pending'::text:6
+column:ot_approval_steps:decided_by:uuid::::YES::7
+column:ot_approval_steps:decided_at:timestamp with time zone::::YES::8
+column:ot_approval_steps:created_at:timestamp with time zone::::NO:now():9
+column:ot_requests:id:uuid::::NO:gen_random_uuid():1
+column:ot_requests:tenant_id:uuid::::NO::2
+column:ot_requests:entity_id:uuid::::NO::3
+column:ot_requests:employee_id:uuid::::NO::4
+column:ot_requests:work_date:date::::NO::5
+column:ot_requests:minutes:integer::32:0:NO::6
+column:ot_requests:reason:text::::YES::7
+column:ot_requests:status:text::::NO:'pending'::text:8
+column:ot_requests:requested_by:uuid::::YES::9
+column:ot_requests:decided_by:uuid::::YES::10
+column:ot_requests:decided_at:timestamp with time zone::::YES::11
+column:ot_requests:created_at:timestamp with time zone::::NO:now():12
+column:ot_requests:updated_at:timestamp with time zone::::NO:now():13
+column:ot_rules:id:integer::32:0:NO:nextval('ot_rules_id_seq'::regclass):1
+column:ot_rules:tenant_id:uuid::::YES::2
+column:ot_rules:weekday_rate:numeric::4:2:NO:1.50:3
+column:ot_rules:weekend_rate:numeric::4:2:NO:2.00:4
+column:ot_rules:holiday_rate:numeric::4:2:NO:3.00:5
+column:ot_rules:max_weekly_hours:numeric::5:2:NO:36.00:6
+column:ot_rules:effective_from:date::::NO:'2026-01-01'::date:7
+column:password_resets:id:uuid::::NO:gen_random_uuid():1
+column:password_resets:tenant_id:uuid::::NO::2
+column:password_resets:user_id:uuid::::NO::3
+column:password_resets:token_hash:bytea::::NO::4
+column:password_resets:expires_at:timestamp with time zone::::NO::5
+column:password_resets:used_at:timestamp with time zone::::YES::6
+column:password_resets:created_by:uuid::::YES::7
+column:password_resets:created_at:timestamp with time zone::::NO:now():8
+column:payroll_events:id:bigint::64:0:NO:nextval('payroll_events_id_seq'::regclass):1
+column:payroll_events:tenant_id:uuid::::NO::2
+column:payroll_events:payroll_run_id:uuid::::NO::3
+column:payroll_events:step_name:text::::NO::4
+column:payroll_events:employee_id:uuid::::YES::5
+column:payroll_events:input:jsonb::::NO::6
+column:payroll_events:output:jsonb::::NO::7
+column:payroll_events:error:jsonb::::YES::8
+column:payroll_events:correlation_id:uuid::::YES::9
+column:payroll_events:created_at:timestamp with time zone::::NO:now():10
+column:payroll_runs:id:uuid::::NO:gen_random_uuid():1
+column:payroll_runs:tenant_id:uuid::::NO::2
+column:payroll_runs:entity_id:uuid::::NO::3
+column:payroll_runs:period_start:date::::NO::4
+column:payroll_runs:period_end:date::::NO::5
+column:payroll_runs:payment_date:date::::NO::6
+column:payroll_runs:status:text::::NO:'draft'::text:7
+column:payroll_runs:total_employees:integer::32:0:NO:0:8
+column:payroll_runs:total_gross:numeric::14:2:NO:0:9
+column:payroll_runs:total_net:numeric::14:2:NO:0:10
+column:payroll_runs:total_tax:numeric::14:2:NO:0:11
+column:payroll_runs:total_sso:numeric::14:2:NO:0:12
+column:payroll_runs:total_pf:numeric::14:2:NO:0:13
+column:payroll_runs:workflow_id:text::::YES::14
+column:payroll_runs:created_by:uuid::::NO::15
+column:payroll_runs:created_at:timestamp with time zone::::NO:now():16
+column:payroll_runs:updated_at:timestamp with time zone::::NO:now():17
+column:payroll_runs:paid_at:timestamp with time zone::::YES::18
+column:payroll_runs:payment_reference:text::::YES::19
+column:payroll_runs:anomaly_reviewed_at:timestamp with time zone::::YES::20
+column:payroll_runs:anomaly_reviewed_by:uuid::::YES::21
+column:payslip_acknowledgements:payslip_id:uuid::::NO::1
+column:payslip_acknowledgements:tenant_id:uuid::::NO::2
+column:payslip_acknowledgements:user_id:uuid::::NO::3
+column:payslip_acknowledgements:acknowledged_at:timestamp with time zone::::NO:now():4
+column:payslip_acknowledgements:ip_address:inet::::YES::5
+column:payslip_lines:id:bigint::64:0:NO:nextval('payslip_lines_id_seq'::regclass):1
+column:payslip_lines:payslip_id:uuid::::NO::2
+column:payslip_lines:code:text::::NO::3
+column:payslip_lines:name:text::::NO::4
+column:payslip_lines:line_type:text::::NO::5
+column:payslip_lines:amount:numeric::12:2:NO::6
+column:payslip_lines:taxable:boolean::::NO:true:7
+column:payslip_templates:id:uuid::::NO:gen_random_uuid():1
+column:payslip_templates:tenant_id:uuid::::NO::2
+column:payslip_templates:entity_id:uuid::::YES::3
+column:payslip_templates:name:text::::NO:'default'::text:4
+column:payslip_templates:is_default:boolean::::NO:true:5
+column:payslip_templates:company_display_name:text::::YES::6
+column:payslip_templates:logo_url:text::::YES::7
+column:payslip_templates:accent_color:text::::NO:'#0369a1'::text:8
+column:payslip_templates:footer_text:text::::YES::9
+column:payslip_templates:show_fields:jsonb::::NO:'["ot", "sso", "pf", "tax", "anomalies"]'::jsonb:10
+column:payslip_templates:paper_size:text::::NO:'A4'::text:11
+column:payslip_templates:created_at:timestamp with time zone::::NO:now():12
+column:payslip_templates:updated_at:timestamp with time zone::::NO:now():13
+column:payslips:id:uuid::::NO:gen_random_uuid():1
+column:payslips:payroll_run_id:uuid::::NO::2
+column:payslips:tenant_id:uuid::::NO::3
+column:payslips:employee_id:uuid::::NO::4
+column:payslips:base_salary:numeric::12:2:NO::5
+column:payslips:gross_earnings:numeric::12:2:NO::6
+column:payslips:total_deductions:numeric::12:2:NO:0:7
+column:payslips:net_pay:numeric::12:2:NO::8
+column:payslips:tax_withheld:numeric::12:2:NO:0:9
+column:payslips:sso_employee:numeric::12:2:NO:0:10
+column:payslips:sso_employer:numeric::12:2:NO:0:11
+column:payslips:pf_employee:numeric::12:2:NO:0:12
+column:payslips:pf_employer:numeric::12:2:NO:0:13
+column:payslips:anomalies:jsonb::::NO:'[]'::jsonb:14
+column:payslips:status:text::::NO:'calculated'::text:15
+column:payslips:created_at:timestamp with time zone::::NO:now():16
+column:payslips:ot_amount:numeric::12:2:NO:0:17
+column:payslips:loan_deduction:numeric::12:2:NO:0:18
+column:payslips:reimbursement:numeric::12:2:NO:0:19
+column:payslips:loan_principal:numeric::12:2:NO:0:20
+column:payslips:loan_interest:numeric::12:2:NO:0:21
+column:payslips:signature_id:uuid::::YES::22
+column:performance_calibrations:id:uuid::::NO:gen_random_uuid():1
+column:performance_calibrations:tenant_id:uuid::::NO::2
+column:performance_calibrations:cycle_id:uuid::::NO::3
+column:performance_calibrations:employee_id:uuid::::NO::4
+column:performance_calibrations:manager_id:uuid::::YES::5
+column:performance_calibrations:calibrated_rating:integer::32:0:NO::6
+column:performance_calibrations:notes:text::::YES::7
+column:performance_calibrations:created_at:timestamp with time zone::::NO:now():8
+column:performance_calibrations:updated_at:timestamp with time zone::::NO:now():9
+column:performance_cycles:id:uuid::::NO:gen_random_uuid():1
+column:performance_cycles:tenant_id:uuid::::NO::2
+column:performance_cycles:name:text::::NO::3
+column:performance_cycles:period_start:date::::NO::4
+column:performance_cycles:period_end:date::::NO::5
+column:performance_cycles:status:text::::NO:'draft'::text:6
+column:performance_cycles:created_by:uuid::::YES::7
+column:performance_cycles:created_at:timestamp with time zone::::NO:now():8
+column:performance_cycles:updated_at:timestamp with time zone::::NO:now():9
+column:performance_goal_check_ins:id:uuid::::NO:gen_random_uuid():1
+column:performance_goal_check_ins:tenant_id:uuid::::NO::2
+column:performance_goal_check_ins:goal_id:uuid::::NO::3
+column:performance_goal_check_ins:employee_id:uuid::::NO::4
+column:performance_goal_check_ins:manager_id:uuid::::YES::5
+column:performance_goal_check_ins:note:text::::NO::6
+column:performance_goal_check_ins:created_at:timestamp with time zone::::NO:now():7
+column:performance_goals:id:uuid::::NO:gen_random_uuid():1
+column:performance_goals:tenant_id:uuid::::NO::2
+column:performance_goals:employee_id:uuid::::NO::3
+column:performance_goals:cycle_id:uuid::::YES::4
+column:performance_goals:title:text::::NO::5
+column:performance_goals:description:text::::YES::6
+column:performance_goals:target:text::::YES::7
+column:performance_goals:progress:integer::32:0:NO:0:8
+column:performance_goals:status:text::::NO:'active'::text:9
+column:performance_goals:created_by:uuid::::YES::10
+column:performance_goals:created_at:timestamp with time zone::::NO:now():11
+column:performance_goals:updated_at:timestamp with time zone::::NO:now():12
+column:performance_reviews:id:uuid::::NO:gen_random_uuid():1
+column:performance_reviews:tenant_id:uuid::::NO::2
+column:performance_reviews:cycle_id:uuid::::NO::3
+column:performance_reviews:employee_id:uuid::::NO::4
+column:performance_reviews:reviewer_user_id:uuid::::YES::5
+column:performance_reviews:status:text::::NO:'pending'::text:6
+column:performance_reviews:rating:integer::32:0:YES::7
+column:performance_reviews:strengths:text::::YES::8
+column:performance_reviews:improvements:text::::YES::9
+column:performance_reviews:submitted_at:timestamp with time zone::::YES::10
+column:performance_reviews:created_at:timestamp with time zone::::NO:now():11
+column:performance_reviews:updated_at:timestamp with time zone::::NO:now():12
+column:performance_reviews:acknowledged_at:timestamp with time zone::::YES::13
+column:pf_rate_history:id:bigint::64:0:NO:nextval('pf_rate_history_id_seq'::regclass):1
+column:pf_rate_history:tenant_id:uuid::::NO::2
+column:pf_rate_history:employee_id:uuid::::NO::3
+column:pf_rate_history:effective_from:date::::NO::4
+column:pf_rate_history:rate:numeric::5:4:NO::5
+column:pf_rate_history:created_by:uuid::::YES::6
+column:pf_rate_history:created_at:timestamp with time zone::::NO:now():7
+column:pf_remittances:id:bigint::64:0:NO:nextval('pf_remittances_id_seq'::regclass):1
+column:pf_remittances:tenant_id:uuid::::NO::2
+column:pf_remittances:payroll_run_id:uuid::::NO::3
+column:pf_remittances:status:text::::NO:'pending'::text:4
+column:pf_remittances:attempts:integer::32:0:NO:0:5
+column:pf_remittances:last_error:text::::YES::6
+column:pf_remittances:payload:jsonb::::NO::7
+column:pf_remittances:sent_at:timestamp with time zone::::YES::8
+column:pf_remittances:created_at:timestamp with time zone::::NO:now():9
+column:pf_rules:id:integer::32:0:NO:nextval('pf_rules_id_seq'::regclass):1
+column:pf_rules:tenant_id:uuid::::YES::2
+column:pf_rules:employee_rate:numeric::5:4:NO:0.0500:3
+column:pf_rules:employer_rate:numeric::5:4:NO:0.0500:4
+column:pf_rules:max_base:numeric::12:2:NO:15000:5
+column:pf_rules:effective_from:date::::NO:'2026-01-01'::date:6
+column:privacy_consents:tenant_id:uuid::::NO::1
+column:privacy_consents:user_id:uuid::::NO::2
+column:privacy_consents:version:text::::NO::3
+column:privacy_consents:accepted_at:timestamp with time zone::::NO:now():4
+column:refresh_tokens:id:bigint::64:0:NO:nextval('refresh_tokens_id_seq'::regclass):1
+column:refresh_tokens:token_hash:bytea::::NO::2
+column:refresh_tokens:user_id:uuid::::NO::3
+column:refresh_tokens:tenant_id:uuid::::NO::4
+column:refresh_tokens:entity_id:uuid::::YES::5
+column:refresh_tokens:expires_at:timestamp with time zone::::NO::6
+column:refresh_tokens:revoked_at:timestamp with time zone::::YES::7
+column:refresh_tokens:parent_hash:bytea::::YES::8
+column:refresh_tokens:created_at:timestamp with time zone::::NO:now():9
+column:refresh_tokens:ip_address:inet::::YES::10
+column:refresh_tokens:user_agent:text::::YES::11
+column:roles:id:integer::32:0:NO:nextval('roles_id_seq'::regclass):1
+column:roles:tenant_id:uuid::::NO::2
+column:roles:name:text::::NO::3
+column:roles:permissions:jsonb::::NO:'[]'::jsonb:4
+column:roles:created_at:timestamp with time zone::::NO:now():5
+column:severance_rules:id:integer::32:0:NO:nextval('severance_rules_id_seq'::regclass):1
+column:severance_rules:tenant_id:uuid::::YES::2
+column:severance_rules:min_months:integer::32:0:NO::3
+column:severance_rules:max_months:integer::32:0:YES::4
+column:severance_rules:days:integer::32:0:NO::5
+column:shift_assignments:id:uuid::::NO:gen_random_uuid():1
+column:shift_assignments:tenant_id:uuid::::NO::2
+column:shift_assignments:employee_id:uuid::::NO::3
+column:shift_assignments:shift_id:uuid::::NO::4
+column:shift_assignments:effective_from:date::::NO::5
+column:shift_assignments:effective_until:date::::YES::6
+column:shift_assignments:created_at:timestamp with time zone::::NO:now():7
+column:shift_assignments:updated_at:timestamp with time zone::::NO:now():8
+column:sso_rules:id:integer::32:0:NO:nextval('sso_rules_id_seq'::regclass):1
+column:sso_rules:tenant_id:uuid::::YES::2
+column:sso_rules:rate:numeric::5:4:NO:0.0500:3
+column:sso_rules:max_wage_base:numeric::12:2:NO:15000:4
+column:sso_rules:effective_from:date::::NO:'2026-01-01'::date:5
+column:tax_brackets:id:integer::32:0:NO:nextval('tax_brackets_id_seq'::regclass):1
+column:tax_brackets:tenant_id:uuid::::YES::2
+column:tax_brackets:year:integer::32:0:NO::3
+column:tax_brackets:lower:numeric::12:2:NO::4
+column:tax_brackets:upper:numeric::12:2:YES::5
+column:tax_brackets:rate:numeric::5:4:NO::6
+column:tenant_api_keys:id:bigint::64:0:NO:nextval('tenant_api_keys_id_seq'::regclass):1
+column:tenant_api_keys:tenant_id:uuid::::NO::2
+column:tenant_api_keys:api_key:text::::NO::3
+column:tenant_api_keys:provider:text::::NO:'huakati'::text:4
+column:tenant_api_keys:created_at:timestamp with time zone::::NO:now():5
+column:tenant_api_keys:updated_at:timestamp with time zone::::NO:now():6
+column:tenant_holidays:id:uuid::::NO:gen_random_uuid():1
+column:tenant_holidays:tenant_id:uuid::::NO::2
+column:tenant_holidays:holiday_date:date::::NO::3
+column:tenant_holidays:name_th:text::::NO::4
+column:tenant_holidays:created_by:uuid::::YES::5
+column:tenant_holidays:created_at:timestamp with time zone::::NO:now():6
+column:tenant_oidc_config:tenant_id:uuid::::NO::1
+column:tenant_oidc_config:issuer:text::::NO::2
+column:tenant_oidc_config:client_id:text::::NO::3
+column:tenant_oidc_config:client_secret:text::::NO::4
+column:tenant_oidc_config:allowed_domains:ARRAY::::NO:'{}'::text[]:5
+column:tenant_oidc_config:enabled:boolean::::NO:false:6
+column:tenant_oidc_config:created_at:timestamp with time zone::::NO:now():7
+column:tenant_oidc_config:updated_at:timestamp with time zone::::NO:now():8
+column:tenant_payroll_settings:tenant_id:uuid::::NO::1
+column:tenant_payroll_settings:unpaid_leave_divisor:numeric::5:2:NO:30:2
+column:tenant_payroll_settings:ot_weekday_rate:numeric::4:2:NO:1.50:3
+column:tenant_payroll_settings:ot_weekend_rate:numeric::4:2:NO:2.00:4
+column:tenant_payroll_settings:ot_holiday_rate:numeric::4:2:NO:3.00:5
+column:tenant_payroll_settings:updated_at:timestamp with time zone::::NO:now():6
+column:tenant_payroll_settings:updated_by:uuid::::YES::7
+column:tenant_payroll_settings:leave_approval_chain:ARRAY::::NO:'{hr_admin}'::text[]:8
+column:tenant_payroll_settings:gl_salary_account:text::::NO:'5100'::text:9
+column:tenant_payroll_settings:gl_net_account:text::::NO:'2100'::text:10
+column:tenant_payroll_settings:gl_tax_account:text::::NO:'2200'::text:11
+column:tenant_payroll_settings:gl_sso_account:text::::NO:'2210'::text:12
+column:tenant_payroll_settings:gl_pf_account:text::::NO:'2220'::text:13
+column:tenant_payroll_settings:gl_loan_account:text::::NO:'2230'::text:14
+column:tenant_payroll_settings:gl_claim_account:text::::NO:'5200'::text:15
+column:tenant_payroll_settings:approval_sla_hours:integer::32:0:NO:48:16
+column:tenant_payroll_settings:ot_approval_chain:ARRAY::::NO:'{hr_admin}'::text[]:17
+column:tenant_pdpa_policy:tenant_id:uuid::::NO::1
+column:tenant_pdpa_policy:payroll_retention_years:integer::32:0:NO:7:2
+column:tenant_pdpa_policy:ops_retention_months:integer::32:0:NO:12:3
+column:tenant_pdpa_policy:updated_at:timestamp with time zone::::NO:now():4
+column:tenant_plugins:id:uuid::::NO:gen_random_uuid():1
+column:tenant_plugins:tenant_id:uuid::::NO::2
+column:tenant_plugins:name:text::::NO::3
+column:tenant_plugins:wasm:bytea::::NO::4
+column:tenant_plugins:capabilities:ARRAY::::NO:'{}'::text[]:5
+column:tenant_plugins:enabled:boolean::::NO:true:6
+column:tenant_plugins:created_at:timestamp with time zone::::NO:now():7
+column:tenant_plugins:updated_at:timestamp with time zone::::NO:now():8
+column:tenants:id:uuid::::NO:gen_random_uuid():1
+column:tenants:name:text::::NO::2
+column:tenants:slug:text::::NO::3
+column:tenants:created_at:timestamp with time zone::::NO:now():4
+column:tenants:updated_at:timestamp with time zone::::NO:now():5
+column:totp_recovery_codes:id:bigint::64:0:NO:nextval('totp_recovery_codes_id_seq'::regclass):1
+column:totp_recovery_codes:tenant_id:uuid::::NO::2
+column:totp_recovery_codes:user_id:uuid::::NO::3
+column:totp_recovery_codes:code_hash:bytea::::NO::4
+column:totp_recovery_codes:used_at:timestamp with time zone::::YES::5
+column:totp_recovery_codes:created_at:timestamp with time zone::::NO:now():6
+column:user_invites:id:uuid::::NO:gen_random_uuid():1
+column:user_invites:tenant_id:uuid::::NO::2
+column:user_invites:email:text::::NO::3
+column:user_invites:full_name_th:text::::YES::4
+column:user_invites:role:text::::NO::5
+column:user_invites:entity_id:uuid::::YES::6
+column:user_invites:token_hash:bytea::::NO::7
+column:user_invites:expires_at:timestamp with time zone::::NO::8
+column:user_invites:accepted_at:timestamp with time zone::::YES::9
+column:user_invites:created_by:uuid::::YES::10
+column:user_invites:created_at:timestamp with time zone::::NO:now():11
+column:user_roles:user_id:uuid::::NO::1
+column:user_roles:role_id:integer::32:0:NO::2
+column:user_roles:entity_id:uuid::::YES::3
+column:user_roles:assigned_at:timestamp with time zone::::NO:now():4
+column:users:id:uuid::::NO:gen_random_uuid():1
+column:users:tenant_id:uuid::::NO::2
+column:users:email:text::::NO::3
+column:users:password_hash:text::::NO::4
+column:users:full_name_th:text::::YES::5
+column:users:full_name_en:text::::YES::6
+column:users:is_active:boolean::::NO:true:7
+column:users:last_login_at:timestamp with time zone::::YES::8
+column:users:created_at:timestamp with time zone::::NO:now():9
+column:users:updated_at:timestamp with time zone::::NO:now():10
+column:users:totp_secret:text::::YES::11
+column:users:totp_enabled:boolean::::NO:false:12
+column:users:totp_enabled_at:timestamp with time zone::::YES::13
+column:users:line_user_id:text::::YES::14
+column:work_shifts:id:uuid::::NO:gen_random_uuid():1
+column:work_shifts:tenant_id:uuid::::NO::2
+column:work_shifts:entity_id:uuid::::NO::3
+column:work_shifts:name:text::::NO::4
+column:work_shifts:start_time:time without time zone::::NO::5
+column:work_shifts:end_time:time without time zone::::NO::6
+column:work_shifts:is_active:boolean::::NO:true:7
+column:work_shifts:created_at:timestamp with time zone::::NO:now():8
+column:work_shifts:updated_at:timestamp with time zone::::NO:now():9
+column:work_shifts:break_minutes:integer::32:0:NO:60:10
+column:work_shifts:grace_minutes:integer::32:0:NO:0:11
+index:_sqlx_migrations_pkey:CREATE UNIQUE INDEX _sqlx_migrations_pkey ON public._sqlx_migrations USING btree (version)
+index:ai_agent_runs_pkey:CREATE UNIQUE INDEX ai_agent_runs_pkey ON public.ai_agent_runs USING btree (id)
+index:ai_conversations_pkey:CREATE UNIQUE INDEX ai_conversations_pkey ON public.ai_conversations USING btree (id)
+index:ai_cost_tracking_pkey:CREATE UNIQUE INDEX ai_cost_tracking_pkey ON public.ai_cost_tracking USING btree (id)
+index:ai_cost_tracking_tenant_id_model_date_key:CREATE UNIQUE INDEX ai_cost_tracking_tenant_id_model_date_key ON public.ai_cost_tracking USING btree (tenant_id, model, date)
+index:ai_document_chunks_document_id_chunk_index_key:CREATE UNIQUE INDEX ai_document_chunks_document_id_chunk_index_key ON public.ai_document_chunks USING btree (document_id, chunk_index)
+index:ai_document_chunks_pkey:CREATE UNIQUE INDEX ai_document_chunks_pkey ON public.ai_document_chunks USING btree (id)
+index:ai_documents_pkey:CREATE UNIQUE INDEX ai_documents_pkey ON public.ai_documents USING btree (id)
+index:ai_documents_tenant_id_content_hash_key:CREATE UNIQUE INDEX ai_documents_tenant_id_content_hash_key ON public.ai_documents USING btree (tenant_id, content_hash)
+index:ai_memory_pkey:CREATE UNIQUE INDEX ai_memory_pkey ON public.ai_memory USING btree (id)
+index:ai_model_roles_pkey:CREATE UNIQUE INDEX ai_model_roles_pkey ON public.ai_model_roles USING btree (tenant_id, role)
+index:ai_providers_pkey:CREATE UNIQUE INDEX ai_providers_pkey ON public.ai_providers USING btree (id)
+index:ai_providers_tenant_id_name_key:CREATE UNIQUE INDEX ai_providers_tenant_id_name_key ON public.ai_providers USING btree (tenant_id, name)
+index:ai_settings_pkey:CREATE UNIQUE INDEX ai_settings_pkey ON public.ai_settings USING btree (tenant_id)
+index:ai_tool_calls_pkey:CREATE UNIQUE INDEX ai_tool_calls_pkey ON public.ai_tool_calls USING btree (id)
+index:approval_delegations_pkey:CREATE UNIQUE INDEX approval_delegations_pkey ON public.approval_delegations USING btree (id)
+index:approval_delegations_tenant_id_delegator_user_id_delegate_u_key:CREATE UNIQUE INDEX approval_delegations_tenant_id_delegator_user_id_delegate_u_key ON public.approval_delegations USING btree (tenant_id, delegator_user_id, delegate_user_id, starts_on)
+index:attendance_days_employee_id_work_date_key:CREATE UNIQUE INDEX attendance_days_employee_id_work_date_key ON public.attendance_days USING btree (employee_id, work_date)
+index:attendance_days_pkey:CREATE UNIQUE INDEX attendance_days_pkey ON public.attendance_days USING btree (id)
+index:attendance_events_client_id_uniq:CREATE UNIQUE INDEX attendance_events_client_id_uniq ON public.attendance_events USING btree (tenant_id, employee_id, client_id) WHERE (client_id IS NOT NULL)
+index:attendance_events_pkey:CREATE UNIQUE INDEX attendance_events_pkey ON public.attendance_events USING btree (id)
+index:attendance_records_employee_id_work_date_key:CREATE UNIQUE INDEX attendance_records_employee_id_work_date_key ON public.attendance_records USING btree (employee_id, work_date)
+index:attendance_records_pkey:CREATE UNIQUE INDEX attendance_records_pkey ON public.attendance_records USING btree (id)
+index:audit_log_pkey:CREATE UNIQUE INDEX audit_log_pkey ON public.audit_log USING btree (id)
+index:bank_templates_pkey:CREATE UNIQUE INDEX bank_templates_pkey ON public.bank_templates USING btree (id)
+index:candidate_interviews_pkey:CREATE UNIQUE INDEX candidate_interviews_pkey ON public.candidate_interviews USING btree (id)
+index:candidate_offers_pkey:CREATE UNIQUE INDEX candidate_offers_pkey ON public.candidate_offers USING btree (id)
+index:candidate_stage_events_pkey:CREATE UNIQUE INDEX candidate_stage_events_pkey ON public.candidate_stage_events USING btree (id)
+index:candidates_pkey:CREATE UNIQUE INDEX candidates_pkey ON public.candidates USING btree (id)
+index:document_signatures_pkey:CREATE UNIQUE INDEX document_signatures_pkey ON public.document_signatures USING btree (id)
+index:document_signatures_sig_uq:CREATE UNIQUE INDEX document_signatures_sig_uq ON public.document_signatures USING btree (tenant_id, document_type, document_id, signer_user_id)
+index:employee_documents_pkey:CREATE UNIQUE INDEX employee_documents_pkey ON public.employee_documents USING btree (id)
+index:employee_loans_pkey:CREATE UNIQUE INDEX employee_loans_pkey ON public.employee_loans USING btree (id)
+index:employee_onboarding_tasks_pkey:CREATE UNIQUE INDEX employee_onboarding_tasks_pkey ON public.employee_onboarding_tasks USING btree (id)
+index:employee_onboarding_tasks_tenant_id_employee_id_title_key:CREATE UNIQUE INDEX employee_onboarding_tasks_tenant_id_employee_id_title_key ON public.employee_onboarding_tasks USING btree (tenant_id, employee_id, title)
+index:employee_training_records_pkey:CREATE UNIQUE INDEX employee_training_records_pkey ON public.employee_training_records USING btree (id)
+index:employees_entity_id_employee_code_key:CREATE UNIQUE INDEX employees_entity_id_employee_code_key ON public.employees USING btree (entity_id, employee_code)
+index:employees_pkey:CREATE UNIQUE INDEX employees_pkey ON public.employees USING btree (id)
+index:entities_pkey:CREATE UNIQUE INDEX entities_pkey ON public.entities USING btree (id)
+index:expense_claims_pkey:CREATE UNIQUE INDEX expense_claims_pkey ON public.expense_claims USING btree (id)
+index:final_settlements_pkey:CREATE UNIQUE INDEX final_settlements_pkey ON public.final_settlements USING btree (id)
+index:form_templates_pkey:CREATE UNIQUE INDEX form_templates_pkey ON public.form_templates USING btree (id)
+index:form_templates_tenant_id_form_type_version_key:CREATE UNIQUE INDEX form_templates_tenant_id_form_type_version_key ON public.form_templates USING btree (tenant_id, form_type, version)
+index:idx_ai_agent_runs_temporal:CREATE INDEX idx_ai_agent_runs_temporal ON public.ai_agent_runs USING btree (id) WHERE (state = ANY (ARRAY['running'::text, 'paused_for_approval'::text]))
+index:idx_ai_agent_runs_tenant:CREATE INDEX idx_ai_agent_runs_tenant ON public.ai_agent_runs USING btree (tenant_id, created_at DESC)
+index:idx_ai_agent_runs_type:CREATE INDEX idx_ai_agent_runs_type ON public.ai_agent_runs USING btree (agent_type, state)
+index:idx_ai_chunks_doc:CREATE INDEX idx_ai_chunks_doc ON public.ai_document_chunks USING btree (document_id)
+index:idx_ai_chunks_embedding:CREATE INDEX idx_ai_chunks_embedding ON public.ai_document_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists='100')
+index:idx_ai_chunks_tsv:CREATE INDEX idx_ai_chunks_tsv ON public.ai_document_chunks USING gin (tsv)
+index:idx_ai_conversations_agent:CREATE INDEX idx_ai_conversations_agent ON public.ai_conversations USING btree (agent_id, state)
+index:idx_ai_conversations_tenant:CREATE INDEX idx_ai_conversations_tenant ON public.ai_conversations USING btree (tenant_id, created_at DESC)
+index:idx_ai_cost_model:CREATE INDEX idx_ai_cost_model ON public.ai_cost_tracking USING btree (model, date DESC)
+index:idx_ai_cost_tenant_date:CREATE INDEX idx_ai_cost_tenant_date ON public.ai_cost_tracking USING btree (tenant_id, date DESC)
+index:idx_ai_documents_entity:CREATE INDEX idx_ai_documents_entity ON public.ai_documents USING btree (entity_id) WHERE (entity_id IS NOT NULL)
+index:idx_ai_documents_hash:CREATE INDEX idx_ai_documents_hash ON public.ai_documents USING btree (content_hash)
+index:idx_ai_documents_tenant_type:CREATE INDEX idx_ai_documents_tenant_type ON public.ai_documents USING btree (tenant_id, doc_type)
+index:idx_ai_memory_embedding:CREATE INDEX idx_ai_memory_embedding ON public.ai_memory USING ivfflat (embedding vector_cosine_ops) WITH (lists='100')
+index:idx_ai_memory_expiry:CREATE INDEX idx_ai_memory_expiry ON public.ai_memory USING btree (expires_at) WHERE (expires_at IS NOT NULL)
+index:idx_ai_memory_scope:CREATE INDEX idx_ai_memory_scope ON public.ai_memory USING btree (tenant_id, scope_key) WHERE (scope_key <> ''::text)
+index:idx_ai_memory_tenant_layer:CREATE INDEX idx_ai_memory_tenant_layer ON public.ai_memory USING btree (tenant_id, layer, created_at DESC)
+index:idx_ai_memory_tsv:CREATE INDEX idx_ai_memory_tsv ON public.ai_memory USING gin (tsv)
+index:idx_ai_tool_calls_run:CREATE INDEX idx_ai_tool_calls_run ON public.ai_tool_calls USING btree (run_id, created_at)
+index:idx_approval_delegations_active:CREATE INDEX idx_approval_delegations_active ON public.approval_delegations USING btree (tenant_id, delegate_user_id, starts_on, ends_on)
+index:idx_attendance_days_shift:CREATE INDEX idx_attendance_days_shift ON public.attendance_days USING btree (shift_id)
+index:idx_attendance_days_tenant:CREATE INDEX idx_attendance_days_tenant ON public.attendance_days USING btree (tenant_id)
+index:idx_attendance_employee_date:CREATE INDEX idx_attendance_employee_date ON public.attendance_records USING btree (employee_id, work_date)
+index:idx_attendance_events_employee_occurred:CREATE INDEX idx_attendance_events_employee_occurred ON public.attendance_events USING btree (employee_id, occurred_at)
+index:idx_attendance_events_employee_work_date:CREATE INDEX idx_attendance_events_employee_work_date ON public.attendance_events USING btree (employee_id, work_date)
+index:idx_attendance_events_tenant:CREATE INDEX idx_attendance_events_tenant ON public.attendance_events USING btree (tenant_id)
+index:idx_attendance_tenant_date:CREATE INDEX idx_attendance_tenant_date ON public.attendance_records USING btree (tenant_id, work_date DESC)
+index:idx_audit_correlation:CREATE INDEX idx_audit_correlation ON public.audit_log USING btree (correlation_id)
+index:idx_audit_tenant_time:CREATE INDEX idx_audit_tenant_time ON public.audit_log USING btree (tenant_id, created_at DESC)
+index:idx_bank_templates_tenant:CREATE INDEX idx_bank_templates_tenant ON public.bank_templates USING btree (tenant_id, bank_name)
+index:idx_calibrations_cycle:CREATE INDEX idx_calibrations_cycle ON public.performance_calibrations USING btree (tenant_id, cycle_id)
+index:idx_calibrations_manager:CREATE INDEX idx_calibrations_manager ON public.performance_calibrations USING btree (tenant_id, manager_id)
+index:idx_candidate_interviews_candidate:CREATE INDEX idx_candidate_interviews_candidate ON public.candidate_interviews USING btree (tenant_id, candidate_id)
+index:idx_candidate_interviews_time:CREATE INDEX idx_candidate_interviews_time ON public.candidate_interviews USING btree (tenant_id, scheduled_at)
+index:idx_candidate_offers:CREATE INDEX idx_candidate_offers ON public.candidate_offers USING btree (tenant_id, candidate_id, created_at DESC)
+index:idx_candidate_stage_events:CREATE INDEX idx_candidate_stage_events ON public.candidate_stage_events USING btree (tenant_id, candidate_id, changed_at)
+index:idx_candidates_job:CREATE INDEX idx_candidates_job ON public.candidates USING btree (tenant_id, job_opening_id, stage)
+index:idx_document_signatures_doc:CREATE INDEX idx_document_signatures_doc ON public.document_signatures USING btree (tenant_id, document_type, document_id, signed_at DESC)
+index:idx_document_signatures_tenant:CREATE INDEX idx_document_signatures_tenant ON public.document_signatures USING btree (tenant_id)
+index:idx_employee_documents_employee:CREATE INDEX idx_employee_documents_employee ON public.employee_documents USING btree (tenant_id, employee_id)
+index:idx_employee_documents_expiry:CREATE INDEX idx_employee_documents_expiry ON public.employee_documents USING btree (tenant_id, expiry_date) WHERE (expiry_date IS NOT NULL)
+index:idx_employee_loans_one_active:CREATE UNIQUE INDEX idx_employee_loans_one_active ON public.employee_loans USING btree (employee_id) WHERE (status = 'active'::text)
+index:idx_employee_loans_tenant_employee:CREATE INDEX idx_employee_loans_tenant_employee ON public.employee_loans USING btree (tenant_id, employee_id)
+index:idx_employees_hire_date:CREATE INDEX idx_employees_hire_date ON public.employees USING btree (hire_date DESC)
+index:idx_employees_manager:CREATE INDEX idx_employees_manager ON public.employees USING btree (tenant_id, manager_id)
+index:idx_employees_tenant_entity:CREATE INDEX idx_employees_tenant_entity ON public.employees USING btree (tenant_id, entity_id) WHERE (status <> 'terminated'::text)
+index:idx_entities_tenant:CREATE INDEX idx_entities_tenant ON public.entities USING btree (tenant_id) WHERE (is_active = true)
+index:idx_expense_claims_employee:CREATE INDEX idx_expense_claims_employee ON public.expense_claims USING btree (employee_id, expense_date DESC)
+index:idx_expense_claims_paid_lookup:CREATE INDEX idx_expense_claims_paid_lookup ON public.expense_claims USING btree (tenant_id, employee_id, expense_date, status, payroll_run_id) WHERE (status = 'approved'::text)
+index:idx_expense_claims_payroll_run:CREATE INDEX idx_expense_claims_payroll_run ON public.expense_claims USING btree (payroll_run_id)
+index:idx_expense_claims_tenant_status:CREATE INDEX idx_expense_claims_tenant_status ON public.expense_claims USING btree (tenant_id, status, created_at DESC)
+index:idx_final_settlements_employee:CREATE INDEX idx_final_settlements_employee ON public.final_settlements USING btree (tenant_id, employee_id, created_at DESC)
+index:idx_final_settlements_tenant_created:CREATE INDEX idx_final_settlements_tenant_created ON public.final_settlements USING btree (tenant_id, created_at DESC)
+index:idx_form_templates_tenant_type:CREATE INDEX idx_form_templates_tenant_type ON public.form_templates USING btree (tenant_id, form_type)
+index:idx_goal_check_ins_goal:CREATE INDEX idx_goal_check_ins_goal ON public.performance_goal_check_ins USING btree (tenant_id, goal_id, created_at)
+index:idx_goals_cycle:CREATE INDEX idx_goals_cycle ON public.performance_goals USING btree (tenant_id, cycle_id)
+index:idx_goals_employee:CREATE INDEX idx_goals_employee ON public.performance_goals USING btree (tenant_id, employee_id, status)
+index:idx_job_openings_status:CREATE INDEX idx_job_openings_status ON public.job_openings USING btree (tenant_id, status, created_at DESC)
+index:idx_kg_edges_properties:CREATE INDEX idx_kg_edges_properties ON public.kg_edges USING gin (properties)
+index:idx_kg_edges_tenant_relation:CREATE INDEX idx_kg_edges_tenant_relation ON public.kg_edges USING btree (tenant_id, relation)
+index:idx_kg_nodes_embedding:CREATE INDEX idx_kg_nodes_embedding ON public.kg_nodes USING ivfflat (embedding vector_cosine_ops) WITH (lists='100')
+index:idx_kg_nodes_properties:CREATE INDEX idx_kg_nodes_properties ON public.kg_nodes USING gin (properties)
+index:idx_kg_nodes_tenant_class:CREATE INDEX idx_kg_nodes_tenant_class ON public.kg_nodes USING btree (tenant_id, class)
+index:idx_leave_approval_rules_lookup:CREATE INDEX idx_leave_approval_rules_lookup ON public.leave_approval_rules USING btree (tenant_id, leave_type, min_days, priority DESC, id)
+index:idx_leave_approval_steps_escalation:CREATE INDEX idx_leave_approval_steps_escalation ON public.leave_approval_steps USING btree (tenant_id, status, escalated_at, created_at)
+index:idx_leave_approval_steps_request:CREATE INDEX idx_leave_approval_steps_request ON public.leave_approval_steps USING btree (leave_request_id)
+index:idx_leave_balances_employee:CREATE INDEX idx_leave_balances_employee ON public.leave_balances USING btree (employee_id, year)
+index:idx_leave_requests_employee:CREATE INDEX idx_leave_requests_employee ON public.leave_requests USING btree (employee_id, start_date DESC)
+index:idx_leave_requests_tenant_status:CREATE INDEX idx_leave_requests_tenant_status ON public.leave_requests USING btree (tenant_id, status, created_at DESC)
+index:idx_loan_installments_loan:CREATE INDEX idx_loan_installments_loan ON public.loan_installments USING btree (loan_id)
+index:idx_loan_installments_run:CREATE INDEX idx_loan_installments_run ON public.loan_installments USING btree (payroll_run_id)
+index:idx_loan_payments_loan:CREATE INDEX idx_loan_payments_loan ON public.loan_payments USING btree (loan_id)
+index:idx_notifications_tenant_status:CREATE INDEX idx_notifications_tenant_status ON public.notifications USING btree (tenant_id, status, created_at)
+index:idx_onboarding_employee:CREATE INDEX idx_onboarding_employee ON public.employee_onboarding_tasks USING btree (tenant_id, employee_id, status)
+index:idx_ot_approval_steps_request:CREATE INDEX idx_ot_approval_steps_request ON public.ot_approval_steps USING btree (ot_request_id)
+index:idx_ot_requests_employee:CREATE INDEX idx_ot_requests_employee ON public.ot_requests USING btree (employee_id, work_date DESC)
+index:idx_ot_requests_tenant_status:CREATE INDEX idx_ot_requests_tenant_status ON public.ot_requests USING btree (tenant_id, status, created_at DESC)
+index:idx_ot_requests_unique_live_date:CREATE UNIQUE INDEX idx_ot_requests_unique_live_date ON public.ot_requests USING btree (tenant_id, employee_id, work_date) WHERE (status = ANY (ARRAY['pending'::text, 'approved'::text]))
+index:idx_password_resets_open:CREATE INDEX idx_password_resets_open ON public.password_resets USING btree (expires_at) WHERE (used_at IS NULL)
+index:idx_password_resets_user:CREATE INDEX idx_password_resets_user ON public.password_resets USING btree (user_id, created_at DESC)
+index:idx_payroll_events_run:CREATE INDEX idx_payroll_events_run ON public.payroll_events USING btree (payroll_run_id)
+index:idx_payroll_runs_tenant:CREATE INDEX idx_payroll_runs_tenant ON public.payroll_runs USING btree (tenant_id, period_start DESC)
+index:idx_payslip_ack_tenant:CREATE INDEX idx_payslip_ack_tenant ON public.payslip_acknowledgements USING btree (tenant_id)
+index:idx_payslip_lines_payslip:CREATE INDEX idx_payslip_lines_payslip ON public.payslip_lines USING btree (payslip_id)
+index:idx_payslip_templates_tenant:CREATE INDEX idx_payslip_templates_tenant ON public.payslip_templates USING btree (tenant_id)
+index:idx_payslips_employee:CREATE INDEX idx_payslips_employee ON public.payslips USING btree (employee_id)
+index:idx_payslips_run:CREATE INDEX idx_payslips_run ON public.payslips USING btree (payroll_run_id)
+index:idx_performance_cycles_status:CREATE INDEX idx_performance_cycles_status ON public.performance_cycles USING btree (tenant_id, status, created_at DESC)
+index:idx_performance_reviews_cycle:CREATE INDEX idx_performance_reviews_cycle ON public.performance_reviews USING btree (tenant_id, cycle_id, status)
+index:idx_pf_rate_history_employee:CREATE INDEX idx_pf_rate_history_employee ON public.pf_rate_history USING btree (employee_id, effective_from DESC)
+index:idx_pf_remittances_tenant:CREATE INDEX idx_pf_remittances_tenant ON public.pf_remittances USING btree (tenant_id, created_at DESC)
+index:idx_privacy_consents_user:CREATE INDEX idx_privacy_consents_user ON public.privacy_consents USING btree (tenant_id, user_id)
+index:idx_refresh_tokens_expiry:CREATE INDEX idx_refresh_tokens_expiry ON public.refresh_tokens USING btree (expires_at) WHERE (revoked_at IS NULL)
+index:idx_refresh_tokens_hash:CREATE INDEX idx_refresh_tokens_hash ON public.refresh_tokens USING btree (token_hash)
+index:idx_refresh_tokens_user:CREATE INDEX idx_refresh_tokens_user ON public.refresh_tokens USING btree (user_id) WHERE (revoked_at IS NULL)
+index:idx_shift_assignments_shift:CREATE INDEX idx_shift_assignments_shift ON public.shift_assignments USING btree (shift_id)
+index:idx_shift_assignments_tenant:CREATE INDEX idx_shift_assignments_tenant ON public.shift_assignments USING btree (tenant_id)
+index:idx_tenant_holidays_date:CREATE INDEX idx_tenant_holidays_date ON public.tenant_holidays USING btree (tenant_id, holiday_date)
+index:idx_tenant_plugins_tenant:CREATE INDEX idx_tenant_plugins_tenant ON public.tenant_plugins USING btree (tenant_id) WHERE enabled
+index:idx_totp_recovery_codes_user_hash:CREATE INDEX idx_totp_recovery_codes_user_hash ON public.totp_recovery_codes USING btree (user_id, code_hash) WHERE (used_at IS NULL)
+index:idx_training_employee:CREATE INDEX idx_training_employee ON public.employee_training_records USING btree (tenant_id, employee_id)
+index:idx_training_expiry:CREATE INDEX idx_training_expiry ON public.employee_training_records USING btree (tenant_id, expires_on) WHERE (expires_on IS NOT NULL)
+index:idx_user_invites_open:CREATE INDEX idx_user_invites_open ON public.user_invites USING btree (expires_at) WHERE (accepted_at IS NULL)
+index:idx_user_invites_tenant:CREATE INDEX idx_user_invites_tenant ON public.user_invites USING btree (tenant_id, created_at DESC)
+index:idx_users_tenant:CREATE INDEX idx_users_tenant ON public.users USING btree (tenant_id) WHERE (is_active = true)
+index:idx_work_shifts_tenant:CREATE INDEX idx_work_shifts_tenant ON public.work_shifts USING btree (tenant_id)
+index:job_openings_pkey:CREATE UNIQUE INDEX job_openings_pkey ON public.job_openings USING btree (id)
+index:kg_edges_pkey:CREATE UNIQUE INDEX kg_edges_pkey ON public.kg_edges USING btree (id)
+index:kg_edges_tenant_id_from_id_relation_to_id_key:CREATE UNIQUE INDEX kg_edges_tenant_id_from_id_relation_to_id_key ON public.kg_edges USING btree (tenant_id, from_id, relation, to_id)
+index:kg_nodes_pkey:CREATE UNIQUE INDEX kg_nodes_pkey ON public.kg_nodes USING btree (id)
+index:kg_nodes_tenant_id_class_key_key:CREATE UNIQUE INDEX kg_nodes_tenant_id_class_key_key ON public.kg_nodes USING btree (tenant_id, class, key)
+index:leave_approval_rules_pkey:CREATE UNIQUE INDEX leave_approval_rules_pkey ON public.leave_approval_rules USING btree (id)
+index:leave_approval_steps_leave_request_id_step_no_key:CREATE UNIQUE INDEX leave_approval_steps_leave_request_id_step_no_key ON public.leave_approval_steps USING btree (leave_request_id, step_no)
+index:leave_approval_steps_pkey:CREATE UNIQUE INDEX leave_approval_steps_pkey ON public.leave_approval_steps USING btree (id)
+index:leave_balances_employee_id_leave_type_id_year_key:CREATE UNIQUE INDEX leave_balances_employee_id_leave_type_id_year_key ON public.leave_balances USING btree (employee_id, leave_type_id, year)
+index:leave_balances_pkey:CREATE UNIQUE INDEX leave_balances_pkey ON public.leave_balances USING btree (id)
+index:leave_requests_pkey:CREATE UNIQUE INDEX leave_requests_pkey ON public.leave_requests USING btree (id)
+index:leave_types_pkey:CREATE UNIQUE INDEX leave_types_pkey ON public.leave_types USING btree (id)
+index:loan_installments_active_unique:CREATE UNIQUE INDEX loan_installments_active_unique ON public.loan_installments USING btree (loan_id, payroll_run_id) WHERE (reversed_at IS NULL)
+index:loan_installments_pkey:CREATE UNIQUE INDEX loan_installments_pkey ON public.loan_installments USING btree (id)
+index:loan_payments_pkey:CREATE UNIQUE INDEX loan_payments_pkey ON public.loan_payments USING btree (id)
+index:notifications_pkey:CREATE UNIQUE INDEX notifications_pkey ON public.notifications USING btree (id)
+index:ot_approval_steps_ot_request_id_step_no_key:CREATE UNIQUE INDEX ot_approval_steps_ot_request_id_step_no_key ON public.ot_approval_steps USING btree (ot_request_id, step_no)
+index:ot_approval_steps_pkey:CREATE UNIQUE INDEX ot_approval_steps_pkey ON public.ot_approval_steps USING btree (id)
+index:ot_requests_pkey:CREATE UNIQUE INDEX ot_requests_pkey ON public.ot_requests USING btree (id)
+index:ot_rules_pkey:CREATE UNIQUE INDEX ot_rules_pkey ON public.ot_rules USING btree (id)
+index:password_resets_pkey:CREATE UNIQUE INDEX password_resets_pkey ON public.password_resets USING btree (id)
+index:password_resets_token_hash_key:CREATE UNIQUE INDEX password_resets_token_hash_key ON public.password_resets USING btree (token_hash)
+index:payroll_events_pkey:CREATE UNIQUE INDEX payroll_events_pkey ON public.payroll_events USING btree (id)
+index:payroll_runs_pkey:CREATE UNIQUE INDEX payroll_runs_pkey ON public.payroll_runs USING btree (id)
+index:payroll_runs_tenant_id_entity_id_period_start_period_end_key:CREATE UNIQUE INDEX payroll_runs_tenant_id_entity_id_period_start_period_end_key ON public.payroll_runs USING btree (tenant_id, entity_id, period_start, period_end)
+index:payslip_acknowledgements_pkey:CREATE UNIQUE INDEX payslip_acknowledgements_pkey ON public.payslip_acknowledgements USING btree (payslip_id)
+index:payslip_lines_pkey:CREATE UNIQUE INDEX payslip_lines_pkey ON public.payslip_lines USING btree (id)
+index:payslip_templates_pkey:CREATE UNIQUE INDEX payslip_templates_pkey ON public.payslip_templates USING btree (id)
+index:payslip_templates_tenant_id_entity_id_name_key:CREATE UNIQUE INDEX payslip_templates_tenant_id_entity_id_name_key ON public.payslip_templates USING btree (tenant_id, entity_id, name)
+index:payslips_pkey:CREATE UNIQUE INDEX payslips_pkey ON public.payslips USING btree (id)
+index:payslips_run_employee_unique:CREATE UNIQUE INDEX payslips_run_employee_unique ON public.payslips USING btree (payroll_run_id, employee_id)
+index:performance_calibrations_pkey:CREATE UNIQUE INDEX performance_calibrations_pkey ON public.performance_calibrations USING btree (id)
+index:performance_calibrations_tenant_id_cycle_id_employee_id_key:CREATE UNIQUE INDEX performance_calibrations_tenant_id_cycle_id_employee_id_key ON public.performance_calibrations USING btree (tenant_id, cycle_id, employee_id)
+index:performance_cycles_pkey:CREATE UNIQUE INDEX performance_cycles_pkey ON public.performance_cycles USING btree (id)
+index:performance_goal_check_ins_pkey:CREATE UNIQUE INDEX performance_goal_check_ins_pkey ON public.performance_goal_check_ins USING btree (id)
+index:performance_goals_pkey:CREATE UNIQUE INDEX performance_goals_pkey ON public.performance_goals USING btree (id)
+index:performance_reviews_cycle_id_employee_id_key:CREATE UNIQUE INDEX performance_reviews_cycle_id_employee_id_key ON public.performance_reviews USING btree (cycle_id, employee_id)
+index:performance_reviews_pkey:CREATE UNIQUE INDEX performance_reviews_pkey ON public.performance_reviews USING btree (id)
+index:pf_rate_history_pkey:CREATE UNIQUE INDEX pf_rate_history_pkey ON public.pf_rate_history USING btree (id)
+index:pf_rate_history_tenant_id_employee_id_effective_from_key:CREATE UNIQUE INDEX pf_rate_history_tenant_id_employee_id_effective_from_key ON public.pf_rate_history USING btree (tenant_id, employee_id, effective_from)
+index:pf_remittances_pkey:CREATE UNIQUE INDEX pf_remittances_pkey ON public.pf_remittances USING btree (id)
+index:pf_remittances_tenant_id_payroll_run_id_key:CREATE UNIQUE INDEX pf_remittances_tenant_id_payroll_run_id_key ON public.pf_remittances USING btree (tenant_id, payroll_run_id)
+index:pf_rules_pkey:CREATE UNIQUE INDEX pf_rules_pkey ON public.pf_rules USING btree (id)
+index:privacy_consents_pkey:CREATE UNIQUE INDEX privacy_consents_pkey ON public.privacy_consents USING btree (tenant_id, user_id, version)
+index:refresh_tokens_pkey:CREATE UNIQUE INDEX refresh_tokens_pkey ON public.refresh_tokens USING btree (id)
+index:refresh_tokens_token_hash_key:CREATE UNIQUE INDEX refresh_tokens_token_hash_key ON public.refresh_tokens USING btree (token_hash)
+index:roles_pkey:CREATE UNIQUE INDEX roles_pkey ON public.roles USING btree (id)
+index:roles_tenant_id_name_key:CREATE UNIQUE INDEX roles_tenant_id_name_key ON public.roles USING btree (tenant_id, name)
+index:severance_rules_pkey:CREATE UNIQUE INDEX severance_rules_pkey ON public.severance_rules USING btree (id)
+index:severance_rules_tenant_id_min_months_key:CREATE UNIQUE INDEX severance_rules_tenant_id_min_months_key ON public.severance_rules USING btree (tenant_id, min_months)
+index:shift_assignments_employee_id_effective_from_key:CREATE UNIQUE INDEX shift_assignments_employee_id_effective_from_key ON public.shift_assignments USING btree (employee_id, effective_from)
+index:shift_assignments_pkey:CREATE UNIQUE INDEX shift_assignments_pkey ON public.shift_assignments USING btree (id)
+index:sso_rules_pkey:CREATE UNIQUE INDEX sso_rules_pkey ON public.sso_rules USING btree (id)
+index:tax_brackets_pkey:CREATE UNIQUE INDEX tax_brackets_pkey ON public.tax_brackets USING btree (id)
+index:tax_brackets_tenant_id_year_lower_key:CREATE UNIQUE INDEX tax_brackets_tenant_id_year_lower_key ON public.tax_brackets USING btree (tenant_id, year, lower)
+index:tenant_api_keys_pkey:CREATE UNIQUE INDEX tenant_api_keys_pkey ON public.tenant_api_keys USING btree (id)
+index:tenant_api_keys_tenant_id_key:CREATE UNIQUE INDEX tenant_api_keys_tenant_id_key ON public.tenant_api_keys USING btree (tenant_id)
+index:tenant_holidays_pkey:CREATE UNIQUE INDEX tenant_holidays_pkey ON public.tenant_holidays USING btree (id)
+index:tenant_holidays_tenant_id_holiday_date_key:CREATE UNIQUE INDEX tenant_holidays_tenant_id_holiday_date_key ON public.tenant_holidays USING btree (tenant_id, holiday_date)
+index:tenant_oidc_config_pkey:CREATE UNIQUE INDEX tenant_oidc_config_pkey ON public.tenant_oidc_config USING btree (tenant_id)
+index:tenant_payroll_settings_pkey:CREATE UNIQUE INDEX tenant_payroll_settings_pkey ON public.tenant_payroll_settings USING btree (tenant_id)
+index:tenant_pdpa_policy_pkey:CREATE UNIQUE INDEX tenant_pdpa_policy_pkey ON public.tenant_pdpa_policy USING btree (tenant_id)
+index:tenant_plugins_pkey:CREATE UNIQUE INDEX tenant_plugins_pkey ON public.tenant_plugins USING btree (id)
+index:tenant_plugins_tenant_id_name_key:CREATE UNIQUE INDEX tenant_plugins_tenant_id_name_key ON public.tenant_plugins USING btree (tenant_id, name)
+index:tenants_pkey:CREATE UNIQUE INDEX tenants_pkey ON public.tenants USING btree (id)
+index:tenants_slug_key:CREATE UNIQUE INDEX tenants_slug_key ON public.tenants USING btree (slug)
+index:totp_recovery_codes_pkey:CREATE UNIQUE INDEX totp_recovery_codes_pkey ON public.totp_recovery_codes USING btree (id)
+index:totp_recovery_codes_user_id_code_hash_key:CREATE UNIQUE INDEX totp_recovery_codes_user_id_code_hash_key ON public.totp_recovery_codes USING btree (user_id, code_hash)
+index:user_invites_pkey:CREATE UNIQUE INDEX user_invites_pkey ON public.user_invites USING btree (id)
+index:user_invites_token_hash_key:CREATE UNIQUE INDEX user_invites_token_hash_key ON public.user_invites USING btree (token_hash)
+index:user_roles_pkey:CREATE UNIQUE INDEX user_roles_pkey ON public.user_roles USING btree (user_id, role_id)
+index:users_pkey:CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)
+index:users_tenant_id_email_key:CREATE UNIQUE INDEX users_tenant_id_email_key ON public.users USING btree (tenant_id, email)
+index:work_shifts_entity_id_name_key:CREATE UNIQUE INDEX work_shifts_entity_id_name_key ON public.work_shifts USING btree (entity_id, name)
+index:work_shifts_pkey:CREATE UNIQUE INDEX work_shifts_pkey ON public.work_shifts USING btree (id)
+constraint:_sqlx_migrations_pkey:p:PRIMARY KEY (version)
+constraint:ai_agent_runs_agent_type_check:c:CHECK ((agent_type = ANY (ARRAY['PayrollAnomalyAgent'::text, 'PolicyQueryAgent'::text, 'PayrollRunAgent'::text, 'LeavePolicyAgent'::text, 'ComplianceMonitorAgent'::text])))
+constraint:ai_agent_runs_human_approver_fkey:f:FOREIGN KEY (human_approver) REFERENCES users(id)
+constraint:ai_agent_runs_pkey:p:PRIMARY KEY (id)
+constraint:ai_agent_runs_state_check:c:CHECK ((state = ANY (ARRAY['running'::text, 'paused_for_approval'::text, 'completed'::text, 'failed'::text, 'timeout'::text])))
+constraint:ai_agent_runs_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_conversations_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE SET NULL
+constraint:ai_conversations_pkey:p:PRIMARY KEY (id)
+constraint:ai_conversations_state_check:c:CHECK ((state = ANY (ARRAY['active'::text, 'paused'::text, 'completed'::text, 'failed'::text])))
+constraint:ai_conversations_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_cost_tracking_pkey:p:PRIMARY KEY (id)
+constraint:ai_cost_tracking_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_cost_tracking_tenant_id_model_date_key:u:UNIQUE (tenant_id, model, date)
+constraint:ai_document_chunks_document_id_chunk_index_key:u:UNIQUE (document_id, chunk_index)
+constraint:ai_document_chunks_document_id_fkey:f:FOREIGN KEY (document_id) REFERENCES ai_documents(id) ON DELETE CASCADE
+constraint:ai_document_chunks_pkey:p:PRIMARY KEY (id)
+constraint:ai_documents_doc_type_check:c:CHECK ((doc_type = ANY (ARRAY['policy'::text, 'regulation'::text, 'payslip'::text, 'api_spec'::text, 'handbook'::text])))
+constraint:ai_documents_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+constraint:ai_documents_pkey:p:PRIMARY KEY (id)
+constraint:ai_documents_tenant_id_content_hash_key:u:UNIQUE (tenant_id, content_hash)
+constraint:ai_documents_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_memory_content_check:c:CHECK (((char_length(content) >= 1) AND (char_length(content) <= 8000)))
+constraint:ai_memory_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE SET NULL
+constraint:ai_memory_importance_check:c:CHECK (((importance >= (0)::numeric) AND (importance <= (1)::numeric)))
+constraint:ai_memory_layer_check:c:CHECK ((layer = ANY (ARRAY['working'::text, 'episodic'::text, 'semantic'::text, 'procedural'::text])))
+constraint:ai_memory_pkey:p:PRIMARY KEY (id)
+constraint:ai_memory_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_memory_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+constraint:ai_model_roles_pkey:p:PRIMARY KEY (tenant_id, role)
+constraint:ai_model_roles_provider_id_fkey:f:FOREIGN KEY (provider_id) REFERENCES ai_providers(id) ON DELETE CASCADE
+constraint:ai_model_roles_role_check:c:CHECK ((role = ANY (ARRAY['chat'::text, 'embedding'::text, 'ocr'::text, 'vision'::text, 'graph_extract'::text])))
+constraint:ai_model_roles_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_providers_pkey:p:PRIMARY KEY (id)
+constraint:ai_providers_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_providers_tenant_id_name_key:u:UNIQUE (tenant_id, name)
+constraint:ai_settings_pkey:p:PRIMARY KEY (tenant_id)
+constraint:ai_settings_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ai_tool_calls_pkey:p:PRIMARY KEY (id)
+constraint:ai_tool_calls_run_id_fkey:f:FOREIGN KEY (run_id) REFERENCES ai_agent_runs(id) ON DELETE CASCADE
+constraint:ai_tool_calls_status_check:c:CHECK ((status = ANY (ARRAY['success'::text, 'failed'::text, 'pending_approval'::text])))
+constraint:approval_delegations_check:c:CHECK ((delegator_user_id <> delegate_user_id))
+constraint:approval_delegations_check1:c:CHECK ((ends_on >= starts_on))
+constraint:approval_delegations_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:approval_delegations_delegate_user_id_fkey:f:FOREIGN KEY (delegate_user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:approval_delegations_delegator_user_id_fkey:f:FOREIGN KEY (delegator_user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:approval_delegations_pkey:p:PRIMARY KEY (id)
+constraint:approval_delegations_tenant_id_delegator_user_id_delegate_u_key:u:UNIQUE (tenant_id, delegator_user_id, delegate_user_id, starts_on)
+constraint:approval_delegations_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:attendance_days_approved_by_fkey:f:FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:attendance_days_derived_ot_minutes_check:c:CHECK ((derived_ot_minutes >= 0))
+constraint:attendance_days_early_leave_minutes_check:c:CHECK ((early_leave_minutes >= 0))
+constraint:attendance_days_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:attendance_days_employee_id_work_date_key:u:UNIQUE (employee_id, work_date)
+constraint:attendance_days_late_minutes_check:c:CHECK ((late_minutes >= 0))
+constraint:attendance_days_ot_kind_check:c:CHECK ((ot_kind = ANY (ARRAY['weekday'::text, 'weekend'::text, 'holiday'::text])))
+constraint:attendance_days_ot_minutes_check:c:CHECK ((ot_minutes >= 0))
+constraint:attendance_days_pkey:p:PRIMARY KEY (id)
+constraint:attendance_days_shift_id_fkey:f:FOREIGN KEY (shift_id) REFERENCES work_shifts(id) ON DELETE SET NULL
+constraint:attendance_days_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text])))
+constraint:attendance_days_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:attendance_days_worked_minutes_check:c:CHECK ((worked_minutes >= 0))
+constraint:attendance_events_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:attendance_events_kind_check:c:CHECK ((kind = ANY (ARRAY['in'::text, 'out'::text])))
+constraint:attendance_events_pkey:p:PRIMARY KEY (id)
+constraint:attendance_events_source_check:c:CHECK ((source = ANY (ARRAY['mobile'::text, 'web'::text, 'device'::text, 'manual'::text, 'import'::text])))
+constraint:attendance_events_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:attendance_records_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:attendance_records_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:attendance_records_employee_id_work_date_key:u:UNIQUE (employee_id, work_date)
+constraint:attendance_records_hours_worked_check:c:CHECK (((hours_worked >= (0)::numeric) AND (hours_worked <= (24)::numeric)))
+constraint:attendance_records_ot_hours_check:c:CHECK (((ot_hours >= (0)::numeric) AND (ot_hours <= (12)::numeric)))
+constraint:attendance_records_ot_kind_check:c:CHECK ((ot_kind = ANY (ARRAY['weekday'::text, 'weekend'::text, 'holiday'::text])))
+constraint:attendance_records_pkey:p:PRIMARY KEY (id)
+constraint:attendance_records_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:audit_log_actor_type_check:c:CHECK ((actor_type = ANY (ARRAY['user'::text, 'agent'::text, 'system'::text])))
+constraint:audit_log_pkey:p:PRIMARY KEY (id)
+constraint:bank_templates_pkey:p:PRIMARY KEY (id)
+constraint:bank_templates_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:candidate_interviews_candidate_id_fkey:f:FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+constraint:candidate_interviews_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:candidate_interviews_interviewer_user_id_fkey:f:FOREIGN KEY (interviewer_user_id) REFERENCES users(id) ON DELETE SET NULL
+constraint:candidate_interviews_location_check:c:CHECK (((location IS NULL) OR (char_length(location) <= 500)))
+constraint:candidate_interviews_mode_check:c:CHECK ((mode = ANY (ARRAY['onsite'::text, 'online'::text, 'phone'::text])))
+constraint:candidate_interviews_notes_check:c:CHECK (((notes IS NULL) OR (char_length(notes) <= 1000)))
+constraint:candidate_interviews_pkey:p:PRIMARY KEY (id)
+constraint:candidate_interviews_status_check:c:CHECK ((status = ANY (ARRAY['scheduled'::text, 'completed'::text, 'cancelled'::text])))
+constraint:candidate_interviews_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:candidate_offers_candidate_id_fkey:f:FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+constraint:candidate_offers_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:candidate_offers_notes_check:c:CHECK (((notes IS NULL) OR (char_length(notes) <= 2000)))
+constraint:candidate_offers_pkey:p:PRIMARY KEY (id)
+constraint:candidate_offers_position_title_check:c:CHECK (((char_length(position_title) >= 1) AND (char_length(position_title) <= 200)))
+constraint:candidate_offers_salary_check:c:CHECK ((salary > (0)::numeric))
+constraint:candidate_offers_signature_id_fkey:f:FOREIGN KEY (signature_id) REFERENCES document_signatures(id) ON DELETE SET NULL
+constraint:candidate_offers_status_check:c:CHECK ((status = ANY (ARRAY['draft'::text, 'sent'::text, 'accepted'::text, 'declined'::text])))
+constraint:candidate_offers_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:candidate_stage_events_candidate_id_fkey:f:FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+constraint:candidate_stage_events_changed_by_fkey:f:FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:candidate_stage_events_pkey:p:PRIMARY KEY (id)
+constraint:candidate_stage_events_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:candidates_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:candidates_email_check:c:CHECK (((email IS NULL) OR (char_length(email) <= 2000)))
+constraint:candidates_first_name_check:c:CHECK (((char_length(first_name) >= 1) AND (char_length(first_name) <= 100)))
+constraint:candidates_job_opening_id_fkey:f:FOREIGN KEY (job_opening_id) REFERENCES job_openings(id) ON DELETE CASCADE
+constraint:candidates_last_name_check:c:CHECK (((char_length(last_name) >= 1) AND (char_length(last_name) <= 100)))
+constraint:candidates_note_check:c:CHECK (((note IS NULL) OR (char_length(note) <= 2000)))
+constraint:candidates_phone_check:c:CHECK (((phone IS NULL) OR (char_length(phone) <= 2000)))
+constraint:candidates_pkey:p:PRIMARY KEY (id)
+constraint:candidates_source_check:c:CHECK (((source IS NULL) OR (char_length(source) <= 100)))
+constraint:candidates_stage_check:c:CHECK ((stage = ANY (ARRAY['applied'::text, 'screening'::text, 'interview'::text, 'offer'::text, 'hired'::text, 'rejected'::text])))
+constraint:candidates_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:document_signatures_doc_hash_sha256_check:c:CHECK ((char_length(doc_hash_sha256) = 64))
+constraint:document_signatures_document_type_check:c:CHECK ((document_type = ANY (ARRAY['payslip'::text, 'offer'::text])))
+constraint:document_signatures_pkey:p:PRIMARY KEY (id)
+constraint:document_signatures_sig_uq:u:UNIQUE (tenant_id, document_type, document_id, signer_user_id)
+constraint:document_signatures_signer_user_id_fkey:f:FOREIGN KEY (signer_user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:document_signatures_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:document_signatures_typed_name_check:c:CHECK (((char_length(typed_name) >= 1) AND (char_length(typed_name) <= 200)))
+constraint:employee_documents_check:c:CHECK (((issued_date IS NULL) OR (expiry_date IS NULL) OR (expiry_date >= issued_date)))
+constraint:employee_documents_doc_number_check:c:CHECK (((doc_number IS NULL) OR (char_length(doc_number) <= 100)))
+constraint:employee_documents_doc_type_check:c:CHECK ((doc_type = ANY (ARRAY['contract'::text, 'work_permit'::text, 'visa'::text, 'id_card'::text, 'certificate'::text, 'other'::text])))
+constraint:employee_documents_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:employee_documents_pkey:p:PRIMARY KEY (id)
+constraint:employee_documents_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:employee_documents_title_check:c:CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200)))
+constraint:employee_documents_uploaded_by_fkey:f:FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:employee_loans_balance_check:c:CHECK ((balance >= (0)::numeric))
+constraint:employee_loans_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id)
+constraint:employee_loans_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:employee_loans_installment_amount_check:c:CHECK ((installment_amount > (0)::numeric))
+constraint:employee_loans_interest_rate_check:c:CHECK (((interest_rate >= (0)::numeric) AND (interest_rate <= 0.10)))
+constraint:employee_loans_pkey:p:PRIMARY KEY (id)
+constraint:employee_loans_principal_check:c:CHECK ((principal > (0)::numeric))
+constraint:employee_loans_status_check:c:CHECK ((status = ANY (ARRAY['active'::text, 'closed'::text, 'cancelled'::text])))
+constraint:employee_loans_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:employee_onboarding_tasks_completed_by_fkey:f:FOREIGN KEY (completed_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:employee_onboarding_tasks_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:employee_onboarding_tasks_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:employee_onboarding_tasks_notes_check:c:CHECK (((notes IS NULL) OR (char_length(notes) <= 500)))
+constraint:employee_onboarding_tasks_pkey:p:PRIMARY KEY (id)
+constraint:employee_onboarding_tasks_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'done'::text])))
+constraint:employee_onboarding_tasks_tenant_id_employee_id_title_key:u:UNIQUE (tenant_id, employee_id, title)
+constraint:employee_onboarding_tasks_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:employee_onboarding_tasks_title_check:c:CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200)))
+constraint:employee_training_records_check:c:CHECK (((completed_on IS NULL) OR (expires_on IS NULL) OR (expires_on >= completed_on)))
+constraint:employee_training_records_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:employee_training_records_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:employee_training_records_pkey:p:PRIMARY KEY (id)
+constraint:employee_training_records_provider_check:c:CHECK (((provider IS NULL) OR (char_length(provider) <= 200)))
+constraint:employee_training_records_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:employee_training_records_title_check:c:CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200)))
+constraint:employees_base_salary_check:c:CHECK ((base_salary >= (0)::numeric))
+constraint:employees_entity_id_employee_code_key:u:UNIQUE (entity_id, employee_code)
+constraint:employees_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE RESTRICT
+constraint:employees_manager_id_fkey:f:FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL
+constraint:employees_pkey:p:PRIMARY KEY (id)
+constraint:employees_status_check:c:CHECK ((status = ANY (ARRAY['active'::text, 'probation'::text, 'leave'::text, 'terminated'::text])))
+constraint:employees_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:employees_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+constraint:entities_geofence_lat_check:c:CHECK (((geofence_lat IS NULL) OR ((geofence_lat >= ('-90'::integer)::numeric) AND (geofence_lat <= (90)::numeric))))
+constraint:entities_geofence_lng_check:c:CHECK (((geofence_lng IS NULL) OR ((geofence_lng >= ('-180'::integer)::numeric) AND (geofence_lng <= (180)::numeric))))
+constraint:entities_geofence_radius_m_check:c:CHECK (((geofence_radius_m >= 1) AND (geofence_radius_m <= 5000)))
+constraint:entities_pkey:p:PRIMARY KEY (id)
+constraint:entities_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:expense_claims_amount_check:c:CHECK ((amount > (0)::numeric))
+constraint:expense_claims_category_check:c:CHECK ((category = ANY (ARRAY['travel'::text, 'meal'::text, 'supplies'::text, 'other'::text])))
+constraint:expense_claims_decided_by_fkey:f:FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:expense_claims_description_check:c:CHECK (((description IS NULL) OR (char_length(description) <= 500)))
+constraint:expense_claims_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:expense_claims_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE RESTRICT
+constraint:expense_claims_payroll_run_id_fkey:f:FOREIGN KEY (payroll_run_id) REFERENCES payroll_runs(id) ON DELETE SET NULL
+constraint:expense_claims_pkey:p:PRIMARY KEY (id)
+constraint:expense_claims_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text, 'paid'::text])))
+constraint:expense_claims_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:final_settlements_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:final_settlements_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:final_settlements_notice_days_check:c:CHECK ((notice_days >= 0))
+constraint:final_settlements_pkey:p:PRIMARY KEY (id)
+constraint:final_settlements_status_check:c:CHECK ((status = ANY (ARRAY['draft'::text, 'finalized'::text, 'cancelled'::text])))
+constraint:final_settlements_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:final_settlements_unused_leave_days_check:c:CHECK ((unused_leave_days >= 0))
+constraint:form_templates_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:form_templates_form_type_check:c:CHECK ((form_type = ANY (ARRAY['50tawi'::text, 'sso1_10'::text, 'pnd1'::text, 'pnd1a'::text, 'bank_payout'::text])))
+constraint:form_templates_pkey:p:PRIMARY KEY (id)
+constraint:form_templates_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:form_templates_tenant_id_form_type_version_key:u:UNIQUE (tenant_id, form_type, version)
+constraint:job_openings_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:job_openings_department_check:c:CHECK (((department IS NULL) OR (char_length(department) <= 100)))
+constraint:job_openings_description_check:c:CHECK (((description IS NULL) OR (char_length(description) <= 2000)))
+constraint:job_openings_employment_type_check:c:CHECK ((employment_type = ANY (ARRAY['full_time'::text, 'part_time'::text, 'contract'::text, 'intern'::text])))
+constraint:job_openings_headcount_check:c:CHECK (((headcount >= 1) AND (headcount <= 100)))
+constraint:job_openings_pkey:p:PRIMARY KEY (id)
+constraint:job_openings_status_check:c:CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text])))
+constraint:job_openings_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:job_openings_title_check:c:CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200)))
+constraint:kg_edges_from_id_fkey:f:FOREIGN KEY (from_id) REFERENCES kg_nodes(id) ON DELETE CASCADE
+constraint:kg_edges_pkey:p:PRIMARY KEY (id)
+constraint:kg_edges_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:kg_edges_tenant_id_from_id_relation_to_id_key:u:UNIQUE (tenant_id, from_id, relation, to_id)
+constraint:kg_edges_to_id_fkey:f:FOREIGN KEY (to_id) REFERENCES kg_nodes(id) ON DELETE CASCADE
+constraint:kg_nodes_pkey:p:PRIMARY KEY (id)
+constraint:kg_nodes_tenant_id_class_key_key:u:UNIQUE (tenant_id, class, key)
+constraint:kg_nodes_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:leave_approval_rules_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:leave_approval_rules_leave_type_check:c:CHECK (((leave_type IS NULL) OR (leave_type = ANY (ARRAY['annual'::text, 'sick'::text, 'personal'::text, 'maternity'::text, 'paternity'::text, 'bereavement'::text, 'unpaid'::text]))))
+constraint:leave_approval_rules_min_days_check:c:CHECK (((min_days IS NULL) OR ((min_days > (0)::numeric) AND (min_days <= (365)::numeric))))
+constraint:leave_approval_rules_pkey:p:PRIMARY KEY (id)
+constraint:leave_approval_rules_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:leave_approval_steps_approver_role_check:c:CHECK ((approver_role = ANY (ARRAY['manager'::text, 'hr_admin'::text])))
+constraint:leave_approval_steps_decided_by_fkey:f:FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:leave_approval_steps_leave_request_id_fkey:f:FOREIGN KEY (leave_request_id) REFERENCES leave_requests(id) ON DELETE CASCADE
+constraint:leave_approval_steps_leave_request_id_step_no_key:u:UNIQUE (leave_request_id, step_no)
+constraint:leave_approval_steps_pkey:p:PRIMARY KEY (id)
+constraint:leave_approval_steps_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'skipped'::text])))
+constraint:leave_balances_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:leave_balances_employee_id_leave_type_id_year_key:u:UNIQUE (employee_id, leave_type_id, year)
+constraint:leave_balances_leave_type_id_fkey:f:FOREIGN KEY (leave_type_id) REFERENCES leave_types(id) ON DELETE RESTRICT
+constraint:leave_balances_pkey:p:PRIMARY KEY (id)
+constraint:leave_balances_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:leave_requests_approver_id_fkey:f:FOREIGN KEY (approver_id) REFERENCES users(id) ON DELETE SET NULL
+constraint:leave_requests_check:c:CHECK ((end_date >= start_date))
+constraint:leave_requests_days_check:c:CHECK ((days > (0)::numeric))
+constraint:leave_requests_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:leave_requests_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE RESTRICT
+constraint:leave_requests_pkey:p:PRIMARY KEY (id)
+constraint:leave_requests_requested_by_fkey:f:FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:leave_requests_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text])))
+constraint:leave_requests_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:leave_types_pkey:p:PRIMARY KEY (id)
+constraint:leave_types_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:loan_installments_amount_check:c:CHECK ((amount > (0)::numeric))
+constraint:loan_installments_loan_id_fkey:f:FOREIGN KEY (loan_id) REFERENCES employee_loans(id) ON DELETE CASCADE
+constraint:loan_installments_payroll_run_id_fkey:f:FOREIGN KEY (payroll_run_id) REFERENCES payroll_runs(id) ON DELETE CASCADE
+constraint:loan_installments_pkey:p:PRIMARY KEY (id)
+constraint:loan_payments_amount_check:c:CHECK ((amount > (0)::numeric))
+constraint:loan_payments_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id)
+constraint:loan_payments_loan_id_fkey:f:FOREIGN KEY (loan_id) REFERENCES employee_loans(id) ON DELETE CASCADE
+constraint:loan_payments_pkey:p:PRIMARY KEY (id)
+constraint:notifications_channel_check:c:CHECK ((channel = ANY (ARRAY['email'::text, 'line'::text])))
+constraint:notifications_pkey:p:PRIMARY KEY (id)
+constraint:notifications_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text])))
+constraint:notifications_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:notifications_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+constraint:ot_approval_steps_approver_role_check:c:CHECK ((approver_role = ANY (ARRAY['manager'::text, 'hr_admin'::text])))
+constraint:ot_approval_steps_decided_by_fkey:f:FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:ot_approval_steps_ot_request_id_fkey:f:FOREIGN KEY (ot_request_id) REFERENCES ot_requests(id) ON DELETE CASCADE
+constraint:ot_approval_steps_ot_request_id_step_no_key:u:UNIQUE (ot_request_id, step_no)
+constraint:ot_approval_steps_pkey:p:PRIMARY KEY (id)
+constraint:ot_approval_steps_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'skipped'::text])))
+constraint:ot_requests_decided_by_fkey:f:FOREIGN KEY (decided_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:ot_requests_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:ot_requests_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE RESTRICT
+constraint:ot_requests_minutes_check:c:CHECK (((minutes >= 1) AND (minutes <= 720)))
+constraint:ot_requests_pkey:p:PRIMARY KEY (id)
+constraint:ot_requests_reason_check:c:CHECK (((reason IS NULL) OR (char_length(reason) <= 500)))
+constraint:ot_requests_requested_by_fkey:f:FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:ot_requests_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text])))
+constraint:ot_requests_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:ot_rules_pkey:p:PRIMARY KEY (id)
+constraint:ot_rules_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+constraint:password_resets_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:password_resets_pkey:p:PRIMARY KEY (id)
+constraint:password_resets_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:password_resets_token_hash_key:u:UNIQUE (token_hash)
+constraint:password_resets_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:payroll_events_payroll_run_id_fkey:f:FOREIGN KEY (payroll_run_id) REFERENCES payroll_runs(id) ON DELETE CASCADE
+constraint:payroll_events_pkey:p:PRIMARY KEY (id)
+constraint:payroll_runs_anomaly_reviewed_by_fkey:f:FOREIGN KEY (anomaly_reviewed_by) REFERENCES users(id)
+constraint:payroll_runs_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id)
+constraint:payroll_runs_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE RESTRICT
+constraint:payroll_runs_pkey:p:PRIMARY KEY (id)
+constraint:payroll_runs_status_check:c:CHECK ((status = ANY (ARRAY['draft'::text, 'calculating'::text, 'pending_approval'::text, 'approved'::text, 'rejected'::text, 'disbursing'::text, 'completed'::text, 'failed'::text])))
+constraint:payroll_runs_tenant_id_entity_id_period_start_period_end_key:u:UNIQUE (tenant_id, entity_id, period_start, period_end)
+constraint:payroll_runs_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:payslip_acknowledgements_payslip_id_fkey:f:FOREIGN KEY (payslip_id) REFERENCES payslips(id) ON DELETE CASCADE
+constraint:payslip_acknowledgements_pkey:p:PRIMARY KEY (payslip_id)
+constraint:payslip_acknowledgements_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:payslip_acknowledgements_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:payslip_lines_line_type_check:c:CHECK ((line_type = ANY (ARRAY['earning'::text, 'deduction'::text, 'tax'::text, 'contribution'::text])))
+constraint:payslip_lines_payslip_id_fkey:f:FOREIGN KEY (payslip_id) REFERENCES payslips(id) ON DELETE CASCADE
+constraint:payslip_lines_pkey:p:PRIMARY KEY (id)
+constraint:payslip_templates_accent_color_check:c:CHECK ((accent_color ~ '^#[0-9a-fA-F]{6}$'::text))
+constraint:payslip_templates_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+constraint:payslip_templates_paper_size_check:c:CHECK ((paper_size = ANY (ARRAY['A4'::text, 'A5'::text, 'Letter'::text])))
+constraint:payslip_templates_pkey:p:PRIMARY KEY (id)
+constraint:payslip_templates_tenant_id_entity_id_name_key:u:UNIQUE (tenant_id, entity_id, name)
+constraint:payslip_templates_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:payslips_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:payslips_payroll_run_id_fkey:f:FOREIGN KEY (payroll_run_id) REFERENCES payroll_runs(id) ON DELETE CASCADE
+constraint:payslips_pkey:p:PRIMARY KEY (id)
+constraint:payslips_run_employee_unique:u:UNIQUE (payroll_run_id, employee_id)
+constraint:payslips_signature_id_fkey:f:FOREIGN KEY (signature_id) REFERENCES document_signatures(id) ON DELETE SET NULL
+constraint:payslips_status_check:c:CHECK ((status = ANY (ARRAY['calculated'::text, 'approved'::text, 'disbursed'::text, 'rejected'::text])))
+constraint:performance_calibrations_calibrated_rating_check:c:CHECK (((calibrated_rating >= 1) AND (calibrated_rating <= 5)))
+constraint:performance_calibrations_cycle_id_fkey:f:FOREIGN KEY (cycle_id) REFERENCES performance_cycles(id) ON DELETE CASCADE
+constraint:performance_calibrations_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:performance_calibrations_manager_id_fkey:f:FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL
+constraint:performance_calibrations_notes_check:c:CHECK (((notes IS NULL) OR (char_length(notes) <= 2000)))
+constraint:performance_calibrations_pkey:p:PRIMARY KEY (id)
+constraint:performance_calibrations_tenant_id_cycle_id_employee_id_key:u:UNIQUE (tenant_id, cycle_id, employee_id)
+constraint:performance_calibrations_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:performance_cycles_check:c:CHECK ((period_end >= period_start))
+constraint:performance_cycles_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:performance_cycles_name_check:c:CHECK (((char_length(name) >= 1) AND (char_length(name) <= 200)))
+constraint:performance_cycles_pkey:p:PRIMARY KEY (id)
+constraint:performance_cycles_status_check:c:CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'closed'::text])))
+constraint:performance_cycles_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:performance_goal_check_ins_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:performance_goal_check_ins_goal_id_fkey:f:FOREIGN KEY (goal_id) REFERENCES performance_goals(id) ON DELETE CASCADE
+constraint:performance_goal_check_ins_manager_id_fkey:f:FOREIGN KEY (manager_id) REFERENCES employees(id) ON DELETE SET NULL
+constraint:performance_goal_check_ins_note_check:c:CHECK (((char_length(note) >= 1) AND (char_length(note) <= 2000)))
+constraint:performance_goal_check_ins_pkey:p:PRIMARY KEY (id)
+constraint:performance_goal_check_ins_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:performance_goals_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:performance_goals_cycle_id_fkey:f:FOREIGN KEY (cycle_id) REFERENCES performance_cycles(id) ON DELETE SET NULL
+constraint:performance_goals_description_check:c:CHECK (((description IS NULL) OR (char_length(description) <= 1000)))
+constraint:performance_goals_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:performance_goals_pkey:p:PRIMARY KEY (id)
+constraint:performance_goals_progress_check:c:CHECK (((progress >= 0) AND (progress <= 100)))
+constraint:performance_goals_status_check:c:CHECK ((status = ANY (ARRAY['active'::text, 'achieved'::text, 'cancelled'::text])))
+constraint:performance_goals_target_check:c:CHECK (((target IS NULL) OR (char_length(target) <= 200)))
+constraint:performance_goals_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:performance_goals_title_check:c:CHECK (((char_length(title) >= 1) AND (char_length(title) <= 200)))
+constraint:performance_reviews_cycle_id_employee_id_key:u:UNIQUE (cycle_id, employee_id)
+constraint:performance_reviews_cycle_id_fkey:f:FOREIGN KEY (cycle_id) REFERENCES performance_cycles(id) ON DELETE CASCADE
+constraint:performance_reviews_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:performance_reviews_improvements_check:c:CHECK (((improvements IS NULL) OR (char_length(improvements) <= 2000)))
+constraint:performance_reviews_pkey:p:PRIMARY KEY (id)
+constraint:performance_reviews_rating_check:c:CHECK (((rating IS NULL) OR ((rating >= 1) AND (rating <= 5))))
+constraint:performance_reviews_reviewer_user_id_fkey:f:FOREIGN KEY (reviewer_user_id) REFERENCES users(id) ON DELETE SET NULL
+constraint:performance_reviews_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'submitted'::text, 'acknowledged'::text])))
+constraint:performance_reviews_strengths_check:c:CHECK (((strengths IS NULL) OR (char_length(strengths) <= 2000)))
+constraint:performance_reviews_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:pf_rate_history_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:pf_rate_history_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:pf_rate_history_pkey:p:PRIMARY KEY (id)
+constraint:pf_rate_history_rate_check:c:CHECK (((rate >= (0)::numeric) AND (rate <= 0.15)))
+constraint:pf_rate_history_tenant_id_employee_id_effective_from_key:u:UNIQUE (tenant_id, employee_id, effective_from)
+constraint:pf_rate_history_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:pf_remittances_payroll_run_id_fkey:f:FOREIGN KEY (payroll_run_id) REFERENCES payroll_runs(id) ON DELETE CASCADE
+constraint:pf_remittances_pkey:p:PRIMARY KEY (id)
+constraint:pf_remittances_status_check:c:CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text])))
+constraint:pf_remittances_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:pf_remittances_tenant_id_payroll_run_id_key:u:UNIQUE (tenant_id, payroll_run_id)
+constraint:pf_rules_pkey:p:PRIMARY KEY (id)
+constraint:pf_rules_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+constraint:privacy_consents_pkey:p:PRIMARY KEY (tenant_id, user_id, version)
+constraint:privacy_consents_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:privacy_consents_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:refresh_tokens_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE SET NULL
+constraint:refresh_tokens_parent_hash_fkey:f:FOREIGN KEY (parent_hash) REFERENCES refresh_tokens(token_hash)
+constraint:refresh_tokens_pkey:p:PRIMARY KEY (id)
+constraint:refresh_tokens_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:refresh_tokens_token_hash_key:u:UNIQUE (token_hash)
+constraint:refresh_tokens_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:roles_pkey:p:PRIMARY KEY (id)
+constraint:roles_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:roles_tenant_id_name_key:u:UNIQUE (tenant_id, name)
+constraint:severance_rules_pkey:p:PRIMARY KEY (id)
+constraint:severance_rules_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+constraint:severance_rules_tenant_id_min_months_key:u:UNIQUE (tenant_id, min_months)
+constraint:shift_assignments_employee_id_effective_from_key:u:UNIQUE (employee_id, effective_from)
+constraint:shift_assignments_employee_id_fkey:f:FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+constraint:shift_assignments_pkey:p:PRIMARY KEY (id)
+constraint:shift_assignments_shift_id_fkey:f:FOREIGN KEY (shift_id) REFERENCES work_shifts(id) ON DELETE CASCADE
+constraint:shift_assignments_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:sso_rules_pkey:p:PRIMARY KEY (id)
+constraint:sso_rules_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+constraint:tax_brackets_pkey:p:PRIMARY KEY (id)
+constraint:tax_brackets_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+constraint:tax_brackets_tenant_id_year_lower_key:u:UNIQUE (tenant_id, year, lower)
+constraint:tenant_api_keys_pkey:p:PRIMARY KEY (id)
+constraint:tenant_api_keys_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:tenant_api_keys_tenant_id_key:u:UNIQUE (tenant_id)
+constraint:tenant_holidays_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:tenant_holidays_pkey:p:PRIMARY KEY (id)
+constraint:tenant_holidays_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:tenant_holidays_tenant_id_holiday_date_key:u:UNIQUE (tenant_id, holiday_date)
+constraint:tenant_oidc_config_pkey:p:PRIMARY KEY (tenant_id)
+constraint:tenant_oidc_config_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:tenant_payroll_settings_approval_sla_hours_check:c:CHECK (((approval_sla_hours >= 0) AND (approval_sla_hours <= 720)))
+constraint:tenant_payroll_settings_ot_holiday_rate_check:c:CHECK (((ot_holiday_rate >= (1)::numeric) AND (ot_holiday_rate <= (5)::numeric)))
+constraint:tenant_payroll_settings_ot_weekday_rate_check:c:CHECK (((ot_weekday_rate >= (1)::numeric) AND (ot_weekday_rate <= (5)::numeric)))
+constraint:tenant_payroll_settings_ot_weekend_rate_check:c:CHECK (((ot_weekend_rate >= (1)::numeric) AND (ot_weekend_rate <= (5)::numeric)))
+constraint:tenant_payroll_settings_pkey:p:PRIMARY KEY (tenant_id)
+constraint:tenant_payroll_settings_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:tenant_payroll_settings_unpaid_leave_divisor_check:c:CHECK (((unpaid_leave_divisor >= (1)::numeric) AND (unpaid_leave_divisor <= (31)::numeric)))
+constraint:tenant_payroll_settings_updated_by_fkey:f:FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:tenant_pdpa_policy_ops_retention_months_check:c:CHECK (((ops_retention_months >= 0) AND (ops_retention_months <= 120)))
+constraint:tenant_pdpa_policy_payroll_retention_years_check:c:CHECK (((payroll_retention_years >= 0) AND (payroll_retention_years <= 50)))
+constraint:tenant_pdpa_policy_pkey:p:PRIMARY KEY (tenant_id)
+constraint:tenant_pdpa_policy_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:tenant_plugins_pkey:p:PRIMARY KEY (id)
+constraint:tenant_plugins_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:tenant_plugins_tenant_id_name_key:u:UNIQUE (tenant_id, name)
+constraint:tenant_plugins_wasm_check:c:CHECK ((octet_length(wasm) > 8))
+constraint:tenants_pkey:p:PRIMARY KEY (id)
+constraint:tenants_slug_key:u:UNIQUE (slug)
+constraint:totp_recovery_codes_pkey:p:PRIMARY KEY (id)
+constraint:totp_recovery_codes_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:totp_recovery_codes_user_id_code_hash_key:u:UNIQUE (user_id, code_hash)
+constraint:totp_recovery_codes_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:user_invites_created_by_fkey:f:FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+constraint:user_invites_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE SET NULL
+constraint:user_invites_pkey:p:PRIMARY KEY (id)
+constraint:user_invites_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:user_invites_token_hash_key:u:UNIQUE (token_hash)
+constraint:user_roles_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+constraint:user_roles_pkey:p:PRIMARY KEY (user_id, role_id)
+constraint:user_roles_role_id_fkey:f:FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+constraint:user_roles_user_id_fkey:f:FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+constraint:users_pkey:p:PRIMARY KEY (id)
+constraint:users_tenant_id_email_key:u:UNIQUE (tenant_id, email)
+constraint:users_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+constraint:work_shifts_break_minutes_check:c:CHECK (((break_minutes >= 0) AND (break_minutes <= 240)))
+constraint:work_shifts_entity_id_fkey:f:FOREIGN KEY (entity_id) REFERENCES entities(id) ON DELETE CASCADE
+constraint:work_shifts_entity_id_name_key:u:UNIQUE (entity_id, name)
+constraint:work_shifts_grace_minutes_check:c:CHECK (((grace_minutes >= 0) AND (grace_minutes <= 60)))
+constraint:work_shifts_pkey:p:PRIMARY KEY (id)
+constraint:work_shifts_tenant_id_fkey:f:FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+policy:ai_agent_runs_isolation:ai_agent_runs:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:ai_conversations_isolation:ai_conversations:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:ai_cost_tracking_isolation:ai_cost_tracking:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:ai_document_chunks_isolation:ai_document_chunks:PERMISSIVE:{public}:ALL:(EXISTS ( SELECT 1
+   FROM ai_documents d
+  WHERE ((d.id = ai_document_chunks.document_id) AND (d.tenant_id = current_tenant_id())))):
+policy:ai_documents_isolation:ai_documents:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:ai_memory_isolation:ai_memory:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:ai_model_roles_isolation:ai_model_roles:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:ai_providers_isolation:ai_providers:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:ai_settings_isolation:ai_settings:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:ai_tool_calls_isolation:ai_tool_calls:PERMISSIVE:{public}:ALL:(EXISTS ( SELECT 1
+   FROM ai_agent_runs ar
+  WHERE ((ar.id = ai_tool_calls.run_id) AND (ar.tenant_id = current_tenant_id())))):
+policy:approval_delegations_isolation:approval_delegations:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:attendance_days_isolation:attendance_days:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:attendance_events_isolation:attendance_events:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:attendance_isolation:attendance_records:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:audit_isolation:audit_log:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:bank_templates_insert:bank_templates:PERMISSIVE:{public}:INSERT::(tenant_id = current_tenant_id())
+policy:bank_templates_select:bank_templates:PERMISSIVE:{public}:SELECT:((tenant_id = current_tenant_id()) OR (tenant_id IS NULL)):
+policy:candidate_interviews_isolation:candidate_interviews:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:candidate_offers_isolation:candidate_offers:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:candidate_stage_events_isolation:candidate_stage_events:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:candidates_isolation:candidates:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:document_signatures_isolation:document_signatures:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:employee_documents_isolation:employee_documents:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:employee_isolation:employees:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:employee_loans_isolation:employee_loans:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:entity_isolation:entities:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:expense_claims_isolation:expense_claims:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:final_settlements_isolation:final_settlements:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:form_templates_insert:form_templates:PERMISSIVE:{public}:INSERT::(tenant_id = current_tenant_id())
+policy:form_templates_select:form_templates:PERMISSIVE:{public}:SELECT:((tenant_id = current_tenant_id()) OR (tenant_id IS NULL)):
+policy:form_templates_update:form_templates:PERMISSIVE:{public}:UPDATE:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:job_openings_isolation:job_openings:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:kg_edges_isolation:kg_edges:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:kg_nodes_isolation:kg_nodes:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:leave_approval_rules_isolation:leave_approval_rules:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:leave_approval_steps_isolation:leave_approval_steps:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:leave_balances_isolation:leave_balances:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:leave_requests_isolation:leave_requests:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:leave_types_isolation:leave_types:PERMISSIVE:{public}:ALL:((tenant_id IS NULL) OR (tenant_id = current_tenant_id())):
+policy:loan_installments_isolation:loan_installments:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:loan_payments_isolation:loan_payments:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:notification_isolation:notifications:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:onboarding_isolation:employee_onboarding_tasks:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:ot_approval_steps_isolation:ot_approval_steps:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:ot_requests_isolation:ot_requests:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:password_resets_isolation:password_resets:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:payroll_events_isolation:payroll_events:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:payroll_runs_isolation:payroll_runs:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:payslip_ack_isolation:payslip_acknowledgements:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:payslip_lines_isolation:payslip_lines:PERMISSIVE:{public}:ALL:(EXISTS ( SELECT 1
+   FROM payslips p
+  WHERE ((p.id = payslip_lines.payslip_id) AND (p.tenant_id = current_tenant_id())))):
+policy:payslip_templates_isolation:payslip_templates:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:payslips_isolation:payslips:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:performance_calibrations_isolation:performance_calibrations:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:performance_cycles_isolation:performance_cycles:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:performance_goal_check_ins_isolation:performance_goal_check_ins:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:performance_goals_isolation:performance_goals:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:performance_reviews_isolation:performance_reviews:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:pf_rate_history_isolation:pf_rate_history:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:pf_remittances_isolation:pf_remittances:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:privacy_consents_isolation:privacy_consents:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:refresh_token_isolation:refresh_tokens:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:role_isolation:roles:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:shift_assignments_isolation:shift_assignments:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:tenant_api_keys_isolation:tenant_api_keys:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:tenant_holidays_isolation:tenant_holidays:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:tenant_isolation:tenants:PERMISSIVE:{public}:ALL:(id = current_tenant_id()):
+policy:tenant_oidc_config_isolation:tenant_oidc_config:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:tenant_payroll_settings_isolation:tenant_payroll_settings:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:tenant_pdpa_policy_isolation:tenant_pdpa_policy:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:tenant_plugins_isolation:tenant_plugins:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:totp_recovery_code_isolation:totp_recovery_codes:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:training_isolation:employee_training_records:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):(tenant_id = current_tenant_id())
+policy:user_invites_isolation:user_invites:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:user_isolation:users:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):
+policy:user_role_isolation:user_roles:PERMISSIVE:{public}:ALL:(EXISTS ( SELECT 1
+   FROM (roles r
+     JOIN users u ON ((u.id = user_roles.user_id)))
+  WHERE ((r.id = user_roles.role_id) AND (u.tenant_id = current_tenant_id())))):
+policy:work_shifts_isolation:work_shifts:PERMISSIVE:{public}:ALL:(tenant_id = current_tenant_id()):

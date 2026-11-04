@@ -1,5 +1,9 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
@@ -17,6 +21,7 @@ type Shift = {
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 
 export default function ShiftsPage() {
+  const { t: tr } = useI18N();
   const [shifts, setShifts] = useState<Shift[] | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [name, setName] = useState("");
@@ -62,7 +67,7 @@ export default function ShiftsPage() {
 
   const create = (e: React.FormEvent) => {
     e.preventDefault();
-    return run("สร้างกะแล้ว", async () => {
+    return run(tr("attendanceShifts.shift-created"), async () => {
       const created = await gw<{ id: string }>("api/v1/shifts", {
         method: "POST",
         body: JSON.stringify({
@@ -81,7 +86,7 @@ export default function ShiftsPage() {
 
   const assign = (e: React.FormEvent) => {
     e.preventDefault();
-    return run("มอบหมายกะแล้ว", async () => {
+    return run(tr("attendanceShifts.shift-assigned"), async () => {
       await gw(`api/v1/shifts/${shiftId}/assign`, {
         method: "POST",
         body: JSON.stringify({ employee_id: employeeId, effective_from: effectiveFrom }),
@@ -93,56 +98,56 @@ export default function ShiftsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>กะทำงาน</h1>
-          <p className="page-sub">สร้างกะและมอบหมายให้พนักงานเพื่อคำนวณวันทำงานอัตโนมัติ</p>
+          <h1>{tr("attendanceShifts.work-shift")}</h1>
+          <p className="page-sub">{tr("attendanceShifts.create-shifts-and-assign-them-to")}</p>
         </div>
         <Link className="btn btn-sm" href="/attendance">
-          ← เวลาและ OT
+          {tr("attendanceShifts.time-and-ot")}
         </Link>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="grid-2">
         <form className="card card-pad" onSubmit={create} style={{ display: "grid", gap: 12 }}>
-          <h2>สร้างกะ</h2>
+          <h2>{tr("attendanceShifts.create-a-shift")}</h2>
           <div className="field">
-            <label>ชื่อกะ</label>
-            <input data-testid="shift-name" value={name} onChange={(e) => setName(e.target.value)} required />
+            <label htmlFor="shift-name">{tr("attendanceShifts.shift-name")}</label>
+            <input id="shift-name" data-testid="shift-name" value={name} onChange={(e) => setName(e.target.value)} required />
           </div>
           <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <div className="field">
-              <label>เริ่ม</label>
-              <input data-testid="shift-start" type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+              <label htmlFor="shift-start">{tr("attendanceShifts.start")}</label>
+              <input id="shift-start" data-testid="shift-start" type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
             </div>
             <div className="field">
-              <label>เลิก</label>
-              <input data-testid="shift-end" type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
+              <label htmlFor="shift-end">{tr("attendanceShifts.finish")}</label>
+              <input id="shift-end" data-testid="shift-end" type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
             </div>
           </div>
           <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <div className="field">
-              <label>พัก (นาที)</label>
-              <input type="number" min="0" data-testid="shift-break" value={breakMin} onChange={(e) => setBreakMin(e.target.value)} />
+              <label htmlFor="shift-break">{tr("attendanceShifts.break-minutes")}</label>
+              <input id="shift-break" type="number" min="0" data-testid="shift-break" value={breakMin} onChange={(e) => setBreakMin(e.target.value)} />
             </div>
             <div className="field">
-              <label>ผ่อนผันสาย (นาที)</label>
-              <input type="number" min="0" data-testid="shift-grace" value={graceMin} onChange={(e) => setGraceMin(e.target.value)} />
+              <label htmlFor="shift-grace">{tr("attendanceShifts.late-grace-minutes")}</label>
+              <input id="shift-grace" type="number" min="0" data-testid="shift-grace" value={graceMin} onChange={(e) => setGraceMin(e.target.value)} />
             </div>
           </div>
           <div>
             <button className="btn btn-primary" data-testid="save-shift" type="submit" disabled={busy}>
-              สร้างกะ
+              {tr("attendanceShifts.create-a-shift")}
             </button>
           </div>
         </form>
 
         <form className="card card-pad" onSubmit={assign} style={{ display: "grid", gap: 12 }}>
-          <h2>มอบหมายกะ</h2>
+          <h2>{tr("attendanceShifts.assign-shifts")}</h2>
           <div className="field">
-            <label>กะ</label>
-            <select data-testid="assign-shift-id" value={shiftId} onChange={(e) => setShiftId(e.target.value)} required>
+            <label htmlFor="assign-shift-id">{tr("attendanceShifts.shift")}</label>
+            <select id="assign-shift-id" data-testid="assign-shift-id" value={shiftId} onChange={(e) => setShiftId(e.target.value)} required>
               {(shifts ?? []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -151,8 +156,8 @@ export default function ShiftsPage() {
             </select>
           </div>
           <div className="field">
-            <label>พนักงาน</label>
-            <select data-testid="shift-employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
+            <label htmlFor="shift-employee">{tr("attendanceShifts.employee")}</label>
+            <select id="shift-employee" data-testid="shift-employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.employee_code} · {e.first_name_th} {e.last_name_th}
@@ -161,12 +166,12 @@ export default function ShiftsPage() {
             </select>
           </div>
           <div className="field">
-            <label>มีผลตั้งแต่</label>
-            <input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} required />
+            <label>{tr("attendanceShifts.effective-from")}</label>
+            <ThaiDateInput value={effectiveFrom} onChange={(v) => setEffectiveFrom(v)} required />
           </div>
           <div>
             <button className="btn btn-primary" data-testid="assign-shift" type="submit" disabled={busy || !shiftId || !employeeId}>
-              มอบหมาย
+              {tr("attendanceShifts.assign")}
             </button>
           </div>
         </form>
@@ -174,17 +179,17 @@ export default function ShiftsPage() {
 
       <div className="card">
         {shifts === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("attendanceShifts.loading")}</div>
         ) : shifts.length === 0 ? (
-          <div className="empty">ยังไม่มีกะ — สร้างกะแรกด้านบน</div>
+          <div className="empty">{tr("attendanceShifts.no-shifts-yet-create-first-shift")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>ชื่อกะ</th>
-                <th>เวลา</th>
-                <th className="num">พัก (นาที)</th>
-                <th className="num">ผ่อนผัน (นาที)</th>
+                <th scope="col">{tr("attendanceShifts.shift-name")}</th>
+                <th scope="col">{tr("attendanceShifts.time")}</th>
+                <th scope="col" className="num">{tr("attendanceShifts.break-minutes")}</th>
+                <th scope="col" className="num">{tr("attendanceShifts.grace-minutes")}</th>
               </tr>
             </thead>
             <tbody>

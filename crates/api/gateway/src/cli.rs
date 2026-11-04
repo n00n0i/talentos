@@ -307,6 +307,36 @@ pub async fn encrypt_existing_pii() -> CliResult<()> {
         fields_changed += [n, s, b].iter().filter(|v| v.is_some()).count() as u64;
     }
 
+    let candidate_rows = sqlx::query("SELECT id, email, phone FROM candidates")
+        .fetch_all(&pool)
+        .await?;
+    for row in &candidate_rows {
+        let id: Uuid = row.get("id");
+        let email: Option<String> = row.get("email");
+        let phone: Option<String> = row.get("phone");
+        let encrypt = |value: Option<String>| -> CliResult<Option<String>> {
+            match value {
+                Some(v) if !v.is_empty() && !is_encrypted(&v) => Ok(Some(cipher.encrypt(&v)?)),
+                other => Ok(other),
+            }
+        };
+        let (e, p) = (encrypt(email)?, encrypt(phone)?);
+        if e == row.get::<Option<String>, _>("email") && p == row.get::<Option<String>, _>("phone")
+        {
+            continue;
+        }
+        sqlx::query(
+            "UPDATE candidates SET email = $1, phone = $2, updated_at = now() WHERE id = $3",
+        )
+        .bind(&e)
+        .bind(&p)
+        .bind(id)
+        .execute(&pool)
+        .await?;
+        rows_changed += 1;
+        fields_changed += [e, p].iter().filter(|v| v.is_some()).count() as u64;
+    }
+
     println!(
         "{}",
         serde_json::json!({ "rows_changed": rows_changed, "fields": fields_changed })

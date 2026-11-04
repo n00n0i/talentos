@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, thDate } from "@/lib/api";
 
@@ -17,6 +19,7 @@ type Review = {
 };
 
 export default function MyReviewsPage() {
+  const { t: tr } = useI18N();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -38,7 +41,7 @@ export default function MyReviewsPage() {
     try {
       await gw(`api/v1/me/reviews/${id}/acknowledge`, { method: "POST" });
       await load();
-      setNotice("รับทราบผลประเมินแล้ว");
+      setNotice(tr("meReviews.the-evaluation-results-have-been-acknowledged"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -50,17 +53,17 @@ export default function MyReviewsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ผลประเมินของฉัน</h1>
-          <p className="page-sub">ผลประเมินจากรอบต่าง ๆ และการรับทราบ</p>
+          <h1>{tr("meReviews.my-reviews")}</h1>
+          <p className="page-sub">{tr("meReviews.evaluation-results-from-various-rounds-and")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       {reviews.length === 0 ? (
         <div className="card">
-          <div className="empty">ยังไม่มีผลประเมินของคุณ</div>
+          <div className="empty">{tr("meReviews.your-evaluation-is-not-yet-available")}</div>
         </div>
       ) : (
         <div style={{ display: "grid", gap: 12 }}>
@@ -78,10 +81,10 @@ export default function MyReviewsPage() {
                   }`}
                 >
                   {review.status === "acknowledged"
-                    ? "รับทราบแล้ว"
+                    ? tr("meReviews.acknowledged")
                     : review.status === "submitted"
-                      ? "รอรับทราบ"
-                      : "รอประเมิน"}
+                      ? tr("meReviews.waiting-to-be-informed")
+                      : tr("meReviews.waiting-for-evaluation")}
                 </span>
               </div>
               <p style={{ color: "var(--muted)", fontSize: 13 }}>
@@ -92,12 +95,12 @@ export default function MyReviewsPage() {
               </p>
               {review.strengths && (
                 <p>
-                  <strong>จุดเด่น:</strong> {review.strengths}
+                  <strong>{tr("meReviews.highlights")}</strong> {review.strengths}
                 </p>
               )}
               {review.improvements && (
                 <p>
-                  <strong>สิ่งที่ควรพัฒนา:</strong> {review.improvements}
+                  <strong>{tr("meReviews.what-should-be-developed")}</strong> {review.improvements}
                 </p>
               )}
               {review.status === "submitted" && (
@@ -107,12 +110,12 @@ export default function MyReviewsPage() {
                   disabled={busy}
                   onClick={() => acknowledge(review.id)}
                 >
-                  รับทราบผลประเมิน
+                  {tr("meReviews.acknowledge-the-evaluation-results")}
                 </button>
               )}
               {review.acknowledged_at && (
                 <p style={{ color: "var(--muted)", fontSize: 13 }}>
-                  รับทราบเมื่อ {thDate(review.acknowledged_at.slice(0, 10))}
+                  {tr("meReviews.text")} {thDate(review.acknowledged_at.slice(0, 10))}
                 </p>
               )}
             </div>

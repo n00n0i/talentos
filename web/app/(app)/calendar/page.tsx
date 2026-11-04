@@ -1,7 +1,12 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, thDate } from "@/lib/api";
+import { ThaiMonthInput } from "@/components/ThaiDateTimeInput";
 
 type Holiday = { name: string };
 type Leave = {
@@ -27,17 +32,18 @@ function monthRange(month: string) {
 
 const hm = (min: number) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}`;
 
-const LEAVE_STATUS: Record<string, string> = {
-  pending: "รออนุมัติ",
-  approved: "อนุมัติแล้ว",
+const LEAVE_STATUS: Record<string, TranslationKey> = {
+  pending: "calendar.pending-approval",
+  approved: "calendar.approved",
 };
 
-const OT_STATUS: Record<string, string> = {
-  pending: "รออนุมัติ",
-  approved: "อนุมัติแล้ว",
+const OT_STATUS: Record<string, TranslationKey> = {
+  pending: "calendar.pending-approval",
+  approved: "calendar.approved",
 };
 
 export default function CalendarPage() {
+  const { t: tr } = useI18N();
   const [month, setMonth] = useState(bangkokMonth);
   const [days, setDays] = useState<Day[] | null>(null);
   const [error, setError] = useState("");
@@ -58,27 +64,26 @@ export default function CalendarPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ปฏิทินทีม</h1>
-          <p className="page-sub">วันหยุด การลา และ OT ของทีมในเดือนเดียว</p>
+          <h1>{tr("calendar.team-calendar")}</h1>
+          <p className="page-sub">{tr("calendar.team-holidays-leave-and-ot-in")}</p>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <input
-            data-testid="calendar-month"
-            type="month"
-            aria-label="เดือน"
+          <ThaiMonthInput
+            testId="calendar-month"
+            ariaLabel={tr("calendar.month")}
             value={month}
-            onChange={(e) => e.target.value && setMonth(e.target.value)}
+            onChange={setMonth}
           />
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       {days === null ? (
-        <div className="spinner">กำลังโหลด…</div>
+        <div className="spinner">{tr("calendar.loading")}</div>
       ) : days.length === 0 ? (
         <div className="card">
-          <div className="empty">ไม่มีวันหยุด การลา หรือ OT ในเดือนนี้</div>
+          <div className="empty">{tr("calendar.there-are-no-holidays-leave-or")}</div>
         </div>
       ) : (
         <div style={{ display: "grid", gap: 12 }}>
@@ -104,7 +109,7 @@ export default function CalendarPage() {
                         {l.label_th}
                       </span>
                       <span>
-                        {l.employee_name} ({l.employee_code}) · {LEAVE_STATUS[l.status] ?? l.status}
+                        {l.employee_name} ({l.employee_code}) · {l.status in LEAVE_STATUS ? tr(LEAVE_STATUS[l.status]) : l.status}
                       </span>
                     </li>
                   ))}
@@ -115,10 +120,10 @@ export default function CalendarPage() {
                   {d.ot.map((o, i) => (
                     <li key={i}>
                       <span className="badge accent" style={{ marginRight: 6 }}>
-                        OT {hm(o.minutes)} ชม.
+                        OT {hm(o.minutes)} {tr("calendar.text")}
                       </span>
                       <span>
-                        {o.employee_name} ({o.employee_code}) · {OT_STATUS[o.status] ?? o.status}
+                        {o.employee_name} ({o.employee_code}) · {o.status in OT_STATUS ? tr(OT_STATUS[o.status]) : o.status}
                       </span>
                     </li>
                   ))}

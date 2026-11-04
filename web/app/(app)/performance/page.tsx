@@ -1,5 +1,9 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -26,25 +30,56 @@ type Review = {
   submitted_at: string | null;
 };
 
+type DirectReport = {
+  id: string;
+  employee_code: string;
+  employee_name: string;
+};
+
+type Calibration = {
+  id: string;
+  cycle_id: string;
+  employee_id: string;
+  employee_code: string;
+  employee_name: string;
+  calibrated_rating: number;
+  notes: string | null;
+};
+
 const emptyCycle = { name: "", period_start: "", period_end: "" };
 type Draft = { rating: string; strengths: string; improvements: string };
 
 export default function PerformancePage() {
+  const { t: tr } = useI18N();
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [selected, setSelected] = useState<Cycle | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [form, setForm] = useState(emptyCycle);
   const [canWrite, setCanWrite] = useState(false);
+  const [canDirect, setCanDirect] = useState(false);
+  const [directReports, setDirectReports] = useState<DirectReport[]>([]);
+  const [calibrations, setCalibrations] = useState<Calibration[]>([]);
+  const [calibrationEmployee, setCalibrationEmployee] = useState("");
+  const [calibrationRating, setCalibrationRating] = useState("");
+  const [calibrationNotes, setCalibrationNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const loadCycles = useCallback(async () => {
-    const res = await gw<{ cycles: Cycle[] }>("api/v1/performance/cycles");
+    // The manager-scoped list only surfaces cycles that already hold a review of a
+    // direct report, so it hides freshly created cycles. Users who can write
+    // cycles (hr_admin) must see the full list; only pure direct-managers fall
+    // back to the scoped endpoint.
+    const res = await gw<{ cycles: Cycle[] }>(
+      canDirect && !canWrite
+        ? "api/v1/me/performance/cycles"
+        : "api/v1/performance/cycles",
+    );
     setCycles(res.cycles);
     setSelected((current) => res.cycles.find((c) => c.id === current?.id) ?? null);
-  }, []);
+  }, [canDirect, canWrite]);
 
   const loadReviews = useCallback(async (cycleId: string) => {
     const res = await gw<{ reviews: Review[] }>(
@@ -56,17 +91,77 @@ export default function PerformancePage() {
   useEffect(() => {
     loadCycles().catch((e) => handleApiError(e, setError));
     gw<Me>("api/v1/auth/me")
-      .then((me) => setCanWrite(me.permissions.includes("employee.update")))
+      .then((me) => {
+        setCanWrite(me.permissions.includes("employee.update"));
+        setCanDirect(me.permissions.includes("performance.manage_direct"));
+      })
       .catch((e) => handleApiError(e, setError));
   }, [loadCycles]);
+
+  useEffect(() => {
+    if (!canDirect) return;
+    gw<{ direct_reports: DirectReport[] }>("api/v1/me/direct-reports")
+      .then((res) => setDirectReports(res.direct_reports))
+      .catch((e) => handleApiError(e, setError));
+  }, [canDirect]);
+
+  const loadCalibrations = useCallback(async (cycleId: string) => {
+    const res = await gw<{ calibrations: Calibration[] }>(
+      `api/v1/performance/cycles/${cycleId}/calibrations`,
+    );
+    setCalibrations(res.calibrations);
+  }, []);
+
+  useEffect(() => {
+    if (!canDirect || !selected) {
+      setCalibrations([]);
+      return;
+    }
+    loadCalibrations(selected.id).catch((e) => handleApiError(e, setError));
+  }, [canDirect, selected, loadCalibrations]);
+
+  async function saveCalibration() {
+    if (!selected || !calibrationEmployee || !calibrationRating) {
+      setError(tr("performance.select-employees-and-scores-before-saving"));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await gw(`api/v1/performance/cycles/${selected.id}/calibrations`, {
+        method: "POST",
+        body: JSON.stringify({
+          employee_id: calibrationEmployee,
+          calibrated_rating: Number(calibrationRating),
+          notes: calibrationNotes.trim() || null,
+        }),
+      });
+      setCalibrationNotes("");
+      setCalibrationRating("");
+      await loadCalibrations(selected.id);
+      setNotice(tr("performance.level-layout-saved"));
+    } catch (e) {
+      handleApiError(e, setError);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!selected) {
       setReviews([]);
       return;
     }
+    // The full review table is read_all-gated server-side. Managers who only
+    // hold performance.manage_direct get their calibrations instead, so skip
+    // the reviews call for them.
+    if (!canWrite && canDirect) {
+      setReviews([]);
+      return;
+    }
     loadReviews(selected.id).catch((e) => handleApiError(e, setError));
-  }, [selected, loadReviews]);
+  }, [selected, canWrite, canDirect, loadReviews]);
 
   useEffect(() => {
     setDrafts(
@@ -103,7 +198,7 @@ export default function PerformancePage() {
       setForm(emptyCycle);
       await loadCycles();
       setSelected(created.cycle);
-      setNotice("สร้างรอบประเมินแล้ว");
+      setNotice(tr("performance.an-evaluation-round-has-been-created"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -117,7 +212,7 @@ export default function PerformancePage() {
     try {
       await gw(`api/v1/performance/cycles/${cycle.id}/${action}`, { method: "POST" });
       await loadCycles();
-      setNotice(action === "start" ? "เริ่มรอบประเมินแล้ว" : "ปิดรอบประเมินแล้ว");
+      setNotice(action === "start" ? tr("performance.the-evaluation-round-has-begun") : tr("performance.the-evaluation-round-has-closed"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -126,14 +221,14 @@ export default function PerformancePage() {
   }
 
   async function removeCycle(cycle: Cycle) {
-    if (!confirm(`ลบรอบ ${cycle.name} และผลประเมินทั้งหมดหรือไม่?`)) return;
+    if (!confirm(tr("performance.deleteCycleConfirm", { name: cycle.name }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/performance/cycles/${cycle.id}`, { method: "DELETE" });
       if (selected?.id === cycle.id) setSelected(null);
       await loadCycles();
-      setNotice("ลบรอบประเมินแล้ว");
+      setNotice(tr("performance.evaluation-round-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -144,7 +239,7 @@ export default function PerformancePage() {
   async function submitReview(review: Review) {
     const draft = drafts[review.id];
     if (!draft?.rating) {
-      setError("เลือกคะแนนก่อนบันทึก");
+      setError(tr("performance.select-score-before-saving"));
       return;
     }
     setBusy(true);
@@ -159,7 +254,7 @@ export default function PerformancePage() {
         }),
       });
       await Promise.all([loadReviews(review.cycle_id), loadCycles()]);
-      setNotice("บันทึกผลประเมินแล้ว");
+      setNotice(tr("performance.evaluation-results-recorded"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -171,21 +266,21 @@ export default function PerformancePage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ประเมินผลการทำงาน</h1>
-          <p className="page-sub">รอบประเมิน คะแนน และข้อคิดเห็นรายพนักงาน</p>
+          <h1>{tr("performance.performance-reviews")}</h1>
+          <p className="page-sub">{tr("performance.review-cycles-ratings-and-per-employee")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       {canWrite && (
         <div className="card card-pad" style={{ marginBottom: 12 }}>
-          <h2 style={{ fontSize: 16, marginBottom: 10 }}>สร้างรอบประเมิน</h2>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>{tr("performance.create-an-evaluation-round")}</h2>
           <form onSubmit={createCycle} style={{ display: "grid", gap: 10 }}>
             <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
               <label>
-                ชื่อรอบ
+                {tr("performance.cycle-name")}
                 <input
                   data-testid="cycle-name"
                   value={form.name}
@@ -194,28 +289,16 @@ export default function PerformancePage() {
                 />
               </label>
               <label>
-                เริ่ม
-                <input
-                  data-testid="cycle-start"
-                  type="date"
-                  value={form.period_start}
-                  onChange={(e) => setForm({ ...form, period_start: e.target.value })}
-                  required
-                />
+                {tr("performance.start")}
+                <ThaiDateInput testId="cycle-start" value={form.period_start} onChange={(v) => setForm({ ...form, period_start: v })} required />
               </label>
               <label>
-                สิ้นสุด
-                <input
-                  data-testid="cycle-end"
-                  type="date"
-                  value={form.period_end}
-                  onChange={(e) => setForm({ ...form, period_end: e.target.value })}
-                  required
-                />
+                {tr("performance.end")}
+                <ThaiDateInput testId="cycle-end" value={form.period_end} onChange={(v) => setForm({ ...form, period_end: v })} required />
               </label>
             </div>
             <button className="btn btn-primary" data-testid="create-cycle" type="submit" disabled={busy}>
-              สร้างรอบ
+              {tr("performance.create-a-round")}
             </button>
           </form>
         </div>
@@ -223,16 +306,16 @@ export default function PerformancePage() {
 
       <div className="card" style={{ marginBottom: 12 }}>
         {cycles.length === 0 ? (
-          <div className="empty">ยังไม่มีรอบประเมิน</div>
+          <div className="empty">{tr("performance.there-is-no-evaluation-round-yet")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>รอบ</th>
-                <th>ช่วงเวลา</th>
-                <th>สถานะ</th>
-                <th>ส่งแล้ว</th>
-                <th />
+                <th scope="col">{tr("performance.cycle")}</th>
+                <th scope="col">{tr("performance.period")}</th>
+                <th scope="col">{tr("performance.status")}</th>
+                <th scope="col">{tr("performance.sent")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
@@ -252,7 +335,7 @@ export default function PerformancePage() {
                   </td>
                   <td>
                     <span className={`badge ${cycle.status === "active" ? "success" : ""}`}>
-                      {cycle.status === "active" ? "กำลังประเมิน" : cycle.status === "closed" ? "ปิดแล้ว" : "ร่าง"}
+                      {cycle.status === "active" ? tr("performance.evaluating") : cycle.status === "closed" ? tr("performance.closed") : tr("performance.draft")}
                     </span>
                   </td>
                   <td>
@@ -269,7 +352,7 @@ export default function PerformancePage() {
                             onClick={() => transition(cycle, "start")}
                             style={{ marginRight: 6 }}
                           >
-                            เริ่มรอบ
+                            {tr("performance.start-the-round")}
                           </button>
                         )}
                         {cycle.status === "active" && (
@@ -280,7 +363,7 @@ export default function PerformancePage() {
                             onClick={() => transition(cycle, "close")}
                             style={{ marginRight: 6 }}
                           >
-                            ปิดรอบ
+                            {tr("performance.close-cycle")}
                           </button>
                         )}
                         {cycle.status === "draft" && (
@@ -290,7 +373,7 @@ export default function PerformancePage() {
                             disabled={busy}
                             onClick={() => removeCycle(cycle)}
                           >
-                            ลบ
+                            {tr("performance.delete")}
                           </button>
                         )}
                       </>
@@ -307,27 +390,27 @@ export default function PerformancePage() {
         <div className="card card-pad">
           <div className="card-head">
             <h2 style={{ fontSize: 16 }}>
-              ผลประเมิน: {selected.name}{" "}
+              {tr("performance.text")} {selected.name}{" "}
               {selected.status === "closed" ? (
-                <span className="badge warning">ปิดรอบแล้ว — แก้ไขไม่ได้</span>
+                <span className="badge warning">{tr("performance.round-closed-cannot-be-edited")}</span>
               ) : selected.status === "draft" ? (
-                <span className="badge warning">ต้องเริ่มรอบก่อนจึงจะบันทึกได้</span>
+                <span className="badge warning">{tr("performance.a-round-must-be-started-before")}</span>
               ) : null}
             </h2>
           </div>
 
           {reviews.length === 0 ? (
-            <div className="empty">ยังไม่มีผลประเมินในรอบนี้ — กด “เริ่มรอบ” เพื่อสร้างรายการ</div>
+            <div className="empty">{tr("performance.there-are-no-evaluation-results-for")}</div>
           ) : (
             <table className="table">
               <thead>
                 <tr>
-                  <th>พนักงาน</th>
-                  <th>สถานะ</th>
-                  <th>คะแนน (1–5)</th>
-                  <th>จุดเด่น</th>
-                  <th>สิ่งที่ควรพัฒนา</th>
-                  <th />
+                  <th scope="col">{tr("performance.employee")}</th>
+                  <th scope="col">{tr("performance.status")}</th>
+                  <th scope="col">{tr("performance.score-1-5")}</th>
+                  <th scope="col">{tr("performance.strengths")}</th>
+                  <th scope="col">{tr("performance.things-that-should-be-developed")}</th>
+                  <th scope="col" />
                 </tr>
               </thead>
               <tbody>
@@ -354,10 +437,10 @@ export default function PerformancePage() {
                           }`}
                         >
                           {review.status === "acknowledged"
-                            ? "รับทราบแล้ว"
+                            ? tr("performance.acknowledged")
                             : review.status === "submitted"
-                              ? "ส่งแล้ว"
-                              : "รอประเมิน"}
+                              ? tr("performance.sent")
+                              : tr("performance.waiting-for-evaluation")}
                         </span>
                       </td>
                       <td>
@@ -399,7 +482,7 @@ export default function PerformancePage() {
                             disabled={busy}
                             onClick={() => submitReview(review)}
                           >
-                            บันทึก
+                            {tr("performance.save")}
                           </button>
                         )}
                       </td>
@@ -409,6 +492,80 @@ export default function PerformancePage() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {selected && canDirect && (
+        <div className="card card-pad" style={{ marginTop: 12 }}>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>
+            {tr("performance.calibration-direct-reports")}
+          </h2>
+          {calibrations.length === 0 ? (
+            <div className="empty">{tr("performance.no-calibration-for-this-cycle-yet")}</div>
+          ) : (
+            <table className="table" style={{ marginBottom: 14 }}>
+              <thead>
+                <tr>
+                  <th scope="col">{tr("performance.employee")}</th>
+                  <th scope="col">{tr("performance.calibration-score")}</th>
+                  <th scope="col">{tr("performance.notes")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calibrations.map((c) => (
+                  <tr key={c.id} data-testid="calibration-row">
+                    <td>
+                      {c.employee_name} ({c.employee_code})
+                    </td>
+                    <td>{c.calibrated_rating}/5</td>
+                    <td>{c.notes ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <select
+                data-testid="calibration-employee"
+                value={calibrationEmployee}
+                onChange={(e) => setCalibrationEmployee(e.target.value)}
+              >
+                <option value="">{tr("performance.select-employee")}</option>
+                {directReports.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.employee_code} · {r.employee_name}
+                  </option>
+                ))}
+              </select>
+              <select
+                data-testid="calibration-rating"
+                value={calibrationRating}
+                onChange={(e) => setCalibrationRating(e.target.value)}
+              >
+                <option value="">—</option>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <input
+                data-testid="calibration-notes"
+                placeholder={tr("performance.notes-optional")}
+                value={calibrationNotes}
+                onChange={(e) => setCalibrationNotes(e.target.value)}
+              />
+            </div>
+            <button
+              className="btn btn-sm btn-primary"
+              data-testid="save-calibration"
+              disabled={busy}
+              onClick={saveCalibration}
+            >
+              {tr("performance.save-calibration")}
+            </button>
+          </div>
         </div>
       )}
     </>

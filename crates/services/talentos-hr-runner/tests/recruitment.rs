@@ -1,12 +1,15 @@
 //! Recruitment pipeline: jobs, candidates, stages, validation, tenant scope.
 //! Requires DATABASE_URL; skips when unset.
 
+use std::sync::Arc;
+
 use sqlx::PgPool;
+use talentos_db::pii::PiiCipher;
 use talentos_db::TenantPool;
 use talentos_hr_runner::recruitment::{
-    create_candidate, create_job, delete_candidate, delete_job, list_candidates, list_jobs,
-    list_stage_history, set_candidate_stage, set_job_status, CandidateInput, JobInput,
-    RecruitmentError,
+    create_candidate, create_job, delete_candidate, delete_job, find_candidate_by_email,
+    list_candidates, list_jobs, list_stage_history, set_candidate_stage, set_job_status,
+    CandidateInput, JobInput, RecruitmentError,
 };
 use talentos_kernel::TenantId;
 
@@ -52,10 +55,17 @@ async fn job_and_candidate_pipeline() {
     assert_eq!(opened.status, "open");
     assert_eq!(opened.candidate_count, 0);
 
-    let alice = create_candidate(&pool, tenant, user_id, opened.id, &candidate("Alice"))
-        .await
-        .expect("candidate A");
-    let bob = create_candidate(&pool, tenant, user_id, opened.id, &candidate("Bob"))
+    let alice = create_candidate(
+        &pool,
+        tenant,
+        user_id,
+        opened.id,
+        &candidate("Alice"),
+        &None,
+    )
+    .await
+    .expect("candidate A");
+    let bob = create_candidate(&pool, tenant, user_id, opened.id, &candidate("Bob"), &None)
         .await
         .expect("candidate B");
     assert_eq!(alice.stage, "applied");
@@ -66,12 +76,12 @@ async fn job_and_candidate_pipeline() {
     assert_eq!(created_history[0].from_stage, None);
     assert_eq!(created_history[0].to_stage, "applied");
 
-    let listed = list_candidates(&pool, tenant, opened.id)
+    let listed = list_candidates(&pool, tenant, opened.id, &None)
         .await
         .expect("list candidates");
     assert_eq!(listed.len(), 2);
 
-    let moved = set_candidate_stage(&pool, tenant, user_id, alice.id, "interview")
+    let moved = set_candidate_stage(&pool, tenant, user_id, alice.id, "interview", &None)
         .await
         .expect("move stage");
     assert_eq!(moved.stage, "interview");
@@ -82,7 +92,7 @@ async fn job_and_candidate_pipeline() {
     assert_eq!(history[0].from_stage.as_deref(), Some("applied"));
     assert_eq!(history[0].to_stage, "interview");
     // Re-selecting the same stage is a no-op for history.
-    set_candidate_stage(&pool, tenant, user_id, alice.id, "interview")
+    set_candidate_stage(&pool, tenant, user_id, alice.id, "interview", &None)
         .await
         .expect("same stage");
     assert_eq!(
@@ -92,7 +102,7 @@ async fn job_and_candidate_pipeline() {
             .len(),
         2
     );
-    let ordered = list_candidates(&pool, tenant, opened.id)
+    let ordered = list_candidates(&pool, tenant, opened.id, &None)
         .await
         .expect("ordered candidates");
     assert_eq!(
@@ -103,7 +113,7 @@ async fn job_and_candidate_pipeline() {
         .iter()
         .any(|c| c.id == alice.id && c.stage == "interview"));
 
-    set_candidate_stage(&pool, tenant, user_id, alice.id, "hired")
+    set_candidate_stage(&pool, tenant, user_id, alice.id, "hired", &None)
         .await
         .expect("hire");
     let jobs = list_jobs(&pool, tenant).await.expect("jobs");
@@ -133,7 +143,7 @@ async fn job_and_candidate_pipeline() {
         .await
         .expect("delete job");
     assert!(matches!(
-        list_candidates(&pool, tenant, opened.id).await,
+        list_candidates(&pool, tenant, opened.id, &None).await,
         Err(RecruitmentError::JobNotFound)
     ));
 
@@ -183,21 +193,21 @@ async fn validation_and_tenant_isolation() {
     let mut bad = candidate("NoLast");
     bad.last_name = " ".into();
     assert!(matches!(
-        create_candidate(&pool, tenant, user_id, opened.id, &bad).await,
+        create_candidate(&pool, tenant, user_id, opened.id, &bad, &None).await,
         Err(RecruitmentError::InvalidName)
     ));
     let mut bad = candidate("LongMail");
     bad.email = Some(format!("{}@x", "a".repeat(200)));
     assert!(matches!(
-        create_candidate(&pool, tenant, user_id, opened.id, &bad).await,
+        create_candidate(&pool, tenant, user_id, opened.id, &bad, &None).await,
         Err(RecruitmentError::InvalidEmail)
     ));
     assert!(matches!(
-        set_candidate_stage(&pool, tenant, user_id, opened.id, "manager").await,
+        set_candidate_stage(&pool, tenant, user_id, opened.id, "manager", &None).await,
         Err(RecruitmentError::InvalidStage)
     ));
 
-    let candidate = create_candidate(&pool, tenant, user_id, opened.id, &candidate("Eve"))
+    let candidate = create_candidate(&pool, tenant, user_id, opened.id, &candidate("Eve"), &None)
         .await
         .expect("candidate");
 
@@ -208,11 +218,11 @@ async fn validation_and_tenant_isolation() {
         .expect("other jobs")
         .is_empty());
     assert!(matches!(
-        list_candidates(&pool, other, opened.id).await,
+        list_candidates(&pool, other, opened.id, &None).await,
         Err(RecruitmentError::JobNotFound)
     ));
     assert!(matches!(
-        set_candidate_stage(&pool, other, user_id, candidate.id, "interview").await,
+        set_candidate_stage(&pool, other, user_id, candidate.id, "interview", &None).await,
         Err(RecruitmentError::CandidateNotFound)
     ));
     assert!(matches!(
@@ -258,6 +268,108 @@ async fn cv_path(raw: &PgPool, tenant_id: uuid::Uuid, candidate_id: uuid::Uuid) 
 }
 
 #[tokio::test]
+async fn candidate_pii_encrypted_at_rest_and_email_lookup() {
+    let Some(url) = database_url() else {
+        eprintln!("SKIP: DATABASE_URL not set");
+        return;
+    };
+    let raw = PgPool::connect(&url).await.expect("connect");
+    let pool = TenantPool::connect(&url, 2).await.expect("tenant pool");
+    let (tenant_id, entities) = seed_tenant_entities(&raw, 1).await;
+    let user_id = user_id_of(&raw, tenant_id, entities[0].1).await;
+    let tenant = TenantId(tenant_id);
+
+    let cipher = PiiCipher::from_hex(&"11".repeat(32)).expect("cipher");
+    let pii = Some(Arc::new(cipher));
+
+    let opened = create_job(&pool, tenant, user_id, &job("Dev"))
+        .await
+        .expect("job");
+    let input = CandidateInput {
+        first_name: "Pii".into(),
+        last_name: "Tester".into(),
+        email: Some("PiiTester@Example.COM".into()),
+        phone: Some("0801234567".into()),
+        source: None,
+        note: None,
+    };
+    let created = create_candidate(&pool, tenant, user_id, opened.id, &input, &pii)
+        .await
+        .expect("candidate");
+    // Email is normalized to lowercase on write; the view decrypts and returns it.
+    assert_eq!(
+        created.email.as_deref(),
+        Some("piitester@example.com"),
+        "API returns decrypted email (normalized)"
+    );
+    assert_eq!(created.phone.as_deref(), Some("0801234567"));
+
+    // Stored value must be ciphertext, not plaintext.
+    let mut tx = raw.begin().await.expect("begin");
+    sqlx::query("SELECT set_config('app.current_tenant_id', $1, true)")
+        .bind(tenant_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .expect("set tenant");
+    let stored_email: Option<String> =
+        sqlx::query_scalar("SELECT email FROM candidates WHERE id = $1")
+            .bind(created.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("stored email");
+    let stored_phone: Option<String> =
+        sqlx::query_scalar("SELECT phone FROM candidates WHERE id = $1")
+            .bind(created.id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("stored phone");
+    let _ = tx.rollback().await;
+    let stored_email = stored_email.expect("email");
+    let stored_phone = stored_phone.expect("phone");
+    assert!(
+        stored_email.starts_with("v1:"),
+        "email is stored encrypted: {stored_email}"
+    );
+    assert!(
+        !stored_email.contains("piitester@example.com"),
+        "plaintext email must not be in storage"
+    );
+    assert!(stored_phone.starts_with("v1:"), "phone is stored encrypted");
+
+    // Lookup by email works even though the stored value is ciphertext.
+    let found = find_candidate_by_email(&pool, tenant, "PiiTester@Example.COM", &pii)
+        .await
+        .expect("lookup");
+    assert!(
+        found.is_some(),
+        "email lookup (any case) must find the encrypted row"
+    );
+    assert_eq!(
+        found.unwrap().id,
+        created.id,
+        "lookup returns the right candidate"
+    );
+
+    // Listing decrypts for display.
+    let listed = list_candidates(&pool, tenant, opened.id, &pii)
+        .await
+        .expect("list");
+    assert_eq!(listed[0].email.as_deref(), Some("piitester@example.com"));
+    assert_eq!(listed[0].phone.as_deref(), Some("0801234567"));
+
+    // Encrypted value without a cipher never prints.
+    let moved = set_candidate_stage(&pool, tenant, user_id, created.id, "screening", &None)
+        .await
+        .expect("stage without cipher");
+    assert_eq!(moved.email, None, "ciphertext without cipher yields no PII");
+
+    delete_candidate(&pool, tenant, created.id)
+        .await
+        .expect("delete");
+    cleanup(&raw, tenant_id).await;
+}
+
+#[tokio::test]
 async fn cv_lifecycle_and_cleanup() {
     use talentos_hr_runner::recruitment::{cv_dir, get_cv, set_cv};
 
@@ -278,7 +390,7 @@ async fn cv_lifecycle_and_cleanup() {
     let job = create_job(&pool, tenant, user_id, &job("Dev"))
         .await
         .expect("job");
-    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"))
+    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"), &None)
         .await
         .expect("candidate");
     assert!(!alice.has_cv);
@@ -300,7 +412,9 @@ async fn cv_lifecycle_and_cleanup() {
     assert_eq!(file.content_type, "application/pdf");
     assert_eq!(file.bytes, b"%PDF-1.4 first");
     let first_path = cv_path(&raw, tenant_id, alice.id).await.expect("path");
-    let listed = list_candidates(&pool, tenant, job.id).await.expect("list");
+    let listed = list_candidates(&pool, tenant, job.id, &None)
+        .await
+        .expect("list");
     assert!(listed[0].has_cv);
 
     set_cv(&pool, tenant, alice.id, "image/png", b"PNG cv")
@@ -342,7 +456,7 @@ async fn cv_lifecycle_and_cleanup() {
         "CV removed with candidate"
     );
 
-    let candidate2 = create_candidate(&pool, tenant, user_id, job.id, &candidate("Bob"))
+    let candidate2 = create_candidate(&pool, tenant, user_id, job.id, &candidate("Bob"), &None)
         .await
         .expect("candidate 2");
     set_cv(&pool, tenant, candidate2.id, "application/pdf", b"%PDF job")
@@ -378,7 +492,7 @@ async fn interviews_schedule_status_and_scope() {
     let job = create_job(&pool, tenant, user_id, &job("Dev"))
         .await
         .expect("job");
-    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"))
+    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"), &None)
         .await
         .expect("candidate");
 
@@ -480,7 +594,7 @@ async fn offers_create_status_and_letter_data() {
     let job = create_job(&pool, tenant, user_id, &job("Dev"))
         .await
         .expect("job");
-    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"))
+    let alice = create_candidate(&pool, tenant, user_id, job.id, &candidate("Alice"), &None)
         .await
         .expect("candidate");
 

@@ -28,6 +28,8 @@ logs/
 # Database
 *.sqlite
 *.db
+# DB dumps contain PII — never commit
+/backups/
 
 # Docker
 docker-compose.override.yml
@@ -41,3 +43,9 @@ certs/
 
 # Local git worktrees
 .worktrees/
+.superpowers/
+.superpowers/sdd/
+
+# Campaign evidence logs are part of the frozen deliverable
+!docs/talentos-sud-v1/evidence/logs/
+!docs/talentos-sud-v1/evidence/logs/*.log

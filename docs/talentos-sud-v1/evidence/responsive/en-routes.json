@@ -1,0 +1,426 @@
+[
+  {
+    "route": "/",
+    "h1": [
+      "Overview"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "ลาพักร้อน",
+      "สมชาย",
+      "ทดสอบ",
+      "ไม่ระบุ",
+      "ไอที"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/employees",
+    "h1": [
+      "Employees"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า",
+      "สมชาย",
+      "ทดสอบ",
+      "นำเข้า"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/team",
+    "h1": [
+      "My team"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/documents",
+    "h1": [
+      "Employee documents"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "ใบอนุญาตทำงาน",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/onboarding",
+    "h1": [
+      "Onboarding employees"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า",
+      "นำเข้า",
+      "ทดสอบ",
+      "ซีเอสวี"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/recruitment",
+    "h1": [
+      "Recruitment"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "นักพัฒนาระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/training",
+    "h1": [
+      "Training & certificates"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "ความปลอดภัย",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/performance",
+    "h1": [
+      "Performance reviews"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "รอบประเมิน",
+      "รอบประเมิน"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/goals",
+    "h1": [
+      "Goals & OKRs"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า",
+      "นำเข้า",
+      "ทดสอบ",
+      "ซีเอสวี"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/attendance",
+    "h1": [
+      "Time & OT"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "ทดสอบวันหยุด",
+      "วันลอยกระทง"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/attendance/shifts",
+    "h1": [
+      "Work shift"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า",
+      "นำเข้า",
+      "ทดสอบ",
+      "ซีเอสวี"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/calendar",
+    "h1": [
+      "Team calendar"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "วันลอยกระทง"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/clock",
+    "h1": [
+      "Time clock"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/leave",
+    "h1": [
+      "Leave"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "ลาพักร้อน",
+      "ผู้ถูกเชิญ",
+      "ผู้จัดการ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/ot",
+    "h1": [
+      "Request OT"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/claims",
+    "h1": [
+      "Expenses"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/payroll",
+    "h1": [
+      "Payroll"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/loans",
+    "h1": [
+      "Loans"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า",
+      "นำเข้า",
+      "ทดสอบ",
+      "ซีเอสวี"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/final-settlement",
+    "h1": [
+      "Offboarding"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "สมชาย",
+      "ทดสอบ",
+      "สมสรี",
+      "ลู่กข่า",
+      "นำเข้า",
+      "ทดสอบ",
+      "ซีเอสวี"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/reports",
+    "h1": [
+      "Reports"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "ไม่ระบุ",
+      "ไอที"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/payslip",
+    "h1": [
+      "Payslip form"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/me/payslips",
+    "h1": [
+      "My payslips"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/me/reviews",
+    "h1": [
+      "My reviews"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/privacy",
+    "h1": [
+      "Privacy and personal information"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/users",
+    "h1": [
+      "Users"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "ผู้ดูแลระบบ",
+      "ผู้ถูกเชิญ",
+      "ผู้จัดการ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/settings",
+    "h1": [
+      "Settings"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "คำขอลาพักร้อนของคุณถูกอนุมัติ",
+      "คำขอลาพักร้อนของคุณถูกอนุมัติ",
+      "มีคำขอลาพักร้อนใหม่จาก",
+      "สมชาย",
+      "ทดสอบ",
+      "มีคำขอลาพักร้อนใหม่จาก",
+      "สมชาย"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/settings/ai",
+    "h1": [
+      "AI settings"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/settings/ai/graph",
+    "h1": [
+      "Organizational knowledge graph"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "ไอที",
+      "นักพัฒนา",
+      "สมชาย",
+      "ทดสอบ",
+      "นำเข้า",
+      "ทดสอบ",
+      "ซีเอสวี"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/forms",
+    "h1": [
+      "Forms"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  },
+  {
+    "route": "/audit",
+    "h1": [
+      "Audit log"
+    ],
+    "thai": [
+      "ผู้ดูแลระบบ",
+      "คืืบหน่าตำแผน"
+    ],
+    "overflow": 0,
+    "lang": "en"
+  }
+]

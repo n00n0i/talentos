@@ -1,0 +1,33 @@
+SAME tables
+DIFF columns
+    78,80c78,80
+    < ai_settings.agents|11|jsonb|jsonb|NO|'[]'::jsonb|NO|NEVER
+    < ai_settings.mcp_enabled|6|boolean|bool|NO|true|NO|NEVER
+    < ai_settings.skills|7|jsonb|jsonb|NO|'[]'::jsonb|NO|NEVER
+    ---
+    > ai_settings.agents|10|jsonb|jsonb|NO|'[]'::jsonb|NO|NEVER
+    > ai_settings.mcp_enabled|7|boolean|bool|NO|true|NO|NEVER
+    > ai_settings.skills|8|jsonb|jsonb|NO|'[]'::jsonb|NO|NEVER
+    82c82
+    < ai_settings.updated_at|8|timestamp with time zone|timestamptz|NO|now()|NO|NEVER
+    ---
+    > ai_settings.updated_at|9|timestamp with time zone|timestamptz|NO|now()|NO|NEVER
+DIFF indexes
+    30c30
+    < document_signatures_sig_uq|document_signatures|CREATE UNIQUE INDEX document_signatures_sig_uq ON public.document_signatures USING btree (tenant_id, document_type, document_id, signer_user_id)
+    ---
+    > document_signatures_tenant_id_document_type_document_id_sig_key|document_signatures|CREATE UNIQUE INDEX document_signatures_tenant_id_document_type_document_id_sig_key ON public.document_signatures USING btree (tenant_id, document_type, document_id, signer_user_id)
+DIFF constraints
+    115c115
+    < document_signatures|document_signatures_sig_uq|u|UNIQUE (tenant_id, document_type, document_id, signer_user_id)
+    ---
+    > document_signatures|document_signatures_tenant_id_document_type_document_id_sig_key|u|UNIQUE (tenant_id, document_type, document_id, signer_user_id)
+SAME rls_enabled
+SAME policies
+SAME grants_app_tables
+SAME grants_app_other
+SAME grants_app_schema
+SAME default_acl
+SAME grants_app_functions
+SAME sequences
+SAME triggers

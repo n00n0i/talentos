@@ -1,5 +1,11 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
+import ThaiDateInput from "@/components/ThaiDateInput";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
 
@@ -18,32 +24,34 @@ type Pending = OtRequest & {
   approver_role: string;
 };
 
-const OT_ERRORS: { [k: string]: string } = {
-  "a request already exists for this work date": "มีคำขอ OT สำหรับวันที่นี้อยู่แล้ว",
-  "OT request is not in pending status": "คำขอนี้ไม่ได้อยู่ในสถานะรออนุมัติ",
-  "OT request cannot be changed in its current status": "คำขอนี้ไม่ได้อยู่ในสถานะรออนุมัติ",
-  "minutes must be between 1 and 720": "จำนวนชั่วโมงต้องอยู่ระหว่าง 0.5 ถึง 12 ชั่วโมง",
-  "reason must be at most 500 characters": "เหตุผลต้องไม่เกิน 500 ตัวอักษร",
-  "OT request not found": "ไม่พบคำขอ OT",
-  "not found": "ไม่พบคำขอ OT",
-  "employee not found for this tenant": "ไม่พบข้อมูลพนักงาน",
-  "no active employee record for this account": "ไม่พบข้อมูลพนักงานที่ใช้งานอยู่สำหรับบัญชีนี้",
+const OT_ERRORS: Record<string, TranslationKey> = {
+  "a request already exists for this work date": "ot.there-is-already-an-ot-request",
+  "OT request is not in pending status": "ot.this-request-is-not-in-pending",
+  "OT request cannot be changed in its current status": "ot.this-request-is-not-in-pending",
+  "minutes must be between 1 and 720": "ot.the-number-of-hours-must-be",
+  "reason must be at most 500 characters": "ot.the-reason-must-not-exceed-500",
+  "OT request not found": "ot.ot-request-not-found",
+  "not found": "ot.ot-request-not-found",
+  "employee not found for this tenant": "ot.employee-information-not-found",
+  "no active employee record for this account": "ot.no-active-employee-information-found-for",
 };
 
-const thOtError = (message: string) => OT_ERRORS[message] ?? message;
+const thOtError = (message: string, t: (key: TranslationKey) => string) =>
+  OT_ERRORS[message] ? t(OT_ERRORS[message]) : message;
 
-const STATUS: { [k: string]: { label: string; tone: string } } = {
-  pending: { label: "รออนุมัติ", tone: "warning" },
-  approved: { label: "อนุมัติแล้ว", tone: "success" },
-  rejected: { label: "ไม่อนุมัติ", tone: "danger" },
-  cancelled: { label: "ยกเลิกแล้ว", tone: "" },
+const STATUS: Record<string, { labelKey: TranslationKey; tone: string }> = {
+  pending: { labelKey: "ot.pending-approval", tone: "warning" },
+  approved: { labelKey: "ot.approved", tone: "success" },
+  rejected: { labelKey: "ot.reject", tone: "danger" },
+  cancelled: { labelKey: "ot.canceled", tone: "" },
 };
 
 const hours = (minutes: number) => String(minutes / 60);
 
-const roleLabel = (role: string) => (role === "manager" ? "หัวหน้างาน" : "HR");
+const roleLabel = (role: string) => (role === "manager" ? tNow("ot.manager") : "HR");
 
 export default function OtPage() {
+  const { t: tr } = useI18N();
   const [isHr, setIsHr] = useState(false);
   const [linked, setLinked] = useState(true);
   const [requests, setRequests] = useState<OtRequest[] | null>(null);
@@ -72,7 +80,7 @@ export default function OtPage() {
   }, []);
 
   useEffect(() => {
-    load().catch((e) => handleApiError(e, (m) => setError(thOtError(m))));
+    load().catch((e) => handleApiError(e, (m) => setError(thOtError(m, tr))));
   }, [load]);
 
   async function act(done: string, path: string, body?: object) {
@@ -85,7 +93,7 @@ export default function OtPage() {
       await load();
       return true;
     } catch (e) {
-      handleApiError(e, (m) => setError(thOtError(m)));
+      handleApiError(e, (m) => setError(thOtError(m, tr)));
       return false;
     } finally {
       setBusy(false);
@@ -94,7 +102,7 @@ export default function OtPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await act("ส่งคำขอ OT แล้ว", "api/v1/me/ot", {
+    const ok = await act(tr("ot.ot-request-sent"), "api/v1/me/ot", {
       work_date: date,
       minutes: Math.round(Number(hrs) * 60),
       reason: reason || undefined,
@@ -107,42 +115,42 @@ export default function OtPage() {
   }
 
   const badge = (status: string) => {
-    const st = STATUS[status] ?? { label: status, tone: "" };
-    return <span className={`badge ${st.tone}`}>{st.label}</span>;
+    const st = STATUS[status];
+    return <span className={`badge ${st?.tone ?? ""}`}>{st ? tr(st.labelKey) : status}</span>;
   };
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>ขอ OT</h1>
+          <h1>{tr("ot.request-ot")}</h1>
           <p className="page-sub">
-            OT ที่อนุมัติเป็นเพียงบันทึกการอนุญาต — การคิดเงินเดือนใช้เวลาลงเวลาจริงเท่านั้น
+            {tr("ot.approved-ot-is-just-a-record")}
           </p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       {isHr && (
         <div className="card">
           <div className="card-head">
-            <h2>รออนุมัติ OT</h2>
-            <span className="hint">{pending.length} รายการ</span>
+            <h2>{tr("ot.waiting-for-ot-approval")}</h2>
+            <span className="hint">{pending.length} {tr("ot.items")}</span>
           </div>
           {pending.length === 0 ? (
-            <div className="empty">ไม่มีคำขอ OT ที่รออนุมัติ</div>
+            <div className="empty">{tr("ot.there-are-no-ot-requests-pending")}</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>พนักงาน</th>
-                    <th>วันที่</th>
-                    <th className="num">ชั่วโมง</th>
-                    <th>เหตุผล</th>
-                    <th />
+                    <th scope="col">{tr("ot.employee")}</th>
+                    <th scope="col">{tr("ot.date")}</th>
+                    <th scope="col" className="num">{tr("ot.hours")}</th>
+                    <th scope="col">{tr("ot.reason")}</th>
+                    <th scope="col" />
                   </tr>
                 </thead>
                 <tbody>
@@ -151,7 +159,7 @@ export default function OtPage() {
                       <td>
                         {r.employee_code} · {r.employee_name}
                         <span className="hint" data-testid="ot-step">
-                          ขั้น {r.step_no}/{r.total_steps} · {roleLabel(r.approver_role)}
+                          {tr("ot.step")} {r.step_no}/{r.total_steps} · {roleLabel(r.approver_role)}
                         </span>
                       </td>
                       <td>{thDate(r.work_date)}</td>
@@ -164,20 +172,20 @@ export default function OtPage() {
                             data-testid="reject-ot"
                             disabled={busy}
                             onClick={() =>
-                              act("ไม่อนุมัติคำขอ OT แล้ว", `api/v1/ot/requests/${r.id}/decision`, { approve: false })
+                              act(tr("ot.ot-request-not-approved"), `api/v1/ot/requests/${r.id}/decision`, { approve: false })
                             }
                           >
-                            ไม่อนุมัติ
+                            {tr("ot.reject")}
                           </button>
                           <button
                             className="btn btn-sm btn-primary"
                             data-testid="approve-ot"
                             disabled={busy}
                             onClick={() =>
-                              act("อนุมัติคำขอ OT แล้ว", `api/v1/ot/requests/${r.id}/decision`, { approve: true })
+                              act(tr("ot.ot-request-approved"), `api/v1/ot/requests/${r.id}/decision`, { approve: true })
                             }
                           >
-                            อนุมัติ
+                            {tr("ot.approve")}
                           </button>
                         </span>
                       </td>
@@ -193,21 +201,21 @@ export default function OtPage() {
       {isHr && (
         <div className="card">
           <div className="card-head">
-            <h2>ประวัติ OT ที่อนุมัติแล้ว</h2>
-            <span className="hint">ล่าสุด {history.length} รายการ</span>
+            <h2>{tr("ot.approved-ot-history")}</h2>
+            <span className="hint">{tr("ot.latest")} {history.length} {tr("ot.items")}</span>
           </div>
           {history.length === 0 ? (
-            <div className="empty">ยังไม่มี OT ที่อนุมัติแล้ว</div>
+            <div className="empty">{tr("ot.there-is-no-approved-ot-yet")}</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>พนักงาน</th>
-                    <th>วันที่</th>
-                    <th className="num">ชั่วโมง</th>
-                    <th>เหตุผล</th>
-                    <th>สถานะ</th>
+                    <th scope="col">{tr("ot.employee")}</th>
+                    <th scope="col">{tr("ot.date")}</th>
+                    <th scope="col" className="num">{tr("ot.hours")}</th>
+                    <th scope="col">{tr("ot.reason")}</th>
+                    <th scope="col">{tr("ot.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -230,24 +238,24 @@ export default function OtPage() {
       )}
 
       {requests === null ? (
-        <div className="spinner">กำลังโหลด…</div>
+        <div className="spinner">{tr("ot.loading")}</div>
       ) : !linked ? (
         <div className="card">
           <div className="empty">
-            ยังไม่ได้ผูกบัญชีนี้กับข้อมูลพนักงาน — ติดต่อ HR เพื่อเชื่อมบัญชี
+            {tr("ot.this-account-has-not-been-linked")}
           </div>
         </div>
       ) : (
         <>
           <form className="card card-pad" onSubmit={submit} style={{ display: "grid", gap: 12 }}>
-            <h2>ยื่นคำขอ OT</h2>
+            <h2>{tr("ot.submit-an-ot-request")}</h2>
             <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
               <div className="field">
-                <label htmlFor="ot-date">วันที่ทำ OT</label>
-                <input id="ot-date" data-testid="ot-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                <label htmlFor="ot-date">{tr("ot.date-of-doing-ot")}</label>
+                <ThaiDateInput id="ot-date" testId="ot-date" value={date} onChange={(v) => setDate(v)} required />
               </div>
               <div className="field">
-                <label htmlFor="ot-hours">ชั่วโมง</label>
+                <label htmlFor="ot-hours">{tr("ot.hours")}</label>
                 <input
                   id="ot-hours"
                   data-testid="ot-hours"
@@ -262,33 +270,33 @@ export default function OtPage() {
               </div>
             </div>
             <div className="field">
-              <label htmlFor="ot-reason">เหตุผล</label>
+              <label htmlFor="ot-reason">{tr("ot.reason")}</label>
               <input id="ot-reason" data-testid="ot-reason" maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
-              <span className="hint">ไม่เกิน 500 ตัวอักษร</span>
+              <span className="hint">{tr("ot.max-500-characters")}</span>
             </div>
             <div>
               <button className="btn btn-primary btn-sm" data-testid="request-ot" type="submit" disabled={busy}>
-                ส่งคำขอ
+                {tr("ot.submit-request")}
               </button>
             </div>
           </form>
 
           <div className="card">
             <div className="card-head">
-              <h2>ประวัติคำขอ OT</h2>
+              <h2>{tr("ot.ot-request-history")}</h2>
             </div>
             {requests.length === 0 ? (
-              <div className="empty">ยังไม่มีคำขอ OT</div>
+              <div className="empty">{tr("ot.there-are-no-ot-requests-yet")}</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>วันที่</th>
-                      <th className="num">ชั่วโมง</th>
-                      <th>เหตุผล</th>
-                      <th>สถานะ</th>
-                      <th />
+                      <th scope="col">{tr("ot.date")}</th>
+                      <th scope="col" className="num">{tr("ot.hours")}</th>
+                      <th scope="col">{tr("ot.reason")}</th>
+                      <th scope="col">{tr("ot.status")}</th>
+                      <th scope="col" />
                     </tr>
                   </thead>
                   <tbody>
@@ -304,9 +312,9 @@ export default function OtPage() {
                               className="btn btn-sm"
                               data-testid="cancel-ot"
                               disabled={busy}
-                              onClick={() => act("ยกเลิกคำขอ OT แล้ว", `api/v1/me/ot/${r.id}/cancel`)}
+                              onClick={() => act(tr("ot.ot-request-canceled"), `api/v1/me/ot/${r.id}/cancel`)}
                             >
-                              ยกเลิก
+                              {tr("ot.cancel")}
                             </button>
                           )}
                         </td>

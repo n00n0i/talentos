@@ -1,0 +1,11 @@
+FROZEN CANDIDATE (verified source+docs): 397864a
+DOCS COMMIT: dff42af
+EVIDENCE COMMIT: this commit (SHA in final report)
+BRANCH: sud-closure
+BASE: e73ce01
+STATUS (only preserved untracked):
+?? web/debug-pw.mjs
+AHEAD OF origin/master:
+88
+REMOTE HEADS:
+refs/heads/master

@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import { useEffect, useRef, useState } from "react";
 import { parseThaiDate, toThaiDate } from "@/lib/thai-date";
 
@@ -27,6 +29,7 @@ export default function ThaiDateInput({
   ariaLabel,
   disabled,
 }: Props) {
+  const { t: tr } = useI18N();
   const [text, setText] = useState(() => toThaiDate(value));
   const native = useRef<HTMLInputElement>(null);
 
@@ -59,7 +62,7 @@ export default function ThaiDateInput({
         value={text}
         onChange={(e) => change(e.target.value)}
         onBlur={blur}
-        placeholder="วว/ดด/ปปปป"
+        placeholder={tr("componentsThaiDateInput.text")}
         inputMode="numeric"
         autoComplete="off"
         required={required}
@@ -68,7 +71,7 @@ export default function ThaiDateInput({
       <button
         type="button"
         className="thai-date-picker"
-        aria-label="เปิดปฏิทิน"
+        aria-label={tr("componentsThaiDateInput.text-2")}
         tabIndex={-1}
         disabled={disabled}
         onClick={() => {

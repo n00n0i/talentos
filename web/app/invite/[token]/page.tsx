@@ -1,11 +1,14 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import Icon from "@/components/Icon";
 
 export default function AcceptInvitePage() {
+  const { t: tr } = useI18N();
   const params = useParams<{ token: string }>();
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -18,7 +21,7 @@ export default function AcceptInvitePage() {
     e.preventDefault();
     setError("");
     if (password !== confirmPassword) {
-      setError("รหัสผ่านทั้งสองช่องไม่ตรงกัน");
+      setError(tr("auth.invite.the-two-password-fields-do-not"));
       return;
     }
     setBusy(true);
@@ -29,10 +32,10 @@ export default function AcceptInvitePage() {
         body: JSON.stringify({ token: params.token, password }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || "ไม่สามารถตั้งรหัสผ่านได้");
+      if (!res.ok) throw new Error(body.message || tr("auth.invite.unable-to-set-password"));
       setDone(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "ไม่สามารถตั้งรหัสผ่านได้");
+      setError(e instanceof Error ? e.message : tr("auth.invite.unable-to-set-password"));
     } finally {
       setBusy(false);
     }
@@ -46,20 +49,20 @@ export default function AcceptInvitePage() {
         </div>
         {done ? (
           <>
-            <h1 style={{ fontSize: 20, marginBottom: 8 }}>ตั้งรหัสผ่านแล้ว</h1>
+            <h1 style={{ fontSize: 20, marginBottom: 8 }}>{tr("auth.invite.password-set")}</h1>
             <p className="hint" style={{ marginBottom: 18 }}>
-              เข้าสู่ระบบด้วยอีเมลและรหัสผ่านใหม่ได้เลย
+              {tr("auth.invite.log-in-with-your-new-email")}
             </p>
             <button className="btn btn-primary" onClick={() => router.replace("/login")}>
-              ไปหน้าเข้าสู่ระบบ
+              {tr("auth.invite.go-to-login-page")}
             </button>
           </>
         ) : (
           <form onSubmit={submit} style={{ display: "grid", gap: 14 }}>
-            <h1 style={{ fontSize: 20 }}>ตั้งรหัสผ่าน</h1>
-            <p className="hint">รหัสผ่านอย่างน้อย 12 ตัวอักษร</p>
+            <h1 style={{ fontSize: 20 }}>{tr("auth.invite.set-password")}</h1>
+            <p className="hint">{tr("auth.invite.password-must-be-at-least-12")}</p>
             <div className="field">
-              <label>รหัสผ่านใหม่</label>
+              <label>{tr("auth.invite.new-password")}</label>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -69,7 +72,7 @@ export default function AcceptInvitePage() {
               />
             </div>
             <div className="field">
-              <label>ยืนยันรหัสผ่าน</label>
+              <label>{tr("auth.invite.confirm-password")}</label>
               <input
                 type="password"
                 autoComplete="new-password"
@@ -78,12 +81,12 @@ export default function AcceptInvitePage() {
                 required
               />
             </div>
-            {error && <p className="error">{error}</p>}
+            {error && <p className="error" role="alert">{error}</p>}
             <button className="btn btn-primary" type="submit" disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "ตั้งรหัสผ่าน"}
+              {busy ? tr("auth.invite.saving") : tr("auth.invite.set-password")}
             </button>
             <Link href="/login" className="hint">
-              กลับหน้าเข้าสู่ระบบ
+              {tr("auth.invite.return-to-login-page")}
             </Link>
           </form>
         )}

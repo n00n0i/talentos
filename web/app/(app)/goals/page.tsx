@@ -1,5 +1,9 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me } from "@/lib/api";
 
@@ -40,13 +44,14 @@ type DirectReport = {
 
 const emptyForm = { title: "", cycle_id: "", target: "", description: "" };
 
-const STATUSES: Record<string, string> = {
-  active: "กำลังทำ",
-  achieved: "สำเร็จ",
-  cancelled: "ยกเลิก",
+const STATUSES: Record<string, TranslationKey> = {
+  active: "goals.in-progress",
+  achieved: "goals.succeed",
+  cancelled: "goals.cancel",
 };
 
 export default function GoalsPage() {
+  const { t: tr } = useI18N();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [employeeId, setEmployeeId] = useState("");
@@ -120,7 +125,7 @@ export default function GoalsPage() {
       setCheckInNote("");
       const res = await gw<{ check_ins: CheckIn[] }>(`api/v1/goals/${checkInGoal}/check-ins`);
       setCheckIns(res.check_ins);
-      setNotice("บันทึก check-in แล้ว");
+      setNotice(tr("goals.check-in-has-been-recorded"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -172,7 +177,7 @@ export default function GoalsPage() {
       });
       setForm(emptyForm);
       await loadGoals(employeeId, cycleFilter);
-      setNotice("เพิ่มเป้าหมายแล้ว");
+      setNotice(tr("goals.target-added"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -194,7 +199,7 @@ export default function GoalsPage() {
         }),
       });
       await loadGoals(employeeId, cycleFilter);
-      setNotice("บันทึกความคืบหน้าแล้ว");
+      setNotice(tr("goals.progress-saved"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -203,13 +208,13 @@ export default function GoalsPage() {
   }
 
   async function remove(goal: Goal) {
-    if (!confirm(`ลบเป้าหมาย ${goal.title} หรือไม่?`)) return;
+    if (!confirm(tr("goals.deleteGoalConfirm", { title: goal.title }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/goals/${goal.id}`, { method: "DELETE" });
       await loadGoals(employeeId, cycleFilter);
-      setNotice("ลบเป้าหมายแล้ว");
+      setNotice(tr("goals.target-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -221,18 +226,18 @@ export default function GoalsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>เป้าหมายและ OKR</h1>
-          <p className="page-sub">เป้าหมายรายพนักงาน ความคืบหน้า และสถานะ</p>
+          <h1>{tr("goals.goals-okrs")}</h1>
+          <p className="page-sub">{tr("goals.per-employee-goals-progress-and-status")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="card card-pad" style={{ marginBottom: 12, display: "grid", gap: 12 }}>
         <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <label>
-            พนักงาน
+            {tr("goals.employee")}
             <select
               data-testid="goal-employee"
               value={employeeId}
@@ -241,7 +246,7 @@ export default function GoalsPage() {
                 setEmployeeId(e.target.value);
               }}
             >
-              <option value="">— เลือกพนักงาน —</option>
+              <option value="">{tr("goals.select-employee")}</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.employee_code} · {e.first_name_th} {e.last_name_th}
@@ -250,13 +255,13 @@ export default function GoalsPage() {
             </select>
           </label>
           <label>
-            กรองตามรอบประเมิน
+            {tr("goals.filter-by-evaluation-period")}
             <select
               data-testid="goal-cycle-filter"
               value={cycleFilter}
               onChange={(e) => setCycleFilter(e.target.value)}
             >
-              <option value="">ทุกรอบ</option>
+              <option value="">{tr("goals.all-cycles")}</option>
               {cycles.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -270,7 +275,7 @@ export default function GoalsPage() {
           <form onSubmit={save} style={{ display: "grid", gap: 10 }}>
             <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr", gap: 12 }}>
               <label>
-                เป้าหมาย
+                {tr("goals.goals")}
                 <input
                   data-testid="goal-title"
                   value={form.title}
@@ -279,7 +284,7 @@ export default function GoalsPage() {
                 />
               </label>
               <label>
-                ค่าเป้าหมาย
+                {tr("goals.target-value")}
                 <input
                   data-testid="goal-target"
                   value={form.target}
@@ -289,13 +294,13 @@ export default function GoalsPage() {
             </div>
             <div className="grid-2" style={{ gridTemplateColumns: "1fr 2fr", gap: 12 }}>
               <label>
-                รอบประเมิน (ไม่บังคับ)
+                {tr("goals.assessment-round-optional")}
                 <select
                   data-testid="goal-cycle"
                   value={form.cycle_id}
                   onChange={(e) => setForm({ ...form, cycle_id: e.target.value })}
                 >
-                  <option value="">— ไม่ผูกกับรอบ —</option>
+                  <option value="">{tr("goals.not-tied-to-cycle")}</option>
                   {cycles.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -304,7 +309,7 @@ export default function GoalsPage() {
                 </select>
               </label>
               <label>
-                รายละเอียด
+                {tr("goals.details")}
                 <input
                   data-testid="goal-description"
                   value={form.description}
@@ -313,7 +318,7 @@ export default function GoalsPage() {
               </label>
             </div>
             <button className="btn btn-primary" data-testid="add-goal" type="submit" disabled={busy || !employeeId}>
-              เพิ่มเป้าหมาย
+              {tr("goals.add-goal")}
             </button>
           </form>
         )}
@@ -321,19 +326,19 @@ export default function GoalsPage() {
 
       <div className="card">
         {!employeeId ? (
-          <div className="empty">เลือกพนักงานเพื่อดูเป้าหมาย</div>
+          <div className="empty">{tr("goals.select-an-employee-to-view-their")}</div>
         ) : goals.length === 0 ? (
-          <div className="empty">ยังไม่มีเป้าหมายของพนักงานคนนี้</div>
+          <div className="empty">{tr("goals.there-are-no-goals-for-this")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>เป้าหมาย</th>
-                <th>รอบ</th>
-                <th>ค่าเป้าหมาย</th>
-                <th>ความคืบหน้า (%)</th>
-                <th>สถานะ</th>
-                {canWrite && <th />}
+                <th scope="col">{tr("goals.goals")}</th>
+                <th scope="col">{tr("goals.cycle")}</th>
+                <th scope="col">{tr("goals.target-value")}</th>
+                <th scope="col">{tr("goals.progress")}</th>
+                <th scope="col">{tr("goals.status")}</th>
+                {canWrite && <th scope="col" />}
               </tr>
             </thead>
             <tbody>
@@ -387,7 +392,7 @@ export default function GoalsPage() {
                           onClick={() => saveGoal(goal)}
                           style={{ marginRight: 6 }}
                         >
-                          บันทึก
+                          {tr("goals.save")}
                         </button>
                         <button
                           className="btn btn-sm"
@@ -395,7 +400,7 @@ export default function GoalsPage() {
                           disabled={busy}
                           onClick={() => remove(goal)}
                         >
-                          ลบ
+                          {tr("goals.delete")}
                         </button>
                       </td>
                     )}
@@ -407,14 +412,14 @@ export default function GoalsPage() {
         )}
         {canDirect && directReports.length > 0 && (
           <div className="card card-pad" style={{ marginTop: 12, display: "grid", gap: 12 }}>
-            <h2 style={{ fontSize: 16 }}>Check-in เป้าหมายลูกทีม</h2>
+            <h2 style={{ fontSize: 16 }}>{tr("goals.team-goal-check-in")}</h2>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <select
                 data-testid="checkin-goal"
                 value={checkInGoal}
                 onChange={(e) => setCheckInGoal(e.target.value)}
               >
-                <option value="">— เลือกเป้าหมายลูกทีม —</option>
+                <option value="">{tr("goals.text")}</option>
                 {goals.map((g) => {
                   const report = directReports.find((r) => r.id === g.employee_id);
                   return (
@@ -432,7 +437,7 @@ export default function GoalsPage() {
                     data-testid="checkin-note"
                     value={checkInNote}
                     onChange={(e) => setCheckInNote(e.target.value)}
-                    placeholder="ข้อมลความคืบหน่า (ไมบังคับ)"
+                    placeholder={tr("goals.progress-notes-optional")}
                     required
                   />
                   <button
@@ -441,11 +446,11 @@ export default function GoalsPage() {
                     type="submit"
                     disabled={busy}
                   >
-                    บันทก check-in
+                    {tr("goals.record-check-in")}
                   </button>
                 </form>
                 {checkIns.length === 0 ? (
-                  <div className="empty">ยังไมมี check-in เป้าหมายน</div>
+                  <div className="empty">{tr("goals.no-goal-check-in-yet")}</div>
                 ) : (
                   <ul style={{ margin: 0, paddingLeft: 18 }}>
                     {checkIns.map((c) => (

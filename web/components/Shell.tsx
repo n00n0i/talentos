@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Icon from "@/components/Icon";
-import Translate from "@/components/Translate";
 import TableLabels from "@/components/TableLabels";
 import { gw, Me } from "@/lib/api";
 import { useI18N } from "@/lib/i18n";
@@ -29,7 +28,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [today, setToday] = useState("");
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const { lang, setLang, t } = useI18N();
+  const { lang, setLang, t, tDynamic } = useI18N();
 
   useEffect(() => {
     gw<Me>("api/v1/auth/me")
@@ -119,7 +118,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
     me?.roles
       .map((r) => {
         const key = `role.${r}`;
-        const label = t(key);
+        const label = tDynamic(key);
         return label === key ? r : label; // unknown role → show the raw role
       })
       .join(" · ") || "";
@@ -202,7 +201,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
               data-testid="lang-toggle"
               className="lang-toggle"
               onClick={() => setLang(lang === "th" ? "en" : "th")}
-              aria-label={t("shell.toggleLang")}
+              aria-label={`${lang === "th" ? "EN" : "TH"} — ${t("shell.toggleLang")}`}
               title={t("shell.toggleLang")}
             >
               {lang === "th" ? "EN" : "TH"}
@@ -221,7 +220,7 @@ export default function Shell({ children }: { children: React.ReactNode }) {
           ) : (
             <>
               <TableLabels />
-              <Translate>{children}</Translate>
+              {children}
             </>
           )}
         </main>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import { useEffect, useRef, useState } from "react";
 import {
   parseThaiDateTime,
@@ -39,6 +41,7 @@ export function ThaiMonthInput({
   ariaLabel,
   disabled,
 }: Base & { value: string; onChange: (iso: string) => void }) {
+  const { t: tr } = useI18N();
   const [text, setText] = useState(() => toThaiMonth(value));
   const native = useRef<HTMLInputElement>(null);
   useEffect(() => setText(toThaiMonth(value)), [value]);
@@ -65,7 +68,7 @@ export function ThaiMonthInput({
         value={text}
         onChange={(e) => change(e.target.value)}
         onBlur={blur}
-        placeholder="ดด/ปปปป"
+        placeholder={tr("componentsThaiDateTimeInput.text")}
         inputMode="numeric"
         autoComplete="off"
         required={required}
@@ -74,7 +77,7 @@ export function ThaiMonthInput({
       <button
         type="button"
         className="thai-date-picker"
-        aria-label="เปิดปฏิทิน"
+        aria-label={tr("componentsThaiDateTimeInput.text-2")}
         tabIndex={-1}
         disabled={disabled}
         onClick={picker(native)}
@@ -104,6 +107,7 @@ export function ThaiDateTimeInput({
   ariaLabel,
   disabled,
 }: Base & { value: string; onChange: (iso: string) => void }) {
+  const { t: tr } = useI18N();
   const [text, setText] = useState(() => toThaiDateTime(value));
   const native = useRef<HTMLInputElement>(null);
   useEffect(() => setText(toThaiDateTime(value)), [value]);
@@ -130,7 +134,7 @@ export function ThaiDateTimeInput({
         value={text}
         onChange={(e) => change(e.target.value)}
         onBlur={blur}
-        placeholder="วว/ดด/ปปปป ชช:นน"
+        placeholder={tr("componentsThaiDateTimeInput.text-3")}
         inputMode="numeric"
         autoComplete="off"
         required={required}
@@ -139,7 +143,7 @@ export function ThaiDateTimeInput({
       <button
         type="button"
         className="thai-date-picker"
-        aria-label="เปิดปฏิทิน"
+        aria-label={tr("componentsThaiDateTimeInput.text-2")}
         tabIndex={-1}
         disabled={disabled}
         onClick={picker(native)}

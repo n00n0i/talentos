@@ -1,5 +1,9 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -71,11 +75,11 @@ const BALANCE_IMPORT_OPTIONAL = ["used_days"];
 const BALANCE_IMPORT_MAX_BYTES = 2 * 1024 * 1024;
 const BALANCE_IMPORT_MAX_ROWS = 1000;
 
-const STATUS: { [k: string]: { label: string; tone: string } } = {
-  pending: { label: "รออนุมัติ", tone: "warning" },
-  approved: { label: "อนุมัติแล้ว", tone: "success" },
-  rejected: { label: "ไม่อนุมัติ", tone: "danger" },
-  cancelled: { label: "ยกเลิกแล้ว", tone: "" },
+const STATUS: Record<string, { labelKey: TranslationKey; tone: string }> = {
+  pending: { labelKey: "leave.pending-approval", tone: "warning" },
+  approved: { labelKey: "leave.approved", tone: "success" },
+  rejected: { labelKey: "leave.reject", tone: "danger" },
+  cancelled: { labelKey: "leave.canceled", tone: "" },
 };
 
 const num = (v: string) => Number(v).toString();
@@ -87,9 +91,9 @@ function parseCsv(text: string): string[][] {
   let quoted = false;
   let closed = false;
   let quoteRec = 0;
-  const where = (rec: number) => (rec === 0 ? "แถวหัวตาราง" : `แถว ${rec}`);
+  const where = (rec: number) => (rec === 0 ? tNow("leave.head-row") : tNow("leave.row", { rec }));
   const bad = (rec: number) =>
-    new Error(`ไฟล์ CSV ไม่ถูกต้อง: เครื่องหมายอัญประกาศผิดรูปแบบที่${where(rec)}`);
+    new Error(tNow("leave.badCsvQuote", { where: where(rec) }));
   const src = text.replace(/^\uFEFF/, "");
   for (let i = 0; i < src.length; i++) {
     const c = src[i];
@@ -129,19 +133,19 @@ function parseCsv(text: string): string[][] {
 }
 
 const BALANCE_IMPORT_ERRORS: [RegExp, (m: RegExpMatchArray) => string][] = [
-  [/^employee_code is required$/, () => "employee_code จำเป็นต้องระบุ"],
-  [/^leave_type is required$/, () => "leave_type จำเป็นต้องระบุ"],
-  [/^year is required$/, () => "year จำเป็นต้องระบุ"],
-  [/^total_days is required$/, () => "total_days จำเป็นต้องระบุ"],
-  [/(\w+) must be a number$/, (m) => `${m[1]} ต้องเป็นตัวเลข`],
-  [/(\w+) must be an integer$/, (m) => `${m[1]} ต้องเป็นจำนวนเต็ม`],
-  [/(\w+) must be >= 0$/, (m) => `${m[1]} ต้องไม่ติดลบ`],
-  [/(\w+) must be <= 366$/, (m) => `${m[1]} ต้องไม่เกิน 366`],
-  [/^year must be between 2000 and 2100$/, () => "year ต้องอยู่ระหว่าง 2000 ถึง 2100"],
-  [/^used_days must not exceed total_days$/, () => "used_days ต้องไม่เกิน total_days"],
-  [/^employee_code (.*) not found$/, (m) => `ไม่พบรหัสพนักงาน ${m[1]}`],
-  [/^leave_type (.*) not found$/, (m) => `ไม่พบประเภทการลา ${m[1]}`],
-  [/^duplicate row for \((.*), (.*), (.*)\) in file$/, (m) => `แถวซ้ำกัน (${m[1]}, ${m[2]}, ${m[3]})`],
+  [/^employee_code is required$/, () => tNow("leave.employee-code-required")],
+  [/^leave_type is required$/, () => tNow("leave.leave-type-required")],
+  [/^year is required$/, () => tNow("leave.year-required")],
+  [/^total_days is required$/, () => tNow("leave.total-days-required")],
+  [/(\w+) must be a number$/, (m) => tNow("leave.fieldNumber", { field: m[1] })],
+  [/(\w+) must be an integer$/, (m) => tNow("leave.fieldInteger", { field: m[1] })],
+  [/(\w+) must be >= 0$/, (m) => tNow("leave.fieldNonNegative", { field: m[1] })],
+  [/(\w+) must be <= 366$/, (m) => tNow("leave.fieldMax366", { field: m[1] })],
+  [/^year must be between 2000 and 2100$/, () => tNow("leave.year-must-be-between-2000-and")],
+  [/^used_days must not exceed total_days$/, () => tNow("leave.used-days-must-not-exceed-total")],
+  [/^employee_code (.*) not found$/, (m) => tNow("leave.employeeCodeNotFound", { code: m[1] })],
+  [/^leave_type (.*) not found$/, (m) => tNow("leave.leaveTypeNotFound", { type: m[1] })],
+  [/^duplicate row for \((.*), (.*), (.*)\) in file$/, (m) => tNow("leave.duplicateRow", { a: m[1], b: m[2], c: m[3] })],
 ];
 
 function thBalanceImportError(message: string): string {
@@ -154,16 +158,16 @@ function thBalanceImportError(message: string): string {
 
 function csvToBalanceImportRows(text: string): BalanceImportRow[] {
   const [header, ...body] = parseCsv(text);
-  if (!header) throw new Error("ไฟล์ว่างเปล่า");
+  if (!header) throw new Error(tNow("leave.the-file-is-empty"));
   const cols = header.map((h) => h.trim());
   const missing = BALANCE_IMPORT_REQUIRED.filter((h) => !cols.includes(h));
-  if (missing.length) throw new Error(`ไม่พบคอลัมน์ที่จำเป็น: ${missing.join(", ")}`);
-  if (body.length === 0) throw new Error("ไม่มีข้อมูลในไฟล์");
+  if (missing.length) throw new Error(tNow("leave.missingColumns", { columns: missing.join(", ") }));
+  if (body.length === 0) throw new Error(tNow("leave.there-is-no-data-in-the"));
   if (body.length > BALANCE_IMPORT_MAX_ROWS)
-    throw new Error(`นำเข้าได้ไม่เกิน ${BALANCE_IMPORT_MAX_ROWS} แถวต่อไฟล์`);
+    throw new Error(tNow("leave.maxRows", { max: BALANCE_IMPORT_MAX_ROWS }));
   return body.map((cells, i) => {
     if (cells.length !== cols.length)
-      throw new Error(`แถว ${i + 1}: จำนวนคอลัมน์ (${cells.length}) ไม่ตรงกับหัวตาราง (${cols.length})`);
+      throw new Error(tNow("leave.columnMismatch", { row: i + 1, got: cells.length, expected: cols.length }));
     const r: BalanceImportRow = {};
     for (const key of [...BALANCE_IMPORT_REQUIRED, ...BALANCE_IMPORT_OPTIONAL]) {
       const idx = cols.indexOf(key);
@@ -175,12 +179,13 @@ function csvToBalanceImportRows(text: string): BalanceImportRow[] {
   });
 }
 
-const ROLE_LABEL: { [k: string]: string } = {
-  manager: "หัวหน้างาน",
-  hr_admin: "HR",
+const ROLE_LABEL: Record<string, import("@/lib/i18n-catalog").TranslationKey> = {
+  manager: "leave.manager",
+  hr_admin: "leave.hrRole",
 };
 
 export default function LeavePage() {
+  const { t: tr } = useI18N();
   const [isHr, setIsHr] = useState(false);
   const [linked, setLinked] = useState(true);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -235,7 +240,7 @@ export default function LeavePage() {
     setError("");
     if (!file) return;
     if (file.size > BALANCE_IMPORT_MAX_BYTES) {
-      setError("ไฟล์ใหญ่เกิน 2 MB");
+      setError(tr("leave.file-larger-than-2-mb"));
       return;
     }
     try {
@@ -243,7 +248,7 @@ export default function LeavePage() {
       if (gen === importGen.current) setImportRows(parsed);
     } catch (err) {
       if (gen === importGen.current)
-        setError(err instanceof Error ? err.message : "อ่านไฟล์ไม่สำเร็จ");
+        setError(err instanceof Error ? err.message : tr("leave.failed-to-read-file"));
     }
   }
 
@@ -262,9 +267,9 @@ export default function LeavePage() {
         setImportResult(r);
       } else if (r.invalid > 0 || r.created !== r.valid) {
         setImportResult(r);
-        setError("ไม่มีการนำเข้าโควตา เนื่องจากข้อมูลบางแถวไม่ถูกต้อง กรุณาแก้ไขไฟล์แล้วลองใหม่");
+        setError(tr("leave.there-is-no-import-quota-because"));
       } else {
-        setNotice(`นำเข้าโควตาการลา ${r.created} รายการแล้ว`);
+        setNotice(tr("leave.importedNotice", { n: r.created }));
         setImportRows([]);
         setImportResult(null);
         setImportKey((k) => k + 1);
@@ -311,7 +316,7 @@ export default function LeavePage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const ok = await act("ส่งคำขอลาแล้ว", "api/v1/leave/requests", {
+    const ok = await act(tr("leave.leave-request-sent"), "api/v1/leave/requests", {
       leave_type: leaveType,
       start_date: start,
       end_date: end,
@@ -327,7 +332,7 @@ export default function LeavePage() {
   async function createDelegation(e: React.FormEvent) {
     e.preventDefault();
     if (!delegateUser || !delegateStart || !delegateEnd) return;
-    const ok = await act("บันทึกการมอบหมายแล้ว", "api/v1/approval-delegations", {
+    const ok = await act(tr("leave.assignment-saved"), "api/v1/approval-delegations", {
       delegate_user_id: delegateUser,
       starts_on: delegateStart,
       ends_on: delegateEnd,
@@ -345,7 +350,7 @@ export default function LeavePage() {
     setNotice("");
     try {
       await gw(`api/v1/approval-delegations/${id}`, { method: "DELETE" });
-      setNotice("ยกเลิกการมอบหมายแล้ว");
+      setNotice(tr("leave.delegation-cancelled"));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -356,42 +361,42 @@ export default function LeavePage() {
 
   const typeLabel = (t: string) => balances.find((b) => b.leave_type === t)?.label_th ?? t;
   const badge = (status: string) => {
-    const st = STATUS[status] ?? { label: status, tone: "" };
-    return <span className={`badge ${st.tone}`}>{st.label}</span>;
+    const st = STATUS[status];
+    return <span className={`badge ${st?.tone ?? ""}`}>{st ? tr(st.labelKey) : status}</span>;
   };
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>การลา</h1>
-          <p className="page-sub">ยื่นคำขอลา ดูวันลาคงเหลือ และติดตามสถานะ</p>
+          <h1>{tr("leave.leave")}</h1>
+          <p className="page-sub">{tr("leave.submit-a-leave-request-view-remaining")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       {isHr && (
         <div className="card">
           <div className="card-head">
-            <h2>รออนุมัติ</h2>
-            <span className="hint">{pending.length} รายการ</span>
+            <h2>{tr("leave.pending-approval")}</h2>
+            <span className="hint">{pending.length} {tr("leave.items")}</span>
           </div>
           {pending.length === 0 ? (
-            <div className="empty">ไม่มีคำขอลาที่รออนุมัติ</div>
+            <div className="empty">{tr("leave.there-are-no-leave-requests-pending")}</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>พนักงาน</th>
-                    <th>ประเภท</th>
-                    <th>วันที่</th>
-                    <th className="num">วัน</th>
-                    <th>เหตุผล</th>
-                    <th>ขั้นตอน</th>
-                    <th />
+                    <th scope="col">{tr("leave.employee")}</th>
+                    <th scope="col">{tr("leave.type")}</th>
+                    <th scope="col">{tr("leave.date")}</th>
+                    <th scope="col" className="num">{tr("leave.day")}</th>
+                    <th scope="col">{tr("leave.reason")}</th>
+                    <th scope="col">{tr("leave.stage")}</th>
+                    <th scope="col" />
                   </tr>
                 </thead>
                 <tbody>
@@ -407,7 +412,7 @@ export default function LeavePage() {
                       <td className="num">{num(r.days)}</td>
                       <td>{r.reason ?? "—"}</td>
                       <td data-testid="leave-step">
-                        ขั้น {r.step_no}/{r.total_steps} · {ROLE_LABEL[r.approver_role] ?? r.approver_role}
+                        {tr("leave.step")} {r.step_no}/{r.total_steps} · {r.approver_role in ROLE_LABEL ? tr(ROLE_LABEL[r.approver_role]) : r.approver_role}
                       </td>
                       <td className="num">
                         <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -416,20 +421,20 @@ export default function LeavePage() {
                             data-testid="reject-leave"
                             disabled={busy}
                             onClick={() =>
-                              act("ไม่อนุมัติคำขอลาแล้ว", `api/v1/leave/requests/${r.id}/decision`, { approve: false })
+                              act(tr("leave.leave-request-not-approved"), `api/v1/leave/requests/${r.id}/decision`, { approve: false })
                             }
                           >
-                            ไม่อนุมัติ
+                            {tr("leave.reject")}
                           </button>
                           <button
                             className="btn btn-sm btn-primary"
                             data-testid="approve-leave"
                             disabled={busy}
                             onClick={() =>
-                              act("อนุมัติคำขอลาแล้ว", `api/v1/leave/requests/${r.id}/decision`, { approve: true })
+                              act(tr("leave.leave-request-approved"), `api/v1/leave/requests/${r.id}/decision`, { approve: true })
                             }
                           >
-                            อนุมัติ
+                            {tr("leave.approve")}
                           </button>
                         </span>
                       </td>
@@ -444,12 +449,12 @@ export default function LeavePage() {
 
       {isHr && (
         <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
-          <h2>มอบหมายการอนุมัติ</h2>
-          <p className="hint">มอบสิทธิ์การอนุมัติการลาให้ผู้ใช้คนอื่นในช่วงเวลาที่กำหนด</p>
+          <h2>{tr("leave.assign-approval")}</h2>
+          <p className="hint">{tr("leave.delegate-leave-approval-rights-to-other")}</p>
           <form onSubmit={createDelegation} style={{ display: "grid", gap: 12 }}>
             <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
               <div className="field">
-                <label htmlFor="delegate-user">ผู้รับมอบหมาย</label>
+                <label htmlFor="delegate-user">{tr("leave.assignee")}</label>
                 <select
                   id="delegate-user"
                   data-testid="delegate-user"
@@ -457,7 +462,7 @@ export default function LeavePage() {
                   onChange={(e) => setDelegateUser(e.target.value)}
                   required
                 >
-                  <option value="">เลือกผู้ใช้…</option>
+                  <option value="">{tr("leave.select-user")}</option>
                   {candidates.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.full_name_th ?? c.email}
@@ -466,17 +471,17 @@ export default function LeavePage() {
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="delegate-start">เริ่ม</label>
+                <label htmlFor="delegate-start">{tr("leave.start")}</label>
                 <ThaiDateInput id="delegate-start" testId="delegate-start" value={delegateStart} onChange={(v) => setDelegateStart(v)} required />
               </div>
               <div className="field">
-                <label htmlFor="delegate-end">ถึง</label>
+                <label htmlFor="delegate-end">{tr("leave.to")}</label>
                 <ThaiDateInput id="delegate-end" testId="delegate-end" value={delegateEnd} onChange={(v) => setDelegateEnd(v)} required />
               </div>
             </div>
             <div>
               <button className="btn btn-primary btn-sm" data-testid="create-delegation" type="submit" disabled={busy}>
-                บันทึกการมอบหมาย
+                {tr("leave.record-of-assignment")}
               </button>
             </div>
           </form>
@@ -484,10 +489,10 @@ export default function LeavePage() {
             <table className="table">
               <thead>
                 <tr>
-                  <th>ผู้รับมอบหมาย</th>
-                  <th>เริ่ม</th>
-                  <th>ถึง</th>
-                  <th />
+                  <th scope="col">{tr("leave.assignee")}</th>
+                  <th scope="col">{tr("leave.start")}</th>
+                  <th scope="col">{tr("leave.to")}</th>
+                  <th scope="col" />
                 </tr>
               </thead>
               <tbody>
@@ -503,7 +508,7 @@ export default function LeavePage() {
                         disabled={busy}
                         onClick={() => cancelDelegation(dg.id)}
                       >
-                        ยกเลิก
+                        {tr("leave.cancel")}
                       </button>
                     </td>
                   </tr>
@@ -516,12 +521,12 @@ export default function LeavePage() {
 
       {isHr && (
         <div className="card card-pad" style={{ display: "grid", gap: 12 }}>
-          <h2>นำเข้าโควตาการลา (CSV)</h2>
+          <h2>{tr("leave.import-leave-quota-csv")}</h2>
           <p className="hint">
-            คอลัมน์: {BALANCE_IMPORT_REQUIRED.join(", ")}, {BALANCE_IMPORT_OPTIONAL.join(", ")} (ไฟล์ไม่เกิน 2 MB และ{" "}
-            {BALANCE_IMPORT_MAX_ROWS} แถว)
+            {tr("leave.text")} {BALANCE_IMPORT_REQUIRED.join(", ")}, {BALANCE_IMPORT_OPTIONAL.join(", ")} {tr("leave.text-2")}{" "}
+            {BALANCE_IMPORT_MAX_ROWS} {tr("leave.text-3")}
           </p>
-          <label htmlFor="import-balance-csv">เลือกไฟล์ CSV โควตาการลา</label>
+          <label htmlFor="import-balance-csv">{tr("leave.select-the-leave-quota-csv-file")}</label>
           <input
             key={importKey}
             id="import-balance-csv"
@@ -540,7 +545,7 @@ export default function LeavePage() {
                   onClick={() => runBalanceImport(true)}
                   disabled={busy}
                 >
-                  ตรวจสอบไฟล์
+                  {tr("leave.check-file")}
                 </button>
                 <button
                   className="btn btn-primary"
@@ -548,24 +553,24 @@ export default function LeavePage() {
                   onClick={() => runBalanceImport(false)}
                   disabled={busy || !importResult || importResult.valid === 0 || importResult.invalid > 0}
                 >
-                  ยืนยันนำเข้า
+                  {tr("leave.confirm-import")}
                 </button>
                 {importResult && (
                   <span data-testid="import-summary">
-                    ทั้งหมด {importResult.total} · ถูกต้อง {importResult.valid} · ผิดพลาด {importResult.invalid}
+                    {tr("leave.all")} {importResult.total} {tr("leave.text-4")} {importResult.valid} {tr("leave.text-5")} {importResult.invalid}
                   </span>
                 )}
               </div>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>แถว</th>
-                    <th>รหัสพนักงาน</th>
-                    <th>ประเภท</th>
-                    <th className="num">ปี</th>
-                    <th className="num">วันทั้งหมด</th>
-                    <th className="num">วันที่ใช้</th>
-                    <th>สถานะ</th>
+                    <th scope="col">{tr("leave.row")}</th>
+                    <th scope="col">{tr("leave.employee-id")}</th>
+                    <th scope="col">{tr("leave.type")}</th>
+                    <th scope="col" className="num">{tr("leave.year")}</th>
+                    <th scope="col" className="num">{tr("leave.all-days")}</th>
+                    <th scope="col" className="num">{tr("leave.use-date")}</th>
+                    <th scope="col">{tr("leave.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -582,9 +587,9 @@ export default function LeavePage() {
                         <td>
                           {res &&
                             (res.status === "valid" ? (
-                              <span className="badge success">ถูกต้อง</span>
+                              <span className="badge success">{tr("leave.valid")}</span>
                             ) : (
-                              <span className="error">{res.errors.map(thBalanceImportError).join(" · ")}</span>
+                              <span className="error" role="alert">{res.errors.map(thBalanceImportError).join(" · ")}</span>
                             ))}
                         </td>
                       </tr>
@@ -598,11 +603,11 @@ export default function LeavePage() {
       )}
 
       {requests === null ? (
-        <div className="spinner">กำลังโหลด…</div>
+        <div className="spinner">{tr("leave.loading")}</div>
       ) : !linked ? (
         <div className="card">
           <div className="empty">
-            ยังไม่ได้ผูกบัญชีนี้กับข้อมูลพนักงาน — ติดต่อ HR เพื่อเชื่อมบัญชี
+            {tr("leave.this-account-has-not-been-linked")}
           </div>
         </div>
       ) : (
@@ -616,12 +621,12 @@ export default function LeavePage() {
                     <div className="stat-value">
                       {num(b.remaining_days)} / {num(b.total_days)}
                     </div>
-                    <div className="stat-hint">วันคงเหลือ / วันทั้งหมด</div>
+                    <div className="stat-hint">{tr("leave.remaining-days-total-days")}</div>
                   </>
                 ) : (
                   <>
-                    <div className="stat-value" style={{ fontSize: 18 }}>ยังไม่ตั้งโควตา</div>
-                    <div className="stat-hint">ให้ HR ตั้งโควตาก่อน เพื่อติดตามวันคงเหลือ</div>
+                    <div className="stat-value" style={{ fontSize: 18 }}>{tr("leave.quota-not-yet-set")}</div>
+                    <div className="stat-hint">{tr("leave.let-hr-set-the-quota-first")}</div>
                   </>
                 )}
               </div>
@@ -629,10 +634,10 @@ export default function LeavePage() {
           </div>
 
           <form className="card card-pad" onSubmit={submit} style={{ display: "grid", gap: 12 }}>
-            <h2>ยื่นคำขอลา</h2>
+            <h2>{tr("leave.submit-a-leave-request")}</h2>
             <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
               <div className="field">
-                <label htmlFor="leave-type">ประเภท</label>
+                <label htmlFor="leave-type">{tr("leave.type")}</label>
                 <select id="leave-type" data-testid="leave-type" value={leaveType} onChange={(e) => setLeaveType(e.target.value)}>
                   {balances.map((b) => (
                     <option key={b.leave_type} value={b.leave_type}>
@@ -642,42 +647,42 @@ export default function LeavePage() {
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="leave-start">เริ่ม</label>
+                <label htmlFor="leave-start">{tr("leave.start")}</label>
                 <ThaiDateInput id="leave-start" testId="leave-start" value={start} onChange={(v) => setStart(v)} required />
               </div>
               <div className="field">
-                <label htmlFor="leave-end">ถึง</label>
+                <label htmlFor="leave-end">{tr("leave.to")}</label>
                 <ThaiDateInput id="leave-end" testId="leave-end" value={end} onChange={(v) => setEnd(v)} required />
               </div>
             </div>
             <div className="field">
-              <label htmlFor="leave-reason">เหตุผล</label>
+              <label htmlFor="leave-reason">{tr("leave.reason")}</label>
               <input id="leave-reason" data-testid="leave-reason" value={reason} onChange={(e) => setReason(e.target.value)} />
             </div>
             <div>
               <button className="btn btn-primary btn-sm" data-testid="request-leave" type="submit" disabled={busy}>
-                ส่งคำขอ
+                {tr("leave.submit-request")}
               </button>
             </div>
           </form>
 
           <div className="card">
             <div className="card-head">
-              <h2>ประวัติการลา</h2>
+              <h2>{tr("leave.leave-history")}</h2>
             </div>
             {requests.length === 0 ? (
-              <div className="empty">ยังไม่มีคำขอลา</div>
+              <div className="empty">{tr("leave.there-is-no-leave-request-yet")}</div>
             ) : (
               <div style={{ overflowX: "auto" }}>
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>ประเภท</th>
-                      <th>วันที่</th>
-                      <th className="num">วัน</th>
-                      <th>เหตุผล</th>
-                      <th>สถานะ</th>
-                      <th />
+                      <th scope="col">{tr("leave.type")}</th>
+                      <th scope="col">{tr("leave.date")}</th>
+                      <th scope="col" className="num">{tr("leave.day")}</th>
+                      <th scope="col">{tr("leave.reason")}</th>
+                      <th scope="col">{tr("leave.status")}</th>
+                      <th scope="col" />
                     </tr>
                   </thead>
                   <tbody>
@@ -696,9 +701,9 @@ export default function LeavePage() {
                               className="btn btn-sm"
                               data-testid="cancel-leave"
                               disabled={busy}
-                              onClick={() => act("ยกเลิกคำขอลาแล้ว", `api/v1/me/leave/${r.id}/cancel`)}
+                              onClick={() => act(tr("leave.leave-request-canceled"), `api/v1/me/leave/${r.id}/cancel`)}
                             >
-                              ยกเลิก
+                              {tr("leave.cancel")}
                             </button>
                           )}
                         </td>
@@ -716,7 +721,7 @@ export default function LeavePage() {
                   onClick={loadMore}
                   disabled={busy}
                 >
-                  โหลดเพิ่ม
+                  {tr("leave.load-more")}
                 </button>
               </div>
             )}

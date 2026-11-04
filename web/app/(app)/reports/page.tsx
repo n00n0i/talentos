@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 
 import { useCallback, useEffect, useState } from "react";
@@ -41,6 +43,7 @@ function minutesToHours(minutes: number) {
 }
 
 export default function ReportsPage() {
+  const { t: tr } = useI18N();
   const [headcount, setHeadcount] = useState<Headcount | null>(null);
   const [costRows, setCostRows] = useState<CostRow[] | null>(null);
   const [otRows, setOtRows] = useState<OtRow[] | null>(null);
@@ -88,18 +91,18 @@ export default function ReportsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>รายงาน</h1>
-          <p className="page-sub">ภาพรวมบุคลากร ต้นทุนเงินเดือน และแนวโน้ม OT</p>
+          <h1>{tr("reports.reports")}</h1>
+          <p className="page-sub">{tr("reports.headcount-payroll-cost-and-ot-trends")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head"><h2>จำนวนพนักงาน</h2></div>
+        <div className="card-head"><h2>{tr("reports.number-of-employees")}</h2></div>
         <div className="card-pad">
         {headcount === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("reports.loading")}</div>
         ) : (
           <>
             <div
@@ -111,28 +114,28 @@ export default function ReportsPage() {
               }}
             >
               <div className="mine-tile" data-testid="headcount-active">
-                <span className="mine-label">ทำงานอยู่</span>
+                <span className="mine-label">{tr("reports.active")}</span>
                 <span className="mine-value">{headcount.active}</span>
               </div>
               <div className="mine-tile" data-testid="headcount-probation">
-                <span className="mine-label">ทดลองงาน</span>
+                <span className="mine-label">{tr("reports.probation")}</span>
                 <span className="mine-value">{headcount.probation}</span>
               </div>
               <div className="mine-tile" data-testid="headcount-leave">
-                <span className="mine-label">ลา</span>
+                <span className="mine-label">{tr("reports.leave")}</span>
                 <span className="mine-value">{headcount.leave}</span>
               </div>
               <div className="mine-tile" data-testid="headcount-terminated">
-                <span className="mine-label">พ้นสภาพ 12 เดือน</span>
+                <span className="mine-label">{tr("reports.expired-for-12-months")}</span>
                 <span className="mine-value">{headcount.terminated_last_12m}</span>
               </div>
             </div>
 
-            <table className="table" aria-label="จำนวนพนักงานตามแผนก">
+            <table className="table" aria-label={tr("reports.number-of-employees-by-department")}>
               <thead>
                 <tr>
-                  <th>แผนก</th>
-                  <th className="num">จำนวน</th>
+                  <th scope="col">{tr("reports.department")}</th>
+                  <th scope="col" className="num">{tr("reports.quantity")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -150,7 +153,7 @@ export default function ReportsPage() {
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head"><h2>ต้นทุนเงินเดือน</h2></div>
+        <div className="card-head"><h2>{tr("reports.salary-costs")}</h2></div>
         <div className="card-pad">
         <form
           onSubmit={reloadCost}
@@ -158,36 +161,36 @@ export default function ReportsPage() {
           style={{ marginBottom: 16, alignItems: "end" }}
         >
           <div className="field">
-            <label htmlFor="cost-from">จาก</label>
+            <label htmlFor="cost-from">{tr("reports.from")}</label>
             <ThaiDateInput id="cost-from" testId="cost-from" value={from} onChange={(v) => setFrom(v)} required />
           </div>
           <div className="field">
-            <label htmlFor="cost-to">ถึง</label>
+            <label htmlFor="cost-to">{tr("reports.to")}</label>
             <ThaiDateInput id="cost-to" testId="cost-to" value={to} onChange={(v) => setTo(v)} required />
           </div>
           <div className="field">
             <span aria-hidden="true">&nbsp;</span>
             <button className="btn btn-primary" data-testid="cost-load" type="submit" disabled={busy}>
-              {busy ? "กำลังโหลด…" : "ดูรายงาน"}
+              {busy ? tr("reports.loading") : tr("reports.view-report")}
             </button>
           </div>
         </form>
 
         {costRows === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("reports.loading")}</div>
         ) : costRows.length === 0 ? (
-          <div className="empty">ไม่มีข้อมูลต้นทุนในช่วงที่เลือก</div>
+          <div className="empty">{tr("reports.cost-information-is-not-available-for")}</div>
         ) : (
-          <table className="table" aria-label="ต้นทุนเงินเดือน">
+          <table className="table" aria-label={tr("reports.salary-costs")}>
             <thead>
               <tr>
-                <th>แผนก</th>
-                <th className="num">คน</th>
-                <th className="num">รายได้รวม</th>
-                <th className="num">สุทธิ</th>
-                <th className="num">ภาษี</th>
-                <th className="num">ประกันสังคม</th>
-                <th className="num">กองทุน</th>
+                <th scope="col">{tr("reports.department")}</th>
+                <th scope="col" className="num">{tr("reports.person")}</th>
+                <th scope="col" className="num">{tr("reports.total-income")}</th>
+                <th scope="col" className="num">{tr("reports.net")}</th>
+                <th scope="col" className="num">{tr("reports.tax")}</th>
+                <th scope="col" className="num">{tr("reports.social-security")}</th>
+                <th scope="col" className="num">{tr("reports.fund")}</th>
               </tr>
             </thead>
             <tbody>
@@ -195,11 +198,11 @@ export default function ReportsPage() {
                 <tr key={r.department}>
                   <td>{r.department}</td>
                   <td className="num">{r.employees}</td>
-                  <td className="num">฿{thb(r.gross)}</td>
-                  <td className="num">฿{thb(r.net)}</td>
-                  <td className="num">฿{thb(r.tax)}</td>
-                  <td className="num">฿{thb(r.sso)}</td>
-                  <td className="num">฿{thb(r.pf)}</td>
+                  <td className="num">{tr("reports.text")}{thb(r.gross)}</td>
+                  <td className="num">{tr("reports.text")}{thb(r.net)}</td>
+                  <td className="num">{tr("reports.text")}{thb(r.tax)}</td>
+                  <td className="num">{tr("reports.text")}{thb(r.sso)}</td>
+                  <td className="num">{tr("reports.text")}{thb(r.pf)}</td>
                 </tr>
               ))}
             </tbody>
@@ -209,19 +212,19 @@ export default function ReportsPage() {
       </div>
 
       <div className="card">
-        <div className="card-head"><h2>แนวโน้ม OT</h2></div>
+        <div className="card-head"><h2>{tr("reports.ot-trends")}</h2></div>
         <div className="card-pad">
         {otRows === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("reports.loading")}</div>
         ) : otRows.length === 0 ? (
-          <div className="empty">ไม่มีข้อมูล OT ในช่วงที่เลือก</div>
+          <div className="empty">{tr("reports.there-is-no-ot-data-for")}</div>
         ) : (
-          <table className="table" aria-label="แนวโน้ม OT">
+          <table className="table" aria-label={tr("reports.ot-trends")}>
             <thead>
               <tr>
-                <th>เดือน</th>
-                <th className="num">ชั่วโมง OT</th>
-                <th className="num">จำนวนวัน</th>
+                <th scope="col">{tr("reports.month")}</th>
+                <th scope="col" className="num">{tr("reports.ot-hours")}</th>
+                <th scope="col" className="num">{tr("reports.days")}</th>
               </tr>
             </thead>
             <tbody>

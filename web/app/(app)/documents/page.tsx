@@ -1,5 +1,9 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 
 import { useCallback, useEffect, useState } from "react";
@@ -30,13 +34,13 @@ type ExpiringDocument = Document & {
   employee_name: string;
 };
 
-const DOC_TYPES: Record<string, string> = {
-  contract: "สัญญาจ้าง",
-  work_permit: "ใบอนุญาตทำงาน",
-  visa: "วีซ่า",
-  id_card: "บัตรประชาชน",
-  certificate: "ใบรับรอง",
-  other: "อื่น ๆ",
+const DOC_TYPES: Record<string, TranslationKey> = {
+  contract: "documents.employment-contract",
+  work_permit: "documents.work-permit",
+  visa: "documents.visa",
+  id_card: "documents.id-card",
+  certificate: "documents.certificate",
+  other: "documents.other",
 };
 
 const emptyForm = {
@@ -49,13 +53,14 @@ const emptyForm = {
 
 function expiryBadge(days: number | null) {
   if (days === null) return null;
-  if (days < 0) return <span className="badge danger">หมดอายุแล้ว {Math.abs(days)} วัน</span>;
-  if (days === 0) return <span className="badge danger">หมดอายุวันนี้</span>;
-  if (days <= 60) return <span className="badge warning">เหลือ {days} วัน</span>;
-  return <span className="badge success">เหลือ {days} วัน</span>;
+  if (days < 0) return <span className="badge danger">{tNow("documents.text")} {Math.abs(days)} {tNow("documents.day")}</span>;
+  if (days === 0) return <span className="badge danger">{tNow("documents.expires-today")}</span>;
+  if (days <= 60) return <span className="badge warning">{tNow("documents.remaining")} {days} {tNow("documents.day")}</span>;
+  return <span className="badge success">{tNow("documents.remaining")} {days} {tNow("documents.day")}</span>;
 }
 
 export default function DocumentsPage() {
+  const { t: tr } = useI18N();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
   const [docs, setDocs] = useState<Document[]>([]);
@@ -102,7 +107,7 @@ export default function DocumentsPage() {
     event.preventDefault();
     if (!employeeId) return;
     if (file && file.size > 5 * 1024 * 1024) {
-      setError("ไฟล์ใหญ่เกิน 5 MB");
+      setError(tr("documents.file-larger-than-5-mb"));
       return;
     }
     setBusy(true);
@@ -126,8 +131,8 @@ export default function DocumentsPage() {
       await Promise.all([loadDocs(employeeId), loadExpiring()]);
       setNotice(
         uploaded
-          ? "เพิ่มเอกสารแล้ว"
-          : "สร้างเอกสารแล้ว แต่ไฟล์อัปโหลดไม่สำเร็จ — อัปโหลดใหม่ที่แถวเอกสาร",
+          ? tr("documents.document-added")
+          : tr("documents.document-created-but-the-file-failed"),
       );
     } catch (e) {
       handleApiError(e, setError);
@@ -138,7 +143,7 @@ export default function DocumentsPage() {
 
   async function uploadFile(id: string, file: File) {
     if (file.size > 5 * 1024 * 1024) {
-      setError("ไฟล์ใหญ่เกิน 5 MB");
+      setError(tr("documents.file-larger-than-5-mb"));
       return false;
     }
     try {
@@ -148,12 +153,12 @@ export default function DocumentsPage() {
         body: file,
       });
       if (!res.ok) {
-        setError(`อัปโหลดไฟล์ไม่สำเร็จ (${res.status})`);
+        setError(tr("documents.uploadError", { status: res.status }));
         return false;
       }
       return true;
     } catch {
-      setError("อัปโหลดไฟล์ไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ");
+      setError(tr("documents.failed-to-upload-file-check-connection"));
       return false;
     }
   }
@@ -164,19 +169,19 @@ export default function DocumentsPage() {
     setError("");
     if (await uploadFile(id, file)) {
       await Promise.all([loadDocs(employeeId), loadExpiring()]);
-      setNotice("อัปโหลดไฟล์แล้ว");
+      setNotice(tr("documents.file-uploaded"));
     }
     setBusy(false);
   }
 
   async function remove(id: string) {
-    if (!confirm("ลบเอกสารนี้หรือไม่? ไฟล์แนบจะถูกลบด้วย")) return;
+    if (!confirm(tr("documents.delete-this-document-attachments-will-also"))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/documents/${id}`, { method: "DELETE" });
       await Promise.all([loadDocs(employeeId), loadExpiring()]);
-      setNotice("ลบเอกสารแล้ว");
+      setNotice(tr("documents.document-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -188,21 +193,21 @@ export default function DocumentsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>เอกสารพนักงาน</h1>
-          <p className="page-sub">สัญญา ใบอนุญาตทำงาน วีซ่า และเอกสารที่ต้องต่ออายุ</p>
+          <h1>{tr("documents.employee-documents")}</h1>
+          <p className="page-sub">{tr("documents.contracts-work-permits-visas-and-documents")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="card card-pad" style={{ marginBottom: 12 }}>
         <div className="card-head">
-          <h2 style={{ fontSize: 16 }}>ใกล้หมดอายุ / หมดอายุแล้ว (60 วัน)</h2>
+          <h2 style={{ fontSize: 16 }}>{tr("documents.expiring-expired-60-days")}</h2>
         </div>
         {expiring.length === 0 ? (
           <div className="empty" data-testid="expiring-empty">
-            ไม่มีเอกสารที่ใกล้หมดอายุ
+            {tr("documents.there-are-no-documents-about-to")}
           </div>
         ) : (
           <ul className="list" data-testid="expiring-list">
@@ -214,7 +219,7 @@ export default function DocumentsPage() {
                 {expiryBadge(d.days_left)}
                 {d.expiry_date && (
                   <span style={{ marginLeft: 8, color: "var(--muted)" }}>
-                    หมดอายุ {thDate(d.expiry_date)}
+                    {tr("documents.expiry")} {thDate(d.expiry_date)}
                   </span>
                 )}
               </li>
@@ -226,13 +231,13 @@ export default function DocumentsPage() {
       <div className="card card-pad" style={{ marginBottom: 12 }}>
         <div className="grid-2" style={{ gridTemplateColumns: "1fr 2fr", gap: 12 }}>
           <label>
-            พนักงาน
+            {tr("documents.employee")}
             <select
               data-testid="doc-employee"
               value={employeeId}
               onChange={(e) => setEmployeeId(e.target.value)}
             >
-              <option value="">— เลือกพนักงาน —</option>
+              <option value="">{tr("documents.select-employee")}</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.employee_code} · {e.first_name_th} {e.last_name_th}
@@ -246,7 +251,7 @@ export default function DocumentsPage() {
         <form onSubmit={save} style={{ marginTop: 12, display: "grid", gap: 10 }}>
           <div className="grid-2" style={{ gridTemplateColumns: "1fr 2fr", gap: 12 }}>
             <label>
-              ประเภท
+              {tr("documents.type")}
               <select
                 data-testid="doc-type"
                 value={form.doc_type}
@@ -260,7 +265,7 @@ export default function DocumentsPage() {
               </select>
             </label>
             <label>
-              ชื่อเอกสาร
+              {tr("documents.document-name")}
               <input
                 data-testid="doc-title"
                 value={form.title}
@@ -271,7 +276,7 @@ export default function DocumentsPage() {
           </div>
           <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <label>
-              เลขที่เอกสาร
+              {tr("documents.document-number")}
               <input
                 data-testid="doc-number"
                 value={form.doc_number}
@@ -279,16 +284,16 @@ export default function DocumentsPage() {
               />
             </label>
             <label>
-              วันที่ออก
+              {tr("documents.issue-date")}
               <ThaiDateInput testId="doc-issued" value={form.issued_date} onChange={(v) => set("issued_date", v)} />
             </label>
             <label>
-              วันหมดอายุ
+              {tr("documents.expiry-date")}
               <ThaiDateInput testId="doc-expiry" value={form.expiry_date} onChange={(v) => set("expiry_date", v)} />
             </label>
           </div>
           <label>
-            ไฟล์แนบ (PDF, JPEG, PNG ≤ 5 MB)
+            {tr("documents.attached-files-pdf-jpeg-png-5")}
             <input
               data-testid="doc-file"
               type="file"
@@ -302,34 +307,34 @@ export default function DocumentsPage() {
             type="submit"
             disabled={busy || !employeeId}
           >
-            เพิ่มเอกสาร
+            {tr("documents.add-document")}
           </button>
         </form>
         ) : (
-          <p className="empty" style={{ marginTop: 12 }}>บัญชีนี้ดูเอกสารได้อย่างเดียว</p>
+          <p className="empty" style={{ marginTop: 12 }}>{tr("documents.this-account-can-only-view-documents")}</p>
         )}
       </div>
 
       <div className="card">
         {docs.length === 0 ? (
-          <div className="empty">ยังไม่มีเอกสารของพนักงานคนนี้</div>
+          <div className="empty">{tr("documents.there-are-no-documents-for-this")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>ประเภท</th>
-                <th>ชื่อเอกสาร</th>
-                <th>เลขที่</th>
-                <th>วันหมดอายุ</th>
-                <th>สถานะ</th>
-                <th>ไฟล์</th>
-                <th />
+                <th scope="col">{tr("documents.type")}</th>
+                <th scope="col">{tr("documents.document-name")}</th>
+                <th scope="col">{tr("documents.number")}</th>
+                <th scope="col">{tr("documents.expiry-date")}</th>
+                <th scope="col">{tr("documents.status")}</th>
+                <th scope="col">{tr("documents.file")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
               {docs.map((d) => (
                 <tr key={d.id} data-testid="document-row">
-                  <td>{DOC_TYPES[d.doc_type] ?? d.doc_type}</td>
+                  <td>{d.doc_type in DOC_TYPES ? tr(DOC_TYPES[d.doc_type]) : d.doc_type}</td>
                   <td>{d.title}</td>
                   <td>{d.doc_number ?? "—"}</td>
                   <td>{d.expiry_date ? thDate(d.expiry_date) : "—"}</td>
@@ -344,14 +349,14 @@ export default function DocumentsPage() {
                         rel="noreferrer"
                         style={{ marginRight: 6 }}
                       >
-                        ดาวน์โหลด
+                        {tr("documents.download")}
                       </a>
                     ) : (
                       "—"
                     )}
                     {canWrite && (
                       <label className="badge" style={{ cursor: "pointer" }}>
-                        อัปโหลด
+                        {tr("documents.upload")}
                         <input
                           data-testid="doc-upload"
                           type="file"
@@ -371,7 +376,7 @@ export default function DocumentsPage() {
                         disabled={busy}
                         onClick={() => remove(d.id)}
                       >
-                        ลบ
+                        {tr("documents.delete")}
                       </button>
                     )}
                   </td>

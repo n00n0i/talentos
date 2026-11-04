@@ -1,8 +1,10 @@
 import type { IconName } from "@/components/Icon";
 import type { Me } from "@/lib/api";
 
-export type NavItem = { href: string; labelKey: string; icon: IconName };
-export type NavGroup = { id: string; labelKey: string | null; items: NavItem[] };
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+export type NavItem = { href: string; labelKey: TranslationKey; icon: IconName };
+export type NavGroup = { id: string; labelKey: TranslationKey | null; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
   { id: "overview", labelKey: null, items: [{ href: "/", labelKey: "nav.overview", icon: "overview" }] },

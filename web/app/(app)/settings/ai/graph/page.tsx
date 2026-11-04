@@ -151,7 +151,7 @@ export default function KnowledgeGraphPage() {
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       {notice && (
         <p className="badge success" data-testid="kg-rebuilt">
           {notice}
@@ -296,9 +296,9 @@ export default function KnowledgeGraphPage() {
               <table className="table" data-testid="kg-triples">
                 <thead>
                   <tr>
-                    <th>{t("kg.subject")}</th>
-                    <th>{t("kg.relation")}</th>
-                    <th>{t("kg.object")}</th>
+                    <th scope="col">{t("kg.subject")}</th>
+                    <th scope="col">{t("kg.relation")}</th>
+                    <th scope="col">{t("kg.object")}</th>
                   </tr>
                 </thead>
                 <tbody>

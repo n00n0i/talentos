@@ -126,7 +126,7 @@ function ApprovalsKpi({
   approvals: Approvals | null;
   failed: boolean;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const counts = approvals
     ? {
         leave: approvals.leave.length,
@@ -218,7 +218,7 @@ function ApprovalsGrid({
   approvals: Approvals | null;
   failed: boolean;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const cards = approvals ? approvalCards(approvals) : [];
 
   return (
@@ -240,7 +240,7 @@ function ApprovalsGrid({
                   <span className="appr-ico">
                     <Icon name={APPROVAL_ICON[card.kind]} size={12} />
                   </span>
-                  <span className="chip">{t(APPROVAL_KIND[card.kind])}</span>
+                  <span className="chip">{tDynamic(APPROVAL_KIND[card.kind])}</span>
                   <span className="appr-when">{card.date}</span>
                 </span>
                 <span className="appr-name">{card.employee}</span>
@@ -291,7 +291,7 @@ function useFollowUps(enabled: boolean) {
 }
 
 function FollowUpsCard({ data, failed }: { data: FollowUpData | null; failed: boolean }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const rows = [
     { key: "docs", label: t("dash.followUps.docs"), href: "/documents" },
     { key: "drafts", label: t("dash.followUps.drafts"), href: "/payroll" },
@@ -361,7 +361,7 @@ function monthLabel(month: string) {
 }
 
 function OtChart({ rows, failed }: { rows: OtRow[] | null; failed: boolean }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const max = rows?.length ? Math.max(...rows.map((row) => row.ot_minutes)) : 0;
   const hasOt = max > 0;
   const slot = rows?.length ? (CHART_W - CHART_PAD * 2) / rows.length : 0;
@@ -421,7 +421,7 @@ function RunSummary({
   loaded: boolean;
   failed: boolean;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const rows = run
     ? [
         { key: "gross", label: t("dash.summary.gross"), value: compactThb(run.totalGross) },
@@ -497,7 +497,7 @@ function deptSegments(
 }
 
 function DeptDonut({ headcount, failed }: { headcount: Headcount | null; failed: boolean }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const total = headcount ? headcount.active + headcount.probation + headcount.leave : 0;
   const segments = headcount
     ? deptSegments(headcount.by_department, t("dash.unknownDept"), t("dash.dept.other"))
@@ -611,7 +611,7 @@ function ActivityCard({
   entries: ActivityEntry[] | null;
   failed: boolean;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
 
   return (
     <div className="card" data-testid="activity">
@@ -631,7 +631,7 @@ function ActivityCard({
               </span>
               <span className="recent-label">
                 {ACTIVITY_LABELS[entry.action]
-                  ? t(ACTIVITY_LABELS[entry.action])
+                  ? tDynamic(ACTIVITY_LABELS[entry.action])
                   : t("dash.activity.other")}
               </span>
               <span className="recent-when">{relativeTh(entry.created_at)}</span>
@@ -673,7 +673,7 @@ function OwnPayslipKpi({
   payslips: SelfPayslip[] | null;
   failed: boolean;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const payslip = payslips?.[0] ?? null;
   const loaded = payslips !== null;
 
@@ -704,7 +704,7 @@ function SelfServiceCard({
   payslips: SelfPayslip[] | null;
   payslipsFailed: boolean;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   // undefined = still loading, null = endpoint answered with nothing
   const [values, setValues] = useState<Partial<Record<MineKey, string | null>>>({});
   const [failed, setFailed] = useState<Partial<Record<MineKey, boolean>>>({});
@@ -797,7 +797,7 @@ function SelfServiceCard({
 }
 
 export default function DashboardPage() {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const [me, setMe] = useState<Me | null>(null);
   const [meFailed, setMeFailed] = useState(false);
   const [headcount, setHeadcount] = useState<Headcount | null>(null);

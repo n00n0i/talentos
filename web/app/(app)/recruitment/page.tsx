@@ -1,11 +1,12 @@
 "use client";
 
+import { useI18N, tNow } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 import { ThaiDateTimeInput } from "@/components/ThaiDateTimeInput";
 
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
-import { uiPrompt } from "@/lib/dialogs";
 
 type Job = {
   id: string;
@@ -64,20 +65,20 @@ type StageEvent = {
   changed_at: string;
 };
 
-const TYPES: Record<string, string> = {
-  full_time: "พนักงานประจำ",
-  part_time: "พาร์ทไทม์",
-  contract: "สัญญาจ้าง",
-  intern: "เด็กฝึกงาน",
+const TYPES: Record<string, import("@/lib/i18n-catalog").TranslationKey> = {
+  full_time: "recruitment.full-time",
+  part_time: "recruitment.part-time",
+  contract: "recruitment.employment-contract",
+  intern: "recruitment.intern",
 };
 
-const STAGES: Record<string, string> = {
-  applied: "รับใบสมัคร",
-  screening: "คัดกรอง",
-  interview: "สัมภาษณ์",
-  offer: "เสนองาน",
-  hired: "จ้างแล้ว",
-  rejected: "ไม่ผ่าน",
+const STAGES: Record<string, import("@/lib/i18n-catalog").TranslationKey> = {
+  applied: "recruitment.receive-an-application",
+  screening: "recruitment.screening",
+  interview: "recruitment.interview",
+  offer: "recruitment.job-offer",
+  hired: "recruitment.hired",
+  rejected: "recruitment.rejected",
 };
 
 const emptyJob = {
@@ -98,6 +99,7 @@ const emptyCandidate = {
 };
 
 export default function RecruitmentPage() {
+  const { t: tr } = useI18N();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selected, setSelected] = useState<Job | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -170,7 +172,7 @@ export default function RecruitmentPage() {
       setJobForm(emptyJob);
       await loadJobs();
       setSelected(created.job);
-      setNotice("เปิดรับสมัครแล้ว");
+      setNotice(tr("recruitment.applications-are-now-open"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -195,14 +197,14 @@ export default function RecruitmentPage() {
   }
 
   async function removeJob(job: Job) {
-    if (!confirm(`ลบตำแหน่ง ${job.title} และผู้สมัครทั้งหมดหรือไม่?`)) return;
+    if (!confirm(tr("recruitment.deleteJobConfirm", { title: job.title }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/jobs/${job.id}`, { method: "DELETE" });
       if (selected?.id === job.id) setSelected(null);
       await loadJobs();
-      setNotice("ลบตำแหน่งแล้ว");
+      setNotice(tr("recruitment.location-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -235,7 +237,7 @@ export default function RecruitmentPage() {
       const uploaded = cvFile ? await uploadCv(created.candidate.id, cvFile) : true;
       setCvFile(null);
       await Promise.all([loadCandidates(selected.id), loadJobs()]);
-      setNotice(uploaded ? "เพิ่มผู้สมัครแล้ว" : "เพิ่มผู้สมัครแล้ว แต่ CV อัปโหลดไม่สำเร็จ");
+      setNotice(uploaded ? tr("recruitment.candidate-added") : tr("recruitment.candidate-added-but-cv-failed-to"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -246,7 +248,7 @@ export default function RecruitmentPage() {
   async function uploadCv(id: string, file: File | undefined) {
     if (!file) return true;
     if (file.size > 5 * 1024 * 1024) {
-      setError("ไฟล์ CV ใหญ่เกิน 5 MB");
+      setError(tr("recruitment.cv-file-larger-than-5-mb"));
       return false;
     }
     try {
@@ -256,12 +258,12 @@ export default function RecruitmentPage() {
         body: file,
       });
       if (!res.ok) {
-        setError(`อัปโหลด CV ไม่สำเร็จ (${res.status})`);
+        setError(tr("recruitment.uploadCvError", { status: res.status }));
         return false;
       }
       return true;
     } catch {
-      setError("อัปโหลด CV ไม่สำเร็จ — ตรวจสอบการเชื่อมต่อ");
+      setError(tr("recruitment.failed-to-upload-cv-check-connection"));
       return false;
     }
   }
@@ -272,7 +274,7 @@ export default function RecruitmentPage() {
     setError("");
     if (await uploadCv(id, file)) {
       await Promise.all([loadCandidates(selected!.id), loadJobs()]);
-      setNotice("อัปโหลด CV แล้ว");
+      setNotice(tr("recruitment.cv-uploaded"));
     }
     setBusy(false);
   }
@@ -318,7 +320,7 @@ export default function RecruitmentPage() {
       });
       setOfferForm({ position_title: "", salary: "", start_date: "", notes: "" });
       await showOffers(offerFor);
-      setNotice("สร้างข้อเสนอแล้ว");
+      setNotice(tr("recruitment.offer-created"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -343,7 +345,7 @@ export default function RecruitmentPage() {
   }
 
   async function signOffer(id: string) {
-    const name = uiPrompt("กรอกชื่อผู้สมัครเพื่อลงนามในข้อเสนอ");
+    const name = window.prompt(tr("recruitment.enter-the-name-of-the-applicant"));
     if (!name || !name.trim()) return;
     setBusy(true);
     setError("");
@@ -353,7 +355,7 @@ export default function RecruitmentPage() {
         body: JSON.stringify({ typed_name: name.trim() }),
       });
       if (offerFor) await showOffers(offerFor);
-      setNotice("บันทึกลายมือชื่อแล้ว");
+      setNotice(tr("recruitment.signature-recorded"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -362,7 +364,7 @@ export default function RecruitmentPage() {
   }
 
   async function removeOffer(id: string) {
-    if (!confirm("ลบข้อเสนอนี้หรือไม่?")) return;
+    if (!confirm(tr("recruitment.delete-this-offer"))) return;
     setBusy(true);
     setError("");
     try {
@@ -405,7 +407,7 @@ export default function RecruitmentPage() {
       });
       setInterviewForm({ scheduled_at: "", mode: "onsite", location: "", notes: "" });
       await showInterviews(interviewFor);
-      setNotice("นัดสัมภาษณ์แล้ว");
+      setNotice(tr("recruitment.an-interview-has-been-arranged"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -430,7 +432,7 @@ export default function RecruitmentPage() {
   }
 
   async function removeInterview(id: string) {
-    if (!confirm("ลบนัดสัมภาษณ์นี้หรือไม่?")) return;
+    if (!confirm(tr("recruitment.delete-this-interview-appointment"))) return;
     setBusy(true);
     setError("");
     try {
@@ -460,13 +462,13 @@ export default function RecruitmentPage() {
   }
 
   async function removeCandidate(candidate: Candidate) {
-    if (!confirm(`ลบผู้สมัคร ${candidate.first_name} ${candidate.last_name} หรือไม่?`)) return;
+    if (!confirm(tr("recruitment.deleteCandidateConfirm", { first: candidate.first_name, last: candidate.last_name }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/candidates/${candidate.id}`, { method: "DELETE" });
       await Promise.all([loadCandidates(candidate.job_opening_id), loadJobs()]);
-      setNotice("ลบผู้สมัครแล้ว");
+      setNotice(tr("recruitment.candidate-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -478,21 +480,21 @@ export default function RecruitmentPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>สรรหาบุคลากร</h1>
-          <p className="page-sub">ตำแหน่งที่เปิดรับและสายงานผู้สมัคร</p>
+          <h1>{tr("recruitment.recruitment")}</h1>
+          <p className="page-sub">{tr("recruitment.open-positions-and-candidate-pipeline")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       {canWrite && (
         <div className="card card-pad" style={{ marginBottom: 12 }}>
-          <h2 style={{ fontSize: 16, marginBottom: 10 }}>เปิดตำแหน่งใหม่</h2>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>{tr("recruitment.open-a-new-position")}</h2>
           <form onSubmit={createJob} style={{ display: "grid", gap: 10 }}>
             <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr", gap: 12 }}>
               <label>
-                ชื่อตำแหน่ง
+                {tr("recruitment.position-name")}
                 <input
                   data-testid="job-title"
                   value={jobForm.title}
@@ -501,7 +503,7 @@ export default function RecruitmentPage() {
                 />
               </label>
               <label>
-                แผนก
+                {tr("recruitment.department")}
                 <input
                   data-testid="job-department"
                   value={jobForm.department}
@@ -511,7 +513,7 @@ export default function RecruitmentPage() {
             </div>
             <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr 2fr", gap: 12 }}>
               <label>
-                ประเภท
+                {tr("recruitment.type")}
                 <select
                   data-testid="job-type"
                   value={jobForm.employment_type}
@@ -525,7 +527,7 @@ export default function RecruitmentPage() {
                 </select>
               </label>
               <label>
-                จำนวนที่รับ
+                {tr("recruitment.headcount")}
                 <input
                   data-testid="job-headcount"
                   type="number"
@@ -538,7 +540,7 @@ export default function RecruitmentPage() {
                 />
               </label>
               <label>
-                รายละเอียด
+                {tr("recruitment.details")}
                 <input
                   data-testid="job-description"
                   value={jobForm.description}
@@ -547,7 +549,7 @@ export default function RecruitmentPage() {
               </label>
             </div>
             <button className="btn btn-primary" data-testid="create-job" type="submit" disabled={busy}>
-              เปิดรับสมัคร
+              {tr("recruitment.open-for-applications")}
             </button>
           </form>
         </div>
@@ -555,17 +557,17 @@ export default function RecruitmentPage() {
 
       <div className="card" style={{ marginBottom: 12 }}>
         {jobs.length === 0 ? (
-          <div className="empty">ยังไม่มีตำแหน่งที่เปิดรับ</div>
+          <div className="empty">{tr("recruitment.no-open-positions-yet")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>ตำแหน่ง</th>
-                <th>แผนก</th>
-                <th>ประเภท</th>
-                <th>สถานะ</th>
-                <th>ผู้สมัคร</th>
-                <th />
+                <th scope="col">{tr("recruitment.position")}</th>
+                <th scope="col">{tr("recruitment.department")}</th>
+                <th scope="col">{tr("recruitment.type")}</th>
+                <th scope="col">{tr("recruitment.status")}</th>
+                <th scope="col">{tr("recruitment.candidate")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
@@ -584,14 +586,14 @@ export default function RecruitmentPage() {
                     )}
                   </td>
                   <td>{job.department ?? "—"}</td>
-                  <td>{TYPES[job.employment_type] ?? job.employment_type}</td>
+                  <td>{job.employment_type in TYPES ? tr(TYPES[job.employment_type]) : job.employment_type}</td>
                   <td>
                     <span className={`badge ${job.status === "open" ? "success" : ""}`}>
-                      {job.status === "open" ? "เปิดรับ" : "ปิดรับ"}
+                      {job.status === "open" ? tr("recruitment.open") : tr("recruitment.closed")}
                     </span>
                   </td>
                   <td>
-                    {job.candidate_count} คน · จ้างแล้ว {job.hired_count}/{job.headcount}
+                    {job.candidate_count} {tr("recruitment.text")} {job.hired_count}/{job.headcount}
                   </td>
                   <td>
                     {canWrite && (
@@ -603,7 +605,7 @@ export default function RecruitmentPage() {
                           onClick={() => toggleJob(job)}
                           style={{ marginRight: 6 }}
                         >
-                          {job.status === "open" ? "ปิดรับ" : "เปิดใหม่"}
+                          {job.status === "open" ? tr("recruitment.closed") : tr("recruitment.reopen")}
                         </button>
                         <button
                           className="btn btn-sm"
@@ -611,7 +613,7 @@ export default function RecruitmentPage() {
                           disabled={busy}
                           onClick={() => removeJob(job)}
                         >
-                          ลบ
+                          {tr("recruitment.delete")}
                         </button>
                       </>
                     )}
@@ -626,14 +628,14 @@ export default function RecruitmentPage() {
       {selected && (
         <div className="card card-pad">
           <div className="card-head">
-            <h2 style={{ fontSize: 16 }}>ผู้สมัคร: {selected.title}</h2>
+            <h2 style={{ fontSize: 16 }}>{tr("recruitment.text-2")} {selected.title}</h2>
           </div>
 
           {canWrite && (
             <form onSubmit={addCandidate} style={{ display: "grid", gap: 10, marginBottom: 12 }}>
               <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                 <label>
-                  ชื่อ
+                  {tr("recruitment.name")}
                   <input
                     data-testid="cand-first"
                     value={candForm.first_name}
@@ -642,7 +644,7 @@ export default function RecruitmentPage() {
                   />
                 </label>
                 <label>
-                  นามสกุล
+                  {tr("recruitment.surname")}
                   <input
                     data-testid="cand-last"
                     value={candForm.last_name}
@@ -651,7 +653,7 @@ export default function RecruitmentPage() {
                   />
                 </label>
                 <label>
-                  อีเมล
+                  {tr("recruitment.email")}
                   <input
                     data-testid="cand-email"
                     type="email"
@@ -662,7 +664,7 @@ export default function RecruitmentPage() {
               </div>
               <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr 2fr", gap: 12 }}>
                 <label>
-                  โทรศัพท์
+                  {tr("recruitment.telephone")}
                   <input
                     data-testid="cand-phone"
                     value={candForm.phone}
@@ -670,7 +672,7 @@ export default function RecruitmentPage() {
                   />
                 </label>
                 <label>
-                  แหล่งที่มา
+                  {tr("recruitment.source")}
                   <input
                     data-testid="cand-source"
                     value={candForm.source}
@@ -678,7 +680,7 @@ export default function RecruitmentPage() {
                   />
                 </label>
                 <label>
-                  หมายเหตุ
+                  {tr("recruitment.notes")}
                   <input
                     data-testid="cand-note"
                     value={candForm.note}
@@ -696,24 +698,24 @@ export default function RecruitmentPage() {
                 />
               </label>
               <button className="btn" data-testid="add-candidate" type="submit" disabled={busy}>
-                เพิ่มผู้สมัคร
+                {tr("recruitment.add-candidate")}
               </button>
             </form>
           )}
 
           {candidates.length === 0 ? (
-            <div className="empty">ยังไม่มีผู้สมัครสำหรับตำแหน่งนี้</div>
+            <div className="empty">{tr("recruitment.there-are-no-applicants-for-this")}</div>
           ) : (
             <table className="table">
               <thead>
                 <tr>
-                  <th>ชื่อ</th>
-                  <th>ติดต่อ</th>
-                  <th>แหล่งที่มา</th>
-                  <th>CV</th>
-                  <th>ขั้นตอน</th>
-                  <th>สมัครเมื่อ</th>
-                  {canWrite && <th />}
+                  <th scope="col">{tr("recruitment.name")}</th>
+                  <th scope="col">{tr("recruitment.contact")}</th>
+                  <th scope="col">{tr("recruitment.source")}</th>
+                  <th scope="col">CV</th>
+                  <th scope="col">{tr("recruitment.stage")}</th>
+                  <th scope="col">{tr("recruitment.apply-when")}</th>
+                  {canWrite && <th scope="col" />}
                 </tr>
               </thead>
               <tbody>
@@ -726,21 +728,21 @@ export default function RecruitmentPage() {
                         data-testid="candidate-history-button"
                         onClick={() => showHistory(candidate)}
                       >
-                        ประวัติ
+                        {tr("recruitment.history")}
                       </button>{" "}
                       <button
                         className="badge"
                         data-testid="candidate-interview-button"
                         onClick={() => showInterviews(candidate)}
                       >
-                        สัมภาษณ์
+                        {tr("recruitment.interview")}
                       </button>{" "}
                       <button
                         className="badge"
                         data-testid="candidate-offer-button"
                         onClick={() => showOffers(candidate)}
                       >
-                        ข้อเสนอ
+                        {tr("recruitment.offer")}
                       </button>
                       {candidate.note && (
                         <div style={{ color: "var(--muted)", fontSize: 13 }}>{candidate.note}</div>
@@ -761,14 +763,14 @@ export default function RecruitmentPage() {
                           rel="noreferrer"
                           style={{ marginRight: 6 }}
                         >
-                          ดาวน์โหลด
+                          {tr("recruitment.download")}
                         </a>
                       ) : (
                         "—"
                       )}
                       {canWrite && (
                         <label className="badge" style={{ cursor: "pointer" }}>
-                          อัปโหลด
+                          {tr("recruitment.upload")}
                           <input
                             data-testid="candidate-cv-upload"
                             type="file"
@@ -789,7 +791,7 @@ export default function RecruitmentPage() {
                       >
                         {Object.entries(STAGES).map(([value, label]) => (
                           <option key={value} value={value}>
-                            {label}
+                            {tr(label)}
                           </option>
                         ))}
                       </select>
@@ -803,7 +805,7 @@ export default function RecruitmentPage() {
                           disabled={busy}
                           onClick={() => removeCandidate(candidate)}
                         >
-                          ลบ
+                          {tr("recruitment.delete")}
                         </button>
                       </td>
                     )}
@@ -816,13 +818,13 @@ export default function RecruitmentPage() {
           {offerFor && (
             <div className="card card-pad" data-testid="candidate-offers" style={{ marginTop: 12 }}>
               <h3 style={{ fontSize: 15 }}>
-                ข้อเสนองาน: {offerFor.first_name} {offerFor.last_name}
+                {tr("recruitment.text-3")} {offerFor.first_name} {offerFor.last_name}
               </h3>
               {canWrite && (
                 <form onSubmit={createOffer} style={{ display: "grid", gap: 10, marginBottom: 12 }}>
                   <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
                     <label>
-                      ตำแหน่ง
+                      {tr("recruitment.position")}
                       <input
                         data-testid="offer-position"
                         value={offerForm.position_title}
@@ -833,7 +835,7 @@ export default function RecruitmentPage() {
                       />
                     </label>
                     <label>
-                      เงินเดือน (บาท)
+                      {tr("recruitment.salary-baht")}
                       <input
                         data-testid="offer-salary"
                         type="number"
@@ -845,12 +847,12 @@ export default function RecruitmentPage() {
                       />
                     </label>
                     <label>
-                      วันที่เริ่มงาน
+                      {tr("recruitment.start-date")}
                       <ThaiDateInput testId="offer-start" value={offerForm.start_date} onChange={(v) => setOfferForm({ ...offerForm, start_date: v })} required />
                     </label>
                   </div>
                   <label>
-                    หมายเหตุ
+                    {tr("recruitment.notes")}
                     <input
                       data-testid="offer-notes"
                       value={offerForm.notes}
@@ -858,19 +860,18 @@ export default function RecruitmentPage() {
                     />
                   </label>
                   <button className="btn" data-testid="create-offer" type="submit" disabled={busy}>
-                    สร้างข้อเสนอ
+                    {tr("recruitment.create-offer")}
                   </button>
                 </form>
               )}
 
               {offers.length === 0 ? (
-                <div className="empty">ยังไม่มีข้อเสนอ</div>
+                <div className="empty">{tr("recruitment.no-offers-yet")}</div>
               ) : (
                 <ul className="list">
                   {offers.map((offer) => (
                     <li key={offer.id} data-testid="offer-row">
-                      {offer.position_title} · {Number(offer.salary).toLocaleString("th-TH")} บาท ·
-                      เริ่ม {offer.start_date}
+                      {offer.position_title} · {Number(offer.salary).toLocaleString("th-TH")} {tr("recruitment.text-4")} {offer.start_date}
                       <a
                         className="badge accent"
                         data-testid="offer-pdf"
@@ -888,10 +889,10 @@ export default function RecruitmentPage() {
                         onChange={(e) => setOfferStatus(offer.id, e.target.value)}
                         style={{ marginLeft: 8 }}
                       >
-                        <option value="draft">ร่าง</option>
-                        <option value="sent">ส่งแล้ว</option>
-                        <option value="accepted">ตอบรับ</option>
-                        <option value="declined">ปฏิเสธ</option>
+                        <option value="draft">{tr("recruitment.draft")}</option>
+                        <option value="sent">{tr("recruitment.sent")}</option>
+                        <option value="accepted">{tr("recruitment.accept")}</option>
+                        <option value="declined">{tr("recruitment.reject")}</option>
                       </select>
                       <button
                         className="btn btn-sm"
@@ -900,7 +901,7 @@ export default function RecruitmentPage() {
                         onClick={() => signOffer(offer.id)}
                         style={{ marginLeft: 6 }}
                       >
-                        ลายมือชื่อ
+                        {tr("recruitment.signature")}
                       </button>
                       {canWrite && (
                         <button
@@ -910,7 +911,7 @@ export default function RecruitmentPage() {
                           onClick={() => removeOffer(offer.id)}
                           style={{ marginLeft: 6 }}
                         >
-                          ลบ
+                          {tr("recruitment.delete")}
                         </button>
                       )}
                     </li>
@@ -923,13 +924,13 @@ export default function RecruitmentPage() {
           {interviewFor && (
             <div className="card card-pad" data-testid="candidate-interviews" style={{ marginTop: 12 }}>
               <h3 style={{ fontSize: 15 }}>
-                นัดสัมภาษณ์: {interviewFor.first_name} {interviewFor.last_name}
+                {tr("recruitment.text-5")} {interviewFor.first_name} {interviewFor.last_name}
               </h3>
               {canWrite && (
                 <form onSubmit={scheduleInterview} style={{ display: "grid", gap: 10, marginBottom: 12 }}>
                   <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr 2fr", gap: 12 }}>
                     <label>
-                      วันเวลา
+                      {tr("recruitment.date-and-time")}
                       <ThaiDateTimeInput
                         testId="interview-when"
                         value={interviewForm.scheduled_at}
@@ -940,7 +941,7 @@ export default function RecruitmentPage() {
                       />
                     </label>
                     <label>
-                      รูปแบบ
+                      {tr("recruitment.type-2")}
                       <select
                         data-testid="interview-mode"
                         value={interviewForm.mode}
@@ -948,13 +949,13 @@ export default function RecruitmentPage() {
                           setInterviewForm({ ...interviewForm, mode: e.target.value })
                         }
                       >
-                        <option value="onsite">ที่สำนักงาน</option>
-                        <option value="online">ออนไลน์</option>
-                        <option value="phone">โทรศัพท์</option>
+                        <option value="onsite">{tr("recruitment.onsite")}</option>
+                        <option value="online">{tr("recruitment.online")}</option>
+                        <option value="phone">{tr("recruitment.telephone")}</option>
                       </select>
                     </label>
                     <label>
-                      สถานที่ / ลิงก์
+                      {tr("recruitment.location-link")}
                       <input
                         data-testid="interview-location"
                         value={interviewForm.location}
@@ -965,7 +966,7 @@ export default function RecruitmentPage() {
                     </label>
                   </div>
                   <label>
-                    หมายเหตุ
+                    {tr("recruitment.notes")}
                     <input
                       data-testid="interview-notes"
                       value={interviewForm.notes}
@@ -975,23 +976,23 @@ export default function RecruitmentPage() {
                     />
                   </label>
                   <button className="btn" data-testid="schedule-interview" type="submit" disabled={busy}>
-                    นัดสัมภาษณ์
+                    {tr("recruitment.schedule-interview")}
                   </button>
                 </form>
               )}
 
               {interviews.length === 0 ? (
-                <div className="empty">ยังไม่มีการนัดสัมภาษณ์</div>
+                <div className="empty">{tr("recruitment.no-interviews-scheduled-yet")}</div>
               ) : (
                 <ul className="list">
                   {interviews.map((interview) => (
                     <li key={interview.id} data-testid="interview-row">
                       {new Date(interview.scheduled_at).toLocaleString("th-TH")} ·{" "}
                       {interview.mode === "online"
-                        ? "ออนไลน์"
+                        ? tr("recruitment.online")
                         : interview.mode === "phone"
-                          ? "โทรศัพท์"
-                          : "ที่สำนักงาน"}
+                          ? tr("recruitment.telephone")
+                          : tr("recruitment.onsite")}
                       {interview.location ? ` · ${interview.location}` : ""}
                       {interview.notes ? ` · ${interview.notes}` : ""}
                       <select
@@ -1001,9 +1002,9 @@ export default function RecruitmentPage() {
                         onChange={(e) => setInterviewStatus(interview.id, e.target.value)}
                         style={{ marginLeft: 8 }}
                       >
-                        <option value="scheduled">นัดไว้</option>
-                        <option value="completed">เสร็จสิ้น</option>
-                        <option value="cancelled">ยกเลิก</option>
+                        <option value="scheduled">{tr("recruitment.scheduled")}</option>
+                        <option value="completed">{tr("recruitment.completed")}</option>
+                        <option value="cancelled">{tr("recruitment.cancel")}</option>
                       </select>
                       {canWrite && (
                         <button
@@ -1013,7 +1014,7 @@ export default function RecruitmentPage() {
                           onClick={() => removeInterview(interview.id)}
                           style={{ marginLeft: 6 }}
                         >
-                          ลบ
+                          {tr("recruitment.delete")}
                         </button>
                       )}
                     </li>
@@ -1026,13 +1027,13 @@ export default function RecruitmentPage() {
           {historyFor && (
             <div className="card card-pad" data-testid="candidate-history" style={{ marginTop: 12 }}>
               <h3 style={{ fontSize: 15 }}>
-                ประวัติขั้นตอน: {historyFor.first_name} {historyFor.last_name}
+                {tr("recruitment.text-6")} {historyFor.first_name} {historyFor.last_name}
               </h3>
               <ul className="list">
                 {history.map((event) => (
                   <li key={event.id}>
-                    {event.from_stage ? STAGES[event.from_stage] ?? event.from_stage : "เริ่มต้น"} →{" "}
-                    {STAGES[event.to_stage] ?? event.to_stage}
+                    {event.from_stage ? (event.from_stage in STAGES ? tr(STAGES[event.from_stage]) : event.from_stage) : tr("recruitment.start")} →{" "}
+                    {event.to_stage in STAGES ? tr(STAGES[event.to_stage]) : event.to_stage}
                     <span style={{ marginLeft: 8, color: "var(--muted)" }}>
                       {new Date(event.changed_at).toLocaleString("th-TH")}
                     </span>

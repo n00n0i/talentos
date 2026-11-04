@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N, tNow } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 
 import { useCallback, useEffect, useState } from "react";
@@ -30,14 +32,15 @@ type ExpiringTraining = Training & {
 const emptyForm = { title: "", provider: "", completed_on: "", expires_on: "" };
 
 function expiryBadge(days: number | null) {
-  if (days === null) return <span className="badge">ไม่มีวันหมดอายุ</span>;
-  if (days < 0) return <span className="badge danger">หมดอายุแล้ว {Math.abs(days)} วัน</span>;
-  if (days === 0) return <span className="badge danger">หมดอายุวันนี้</span>;
-  if (days <= 90) return <span className="badge warning">เหลือ {days} วัน</span>;
-  return <span className="badge success">เหลือ {days} วัน</span>;
+  if (days === null) return <span className="badge">{tNow("training.no-expiration-date")}</span>;
+  if (days < 0) return <span className="badge danger">{tNow("training.text")} {Math.abs(days)} {tNow("training.day")}</span>;
+  if (days === 0) return <span className="badge danger">{tNow("training.expires-today")}</span>;
+  if (days <= 90) return <span className="badge warning">{tNow("training.remaining")} {days} {tNow("training.day")}</span>;
+  return <span className="badge success">{tNow("training.remaining")} {days} {tNow("training.day")}</span>;
 }
 
 export default function TrainingPage() {
+  const { t: tr } = useI18N();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
   const [records, setRecords] = useState<Training[]>([]);
@@ -94,7 +97,7 @@ export default function TrainingPage() {
       });
       setForm(emptyForm);
       await Promise.all([loadRecords(employeeId), loadExpiring()]);
-      setNotice("บันทึกการอบรมแล้ว");
+      setNotice(tr("training.training-recorded"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -103,13 +106,13 @@ export default function TrainingPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("ลบประวัติการอบรมนี้หรือไม่?")) return;
+    if (!confirm(tr("training.delete-this-training-history-or-not"))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/training/${id}`, { method: "DELETE" });
       await Promise.all([loadRecords(employeeId), loadExpiring()]);
-      setNotice("ลบประวัติการอบรมแล้ว");
+      setNotice(tr("training.training-history-has-been-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -121,20 +124,20 @@ export default function TrainingPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>อบรมและใบรับรอง</h1>
-          <p className="page-sub">ประวัติการอบรมและใบรับรองที่ต้องต่ออายุ</p>
+          <h1>{tr("training.training-certificates")}</h1>
+          <p className="page-sub">{tr("training.training-history-and-certificates-to-renew")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="card card-pad" style={{ marginBottom: 12 }}>
         <div className="card-head">
-          <h2 style={{ fontSize: 16 }}>ใบรับรองภายใน 90 วัน / หมดอายุไม่เกิน 1 ปี</h2>
+          <h2 style={{ fontSize: 16 }}>{tr("training.certificates-within-90-days-expired-within")}</h2>
         </div>
         {expiring.length === 0 ? (
-          <div className="empty">ไม่มีใบรับรองที่ใกล้หมดอายุ</div>
+          <div className="empty">{tr("training.there-are-no-certificates-about-to")}</div>
         ) : (
           <ul className="list" data-testid="training-expiring">
             {expiring.map((t) => (
@@ -145,7 +148,7 @@ export default function TrainingPage() {
                 {expiryBadge(t.days_left)}
                 {t.expires_on && (
                   <span style={{ marginLeft: 8, color: "var(--muted)" }}>
-                    หมดอายุ {thDate(t.expires_on)}
+                    {tr("training.expiry")} {thDate(t.expires_on)}
                   </span>
                 )}
               </li>
@@ -156,7 +159,7 @@ export default function TrainingPage() {
 
       <div className="card card-pad" style={{ marginBottom: 12 }}>
         <label>
-          พนักงาน
+          {tr("training.employee")}
           <select
             data-testid="training-employee"
             value={employeeId}
@@ -165,7 +168,7 @@ export default function TrainingPage() {
               setEmployeeId(e.target.value);
             }}
           >
-            <option value="">— เลือกพนักงาน —</option>
+            <option value="">{tr("training.select-employee")}</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.employee_code} · {e.first_name_th} {e.last_name_th}
@@ -178,7 +181,7 @@ export default function TrainingPage() {
           <form onSubmit={save} style={{ marginTop: 12, display: "grid", gap: 10 }}>
             <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr", gap: 12 }}>
               <label>
-                หลักสูตร / หัวข้อ
+                {tr("training.course-topic")}
                 <input
                   data-testid="training-title"
                   value={form.title}
@@ -187,7 +190,7 @@ export default function TrainingPage() {
                 />
               </label>
               <label>
-                ผู้จัดอบรม
+                {tr("training.training-provider")}
                 <input
                   data-testid="training-provider"
                   value={form.provider}
@@ -197,11 +200,11 @@ export default function TrainingPage() {
             </div>
             <div className="grid-2" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>
-                วันที่อบรมเสร็จ
+                {tr("training.date-of-completion-of-training")}
                 <ThaiDateInput testId="training-completed" value={form.completed_on} onChange={(v) => setForm({ ...form, completed_on: v })} />
               </label>
               <label>
-                วันหมดอายุใบรับรอง
+                {tr("training.certificate-expiration-date")}
                 <ThaiDateInput testId="training-expires" value={form.expires_on} onChange={(v) => setForm({ ...form, expires_on: v })} />
               </label>
             </div>
@@ -211,7 +214,7 @@ export default function TrainingPage() {
               type="submit"
               disabled={busy || !employeeId}
             >
-              บันทึกการอบรม
+              {tr("training.training-record")}
             </button>
           </form>
         )}
@@ -219,19 +222,19 @@ export default function TrainingPage() {
 
       <div className="card">
         {!employeeId ? (
-          <div className="empty">เลือกพนักงานเพื่อดูประวัติการอบรม</div>
+          <div className="empty">{tr("training.select-an-employee-to-view-their")}</div>
         ) : records.length === 0 ? (
-          <div className="empty">ยังไม่มีประวัติการอบรมของพนักงานคนนี้</div>
+          <div className="empty">{tr("training.there-is-no-training-history-of")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>หลักสูตร</th>
-                <th>ผู้จัด</th>
-                <th>อบรมเมื่อ</th>
-                <th>หมดอายุ</th>
-                <th>สถานะ</th>
-                {canWrite && <th />}
+                <th scope="col">{tr("training.course")}</th>
+                <th scope="col">{tr("training.organizer")}</th>
+                <th scope="col">{tr("training.when-training")}</th>
+                <th scope="col">{tr("training.expiry")}</th>
+                <th scope="col">{tr("training.status")}</th>
+                {canWrite && <th scope="col" />}
               </tr>
             </thead>
             <tbody>
@@ -250,7 +253,7 @@ export default function TrainingPage() {
                         disabled={busy}
                         onClick={() => remove(t.id)}
                       >
-                        ลบ
+                        {tr("training.delete")}
                       </button>
                     </td>
                   )}

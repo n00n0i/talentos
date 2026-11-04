@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,6 +28,7 @@ type Task = {
 const emptyForm = { title: "", notes: "", due_date: "" };
 
 export default function OnboardingPage() {
+  const { t: tr } = useI18N();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -71,7 +74,7 @@ export default function OnboardingPage() {
         method: "POST",
       });
       setTasks(res.tasks);
-      setNotice("สร้างรายการมาตรฐานแล้ว");
+      setNotice(tr("onboarding.standard-checklist-created"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -96,7 +99,7 @@ export default function OnboardingPage() {
       });
       setForm(emptyForm);
       await loadTasks(employeeId);
-      setNotice("เพิ่มงานแล้ว");
+      setNotice(tr("onboarding.work-added"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -121,13 +124,13 @@ export default function OnboardingPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("ลบงานนี้หรือไม่?")) return;
+    if (!confirm(tr("onboarding.delete-this-job-or-not"))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/onboarding/${id}`, { method: "DELETE" });
       await loadTasks(employeeId);
-      setNotice("ลบงานแล้ว");
+      setNotice(tr("onboarding.work-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -139,18 +142,18 @@ export default function OnboardingPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Onboarding พนักงาน</h1>
-          <p className="page-sub">รายการงานต้อนรับ เอกสาร และการตั้งค่าสำหรับพนักงานใหม่</p>
+          <h1>{tr("onboarding.onboarding-employees")}</h1>
+          <p className="page-sub">{tr("onboarding.onboarding-tasks-documents-and-setup-for")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="card card-pad" style={{ marginBottom: 12, display: "grid", gap: 12 }}>
         <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr", gap: 12, alignItems: "end" }}>
           <label>
-            พนักงาน
+            {tr("onboarding.employee")}
             <select
               data-testid="onboarding-employee"
               value={employeeId}
@@ -159,7 +162,7 @@ export default function OnboardingPage() {
                 setEmployeeId(e.target.value);
               }}
             >
-              <option value="">— เลือกพนักงาน —</option>
+              <option value="">{tr("onboarding.select-employee")}</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.employee_code} · {e.first_name_th} {e.last_name_th}
@@ -174,14 +177,14 @@ export default function OnboardingPage() {
               disabled={busy || !employeeId}
               onClick={startStandard}
             >
-              สร้างรายการมาตรฐาน
+              {tr("onboarding.create-standard-checklist")}
             </button>
           )}
         </div>
 
         {employeeId && (
           <p data-testid="onboarding-progress">
-            เสร็จ {done}/{tasks.length} รายการ
+            {tr("onboarding.finish")} {done}/{tasks.length} {tr("onboarding.items")}
           </p>
         )}
 
@@ -189,7 +192,7 @@ export default function OnboardingPage() {
           <form onSubmit={addTask} style={{ display: "grid", gap: 10 }}>
             <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr", gap: 12 }}>
               <label>
-                งานที่ต้องทำ
+                {tr("onboarding.work-to-be-done")}
                 <input
                   data-testid="task-title"
                   value={form.title}
@@ -198,12 +201,12 @@ export default function OnboardingPage() {
                 />
               </label>
               <label>
-                กำหนดเสร็จ
+                {tr("onboarding.due-for-completion")}
                 <ThaiDateInput testId="task-due" value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} />
               </label>
             </div>
             <label>
-              หมายเหตุ
+              {tr("onboarding.notes")}
               <input
                 data-testid="task-notes"
                 value={form.notes}
@@ -216,7 +219,7 @@ export default function OnboardingPage() {
               type="submit"
               disabled={busy || !employeeId}
             >
-              เพิ่มงาน
+              {tr("onboarding.add-task")}
             </button>
           </form>
         )}
@@ -224,18 +227,18 @@ export default function OnboardingPage() {
 
       <div className="card">
         {!employeeId ? (
-          <div className="empty">เลือกพนักงานเพื่อดูรายการ onboarding</div>
+          <div className="empty">{tr("onboarding.select-an-employee-to-view-their")}</div>
         ) : tasks.length === 0 ? (
-          <div className="empty">ยังไม่มีรายการ onboarding สำหรับพนักงานคนนี้</div>
+          <div className="empty">{tr("onboarding.no-onboarding-tasks-for-this-employee")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>เสร็จ</th>
-                <th>งาน</th>
-                <th>กำหนดเสร็จ</th>
-                <th>สถานะ</th>
-                {canWrite && <th />}
+                <th scope="col">{tr("onboarding.finish")}</th>
+                <th scope="col">{tr("onboarding.work")}</th>
+                <th scope="col">{tr("onboarding.due-for-completion")}</th>
+                <th scope="col">{tr("onboarding.status")}</th>
+                {canWrite && <th scope="col" />}
               </tr>
             </thead>
             <tbody>
@@ -245,7 +248,7 @@ export default function OnboardingPage() {
                     <input
                       data-testid="task-done"
                       type="checkbox"
-                      aria-label={`เสร็จ: ${t.title}`}
+                      aria-label={tr("onboarding.markDoneAria", { title: t.title })}
                       checked={t.status === "done"}
                       disabled={busy || !canWrite}
                       onChange={(e) => toggle(t, e.target.checked)}
@@ -258,13 +261,13 @@ export default function OnboardingPage() {
                   <td>{t.due_date ? thDate(t.due_date) : "—"}</td>
                   <td>
                     {t.status === "done" ? (
-                      <span className="badge success">เสร็จแล้ว</span>
+                      <span className="badge success">{tr("onboarding.finished")}</span>
                     ) : t.days_left !== null && t.days_left < 0 ? (
-                      <span className="badge danger">เลยกำหนด {Math.abs(t.days_left)} วัน</span>
+                      <span className="badge danger">{tr("onboarding.text")} {Math.abs(t.days_left)} {tr("onboarding.day")}</span>
                     ) : t.days_left === 0 ? (
-                      <span className="badge warning">ครบกำหนดวันนี้</span>
+                      <span className="badge warning">{tr("onboarding.due-today")}</span>
                     ) : (
-                      <span className="badge">รอทำ</span>
+                      <span className="badge">{tr("onboarding.waiting-to-do-it")}</span>
                     )}
                   </td>
                   {canWrite && (
@@ -275,7 +278,7 @@ export default function OnboardingPage() {
                         disabled={busy}
                         onClick={() => remove(t.id)}
                       >
-                        ลบ
+                        {tr("onboarding.delete")}
                       </button>
                     </td>
                   )}

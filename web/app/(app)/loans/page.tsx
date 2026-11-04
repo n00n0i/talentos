@@ -1,5 +1,9 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
@@ -43,13 +47,14 @@ type Installment = {
 
 const REVERSIBLE_RUN_STATUS = ["draft", "calculating", "pending_approval"];
 
-const STATUS_LABEL: Record<string, string> = {
-  active: "กำลังผ่อน",
-  paid: "ชำระครบ",
-  cancelled: "ยกเลิก",
+const STATUS_LABEL: Record<string, TranslationKey> = {
+  active: "loans.paying-installments",
+  paid: "loans.paid-in-full",
+  cancelled: "loans.cancel",
 };
 
 export default function LoansPage() {
+  const { t: tr } = useI18N();
   const [loans, setLoans] = useState<Loan[] | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [employeeId, setEmployeeId] = useState("");
@@ -95,7 +100,7 @@ export default function LoansPage() {
           note: note.trim() || null,
         }),
       });
-      setNotice("สร้างเงินกู้แล้ว");
+      setNotice(tr("loans.loan-created"));
       setEmployeeId("");
       setPrincipal("");
       setInstallment("");
@@ -111,12 +116,12 @@ export default function LoansPage() {
   }
 
   async function cancel(loan: Loan) {
-    if (!confirm(`ยืนยันยกเลิกเงินกู้ของ ${loan.employee_code}?`)) return;
+    if (!confirm(tr("loans.cancelConfirm", { code: loan.employee_code }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/loans/${loan.id}/cancel`, { method: "POST" });
-      setNotice("ยกเลิกเงินกู้แล้ว");
+      setNotice(tr("loans.loan-canceled"));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -127,13 +132,13 @@ export default function LoansPage() {
 
   async function payoffLoan(loan: Loan) {
     const input = prompt(
-      `จ่ายปิด/จ่ายบางส่วน — ${loan.employee_code} ${loan.employee_name}\nคงเหลือ ฿${thb(loan.balance)}`,
+      tr("loans.payoffPrompt", { code: loan.employee_code, name: loan.employee_name, balance: thb(loan.balance) }),
       loan.balance,
     );
     if (input === null) return;
     const amount = Number(input);
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError("ระบุจำนวนเงินที่มากกว่า 0");
+      setError(tr("loans.specify-an-amount-greater-than-0"));
       return;
     }
     setBusy(true);
@@ -144,7 +149,7 @@ export default function LoansPage() {
         method: "POST",
         body: JSON.stringify({ amount, note: null }),
       });
-      setNotice("บันทึกการชำระแล้ว");
+      setNotice(tr("loans.payment-recorded"));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -171,7 +176,7 @@ export default function LoansPage() {
   async function reverseInstallment(loan: Loan, installment: Installment) {
     if (
       !confirm(
-        `ยืนยันกลับรายการงวดผ่อนของ ${loan.employee_code} ฿${thb(installment.amount)}?`,
+        tr("loans.reverseConfirm", { code: loan.employee_code, amount: thb(installment.amount) }),
       )
     )
       return;
@@ -183,7 +188,7 @@ export default function LoansPage() {
         `api/v1/loans/${loan.id}/installments/${installment.payroll_run_id}/reverse`,
         { method: "POST" },
       );
-      setNotice("กลับรายการแล้ว — ต้องคำนวณรอบเงินเดือนใหม่");
+      setNotice(tr("loans.the-transaction-has-been-reversed-the"));
       setInstallments((prev) => ({ ...prev, [loan.id]: null }));
       await load();
     } catch (e) {
@@ -197,19 +202,19 @@ export default function LoansPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>สินเชื่อ/เงินกู้</h1>
-          <p className="page-sub">บันทึกเงินกู้พนักงานและติดตามยอดคงเหลือ</p>
+          <h1>{tr("loans.loans")}</h1>
+          <p className="page-sub">{tr("loans.record-employee-loans-and-track-balances")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       <form className="card card-pad" onSubmit={submit} style={{ marginBottom: 16 }}>
-        <h2 style={{ marginBottom: 14 }}>สร้างเงินกู้</h2>
+        <h2 style={{ marginBottom: 14 }}>{tr("loans.create-a-loan")}</h2>
         <div className="form-row" style={{ alignItems: "end" }}>
           <div className="field">
-            <label htmlFor="loan-employee">พนักงาน</label>
+            <label htmlFor="loan-employee">{tr("loans.employee")}</label>
             <select
               id="loan-employee"
               data-testid="loan-employee"
@@ -217,7 +222,7 @@ export default function LoansPage() {
               onChange={(e) => setEmployeeId(e.target.value)}
               required
             >
-              <option value="">เลือกพนักงาน</option>
+              <option value="">{tr("loans.choose-employees")}</option>
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.employee_code} · {e.first_name_th} {e.last_name_th}
@@ -226,7 +231,7 @@ export default function LoansPage() {
             </select>
           </div>
           <div className="field">
-            <label htmlFor="loan-principal">เงินต้น (บาท)</label>
+            <label htmlFor="loan-principal">{tr("loans.principal-baht")}</label>
             <input
               id="loan-principal"
               data-testid="loan-principal"
@@ -239,7 +244,7 @@ export default function LoansPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="loan-installment">งวดผ่อนต่อรอบ (บาท)</label>
+            <label htmlFor="loan-installment">{tr("loans.installment-per-run-thb")}</label>
             <input
               id="loan-installment"
               data-testid="loan-installment"
@@ -252,7 +257,7 @@ export default function LoansPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="loan-interest-rate">ดอกเบี้ยต่อเดือน (%)</label>
+            <label htmlFor="loan-interest-rate">{tr("loans.monthly-interest")}</label>
             <input
               id="loan-interest-rate"
               data-testid="loan-interest-rate"
@@ -266,11 +271,11 @@ export default function LoansPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="loan-start">วันเริ่มผ่อน</label>
+            <label htmlFor="loan-start">{tr("loans.installment-start-date")}</label>
             <ThaiDateInput id="loan-start" testId="loan-start" value={startDate} onChange={(v) => setStartDate(v)} required />
           </div>
           <div className="field">
-            <label htmlFor="loan-note">หมายเหตุ</label>
+            <label htmlFor="loan-note">{tr("loans.notes")}</label>
             <input
               id="loan-note"
               data-testid="loan-note"
@@ -280,7 +285,7 @@ export default function LoansPage() {
           </div>
           <div style={{ display: "flex", alignItems: "end" }}>
             <button className="btn btn-primary" data-testid="create-loan" type="submit" disabled={busy}>
-              {busy ? "กำลังบันทึก…" : "สร้างเงินกู้"}
+              {busy ? tr("loans.saving") : tr("loans.create-a-loan")}
             </button>
           </div>
         </div>
@@ -288,22 +293,22 @@ export default function LoansPage() {
 
       <div className="card">
         {loans === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("loans.loading")}</div>
         ) : loans.length === 0 ? (
-          <div className="empty">ไม่มีรายการเงินกู้</div>
+          <div className="empty">{tr("loans.there-are-no-loan-items")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>พนักงาน</th>
-                <th className="num">เงินต้น</th>
-                <th className="num">ชำระแล้ว</th>
-                <th className="num">คงเหลือ</th>
-                <th className="num">งวดผ่อน</th>
-                <th className="num">ดอกเบี้ย</th>
-                <th>วันเริ่มผ่อน</th>
-                <th>สถานะ</th>
-                <th />
+                <th scope="col">{tr("loans.employee")}</th>
+                <th scope="col" className="num">{tr("loans.principal")}</th>
+                <th scope="col" className="num">{tr("loans.paid")}</th>
+                <th scope="col" className="num">{tr("loans.remaining")}</th>
+                <th scope="col" className="num">{tr("loans.installment")}</th>
+                <th scope="col" className="num">{tr("loans.interest")}</th>
+                <th scope="col">{tr("loans.installment-start-date")}</th>
+                <th scope="col">{tr("loans.status")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
@@ -313,29 +318,29 @@ export default function LoansPage() {
                     <td>
                       {l.employee_code} · {l.employee_name}
                     </td>
-                    <td className="num">฿{thb(l.principal)}</td>
-                    <td className="num">฿{thb(l.paid_amount)}</td>
-                    <td className="num">฿{thb(l.balance)}</td>
-                    <td className="num">฿{thb(l.installment_amount)}</td>
+                    <td className="num">{tr("loans.text")}{thb(l.principal)}</td>
+                    <td className="num">{tr("loans.text")}{thb(l.paid_amount)}</td>
+                    <td className="num">{tr("loans.text")}{thb(l.balance)}</td>
+                    <td className="num">{tr("loans.text")}{thb(l.installment_amount)}</td>
                     <td className="num">{(Number(l.interest_rate) * 100).toFixed(2)}%</td>
                     <td>{thDate(l.start_date)}</td>
                     <td>
                       <span className={`badge ${l.status === "active" ? "warning" : l.status === "paid" ? "success" : ""}`}>
-                        {STATUS_LABEL[l.status] ?? l.status}
+                        {l.status in STATUS_LABEL ? tr(STATUS_LABEL[l.status]) : l.status}
                       </span>
                     </td>
                     <td className="num">
                       <button className="btn btn-sm" data-testid="toggle-installments" onClick={() => toggleInstallments(l)} disabled={busy}>
-                        {installments[l.id] ? "ซ่อนงวด" : "ดูงวด"}
+                        {installments[l.id] ? tr("loans.hide-period") : tr("loans.view-installment")}
                       </button>
                       {l.status === "active" && (
                         <button className="btn btn-sm" data-testid="payoff-loan" onClick={() => payoffLoan(l)} disabled={busy}>
-                          จ่ายปิด/จ่ายบางส่วน
+                          {tr("loans.pay-off-pay-in-part")}
                         </button>
                       )}
                       {l.status === "active" && (
                         <button className="btn btn-sm" data-testid="cancel-loan" onClick={() => cancel(l)} disabled={busy}>
-                          ยกเลิก
+                          {tr("loans.cancel")}
                         </button>
                       )}
                     </td>
@@ -344,18 +349,18 @@ export default function LoansPage() {
                     <tr data-testid="loan-installments">
                       <td colSpan={9}>
                         {installments[l.id]!.length === 0 ? (
-                          <div className="empty">ยังไม่มีงวดผ่อน</div>
+                          <div className="empty">{tr("loans.there-are-no-installments-yet")}</div>
                         ) : (
                           <table className="table table-inner">
                             <thead>
                               <tr>
-                                <th>รอบเงินเดือน</th>
-                                <th>รันไอดี</th>
-                                <th className="num">งวด</th>
-                                <th className="num">เงินต้น</th>
-                                <th className="num">ดอกเบี้ย</th>
-                                <th>สถานะรอบ</th>
-                                <th />
+                                <th scope="col">{tr("loans.payroll-runs")}</th>
+                                <th scope="col">{tr("loans.run-id")}</th>
+                                <th scope="col" className="num">{tr("loans.period")}</th>
+                                <th scope="col" className="num">{tr("loans.principal")}</th>
+                                <th scope="col" className="num">{tr("loans.interest")}</th>
+                                <th scope="col">{tr("loans.round-status")}</th>
+                                <th scope="col" />
                               </tr>
                             </thead>
                             <tbody>
@@ -363,20 +368,20 @@ export default function LoansPage() {
                                 <tr key={ins.id}>
                                   <td>{thDate(ins.period_start)} – {thDate(ins.period_end)}</td>
                                   <td className="mono">{ins.payroll_run_id.slice(0, 8)}…</td>
-                                  <td className="num">฿{thb(ins.amount)}</td>
-                                  <td className="num">฿{thb(ins.principal_amount)}</td>
-                                  <td className="num">฿{thb(ins.interest_amount)}</td>
+                                  <td className="num">{tr("loans.text")}{thb(ins.amount)}</td>
+                                  <td className="num">{tr("loans.text")}{thb(ins.principal_amount)}</td>
+                                  <td className="num">{tr("loans.text")}{thb(ins.interest_amount)}</td>
                                   <td>
                                     {ins.reversed_at ? (
-                                      <span className="badge">กลับรายการแล้ว</span>
+                                      <span className="badge">{tr("loans.items-have-been-reversed")}</span>
                                     ) : (
-                                      <span className="badge">{RUN_STATUS[ins.run_status]?.label ?? ins.run_status}</span>
+                                      <span className="badge">{RUN_STATUS[ins.run_status] ? tr(RUN_STATUS[ins.run_status].labelKey) : ins.run_status}</span>
                                     )}
                                   </td>
                                   <td className="num">
                                     {!ins.reversed_at && REVERSIBLE_RUN_STATUS.includes(ins.run_status) && (
                                       <button className="btn btn-sm" data-testid="reverse-installment" onClick={() => reverseInstallment(l, ins)} disabled={busy}>
-                                        กลับรายการ
+                                        {tr("loans.reversal")}
                                       </button>
                                     )}
                                   </td>

@@ -1,5 +1,9 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
 
@@ -16,14 +20,15 @@ type User = {
 
 type InviteResult = { invite_path: string; email: string; role: string; expires_at: string };
 
-const ROLES = [
-  { value: "hr_admin", label: "ผู้ดูแล HR" },
-  { value: "payroll_manager", label: "ผู้จัดการเงินเดือน" },
-  { value: "manager", label: "หัวหน้างาน" },
-  { value: "employee", label: "พนักงาน" },
+const ROLES: { value: string; labelKey: TranslationKey }[] = [
+  { value: "hr_admin", labelKey: "users.hr-administrator" },
+  { value: "payroll_manager", labelKey: "users.payroll-manager" },
+  { value: "manager", labelKey: "users.manager" },
+  { value: "employee", labelKey: "users.employee" },
 ];
 
 export default function UsersPage() {
+  const { t: tr } = useI18N();
   const [users, setUsers] = useState<User[] | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -73,7 +78,7 @@ export default function UsersPage() {
         method: "POST",
         body: JSON.stringify({ role: newRole }),
       });
-      setNotice(`เพิ่มบทบาท ${newRole} ให้ ${user.email} แล้ว`);
+      setNotice(tr("users.roleAdded", { role: newRole, email: user.email }));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -101,12 +106,12 @@ export default function UsersPage() {
   }
 
   async function reset2fa(user: User) {
-    if (!confirm(`รีเซ็ต 2FA ของ ${user.email}? ผู้ใช้จะเข้าสู่ระบบได้โดยไม่ต้องใช้รหัสจนกว่าจะเปิดใหม่`)) return;
+    if (!confirm(tr("users.reset2faConfirm", { email: user.email }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/users/${user.id}/2fa/reset`, { method: "POST" });
-      setNotice(`รีเซ็ต 2FA ของ ${user.email} แล้ว`);
+      setNotice(tr("users.reset2faNotice", { email: user.email }));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -124,7 +129,7 @@ export default function UsersPage() {
         method: "PUT",
         body: JSON.stringify({ line_user_id: value.trim() || null }),
       });
-      setNotice("บันทึก LINE ID แล้ว");
+      setNotice(tr("users.line-id-saved"));
       setLines((prev) => ({ ...prev, [user.id]: value.trim() }));
       await load();
     } catch (e) {
@@ -135,11 +140,11 @@ export default function UsersPage() {
   }
 
   async function deactivate(user: User) {
-    if (!confirm(`ปิดการใช้งานบัญชี ${user.email}?`)) return;
+    if (!confirm(tr("users.deactivateConfirm", { email: user.email }))) return;
     setBusy(true);
     try {
       await gw(`api/v1/users/${user.id}`, { method: "DELETE" });
-      setNotice("ปิดการใช้งานบัญชีแล้ว");
+      setNotice(tr("users.account-has-been-deactivated"));
       await load();
     } catch (e) {
       handleApiError(e, setError);
@@ -159,19 +164,19 @@ export default function UsersPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ผู้ใช้</h1>
-          <p className="page-sub">เชิญผู้ใช้และกำหนดบทบาท</p>
+          <h1>{tr("users.users")}</h1>
+          <p className="page-sub">{tr("users.invite-users-and-assign-roles")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       <form className="card card-pad" onSubmit={submitInvite} style={{ display: "grid", gap: 14 }}>
-        <h2>เชิญผู้ใช้</h2>
+        <h2>{tr("users.invite-user")}</h2>
         <div className="form-row">
           <div className="field">
-            <label htmlFor="invite-email">อีเมล</label>
+            <label htmlFor="invite-email">{tr("users.email")}</label>
             <input
               id="invite-email"
               type="email"
@@ -181,15 +186,15 @@ export default function UsersPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="invite-name">ชื่อ (ไทย)</label>
+            <label htmlFor="invite-name">{tr("users.name-thai")}</label>
             <input id="invite-name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="field">
-            <label htmlFor="invite-role">บทบาท</label>
+            <label htmlFor="invite-role">{tr("users.role")}</label>
             <select id="invite-role" value={role} onChange={(e) => setRole(e.target.value)}>
               {ROLES.map((r) => (
                 <option key={r.value} value={r.value}>
-                  {r.label}
+                  {tr(r.labelKey)}
                 </option>
               ))}
             </select>
@@ -197,12 +202,12 @@ export default function UsersPage() {
         </div>
         <div>
           <button className="btn btn-primary" type="submit" disabled={busy}>
-            {busy ? "กำลังสร้าง…" : "สร้างลิงก์เชิญ"}
+            {busy ? tr("users.creating") : tr("users.create-an-invitation-link")}
           </button>
         </div>
         {invite && (
           <div style={{ background: "#eef0ff", borderRadius: 6, padding: 12, display: "grid", gap: 6 }}>
-            <strong>ลิงก์เชิญ (ใช้ได้ครั้งเดียว, หมดอายุ 7 วัน)</strong>
+            <strong>{tr("users.invitation-link-can-be-used-once")}</strong>
             <a href={inviteUrl} style={{ wordBreak: "break-all", fontSize: 12, color: "var(--teal)" }}>
               {inviteUrl}
             </a>
@@ -212,7 +217,7 @@ export default function UsersPage() {
                 className="btn btn-sm"
                 onClick={() => navigator.clipboard?.writeText(inviteUrl)}
               >
-                คัดลอกลิงก์
+                {tr("users.copy-link")}
               </button>
             </div>
           </div>
@@ -221,8 +226,8 @@ export default function UsersPage() {
 
       {reset && (
         <div className="card card-pad" style={{ display: "grid", gap: 6 }}>
-          <strong>ลิงก์รีเซ็ตรหัสผ่านสำหรับ {reset.email}</strong>
-          <span className="hint">ใช้ได้ครั้งเดียว · หมดอายุใน 1 ชั่วโมง</span>
+          <strong>{tr("users.text")} {reset.email}</strong>
+          <span className="hint">{tr("users.can-be-used-once-expires-in")}</span>
           <a href={resetUrl} style={{ wordBreak: "break-all", fontSize: 12, color: "var(--teal)" }}>
             {resetUrl}
           </a>
@@ -232,7 +237,7 @@ export default function UsersPage() {
               className="btn btn-sm"
               onClick={() => navigator.clipboard?.writeText(resetUrl)}
             >
-              คัดลอกลิงก์
+              {tr("users.copy-link")}
             </button>
           </div>
         </div>
@@ -240,20 +245,20 @@ export default function UsersPage() {
 
       <div className="card">
         <p className="hint" style={{ padding: "12px 16px 0" }}>
-          LINE ID ต้องเป็น user id จาก LINE Messaging API (U ตามด้วยตัวอักษร hex 32 ตัว) ไม่ใช่ id ของกลุ่มหรือห้องแชต
+          {tr("users.line-id-must-be-the-user")}
         </p>
         {users === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("users.loading")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>อีเมล</th>
-                <th>ชื่อ</th>
-                <th>บทบาท</th>
-                <th>สถานะ</th>
-                <th>เข้าสู่ระบบล่าสุด</th>
-                <th />
+                <th scope="col">{tr("users.email")}</th>
+                <th scope="col">{tr("users.name")}</th>
+                <th scope="col">{tr("users.role")}</th>
+                <th scope="col">{tr("users.status")}</th>
+                <th scope="col">{tr("users.latest-login")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
@@ -264,32 +269,32 @@ export default function UsersPage() {
                   <td>{u.roles.length ? u.roles.join(", ") : "—"}</td>
                   <td>
                     <span className={`badge ${u.is_active ? "success" : "danger"}`}>
-                      {u.is_active ? "ใช้งาน" : "ปิด"}
+                      {u.is_active ? tr("users.use") : tr("users.close")}
                     </span>
                   </td>
                   <td>{u.last_login_at ? new Date(u.last_login_at).toLocaleString("th-TH") : "—"}</td>
                   <td className="num" style={{ whiteSpace: "normal" }}>
                     <div className="row-actions">
                     <select
-                      aria-label={`เพิ่มบทบาทให้ ${u.email}`}
+                      aria-label={tr("users.addRoleAria", { email: u.email })}
                       defaultValue=""
                       onChange={(e) => {
                         if (e.target.value) assign(u, e.target.value);
                       }}
                       className="compact-select"
                     >
-                      <option value="">เพิ่มบทบาท…</option>
+                      <option value="">{tr("users.add-a-role")}</option>
                       {ROLES.map((r) => (
                         <option key={r.value} value={r.value}>
-                          {r.label}
+                          {tr(r.labelKey)}
                         </option>
                       ))}
                     </select>{" "}
                     <input
                       data-testid="line-id"
-                      aria-label={`LINE ID ของ ${u.email}`}
+                      aria-label={tr("users.lineIdAria", { email: u.email })}
                       placeholder="U0123…"
-                      title="LINE user id จาก Messaging API (U ตามด้วยตัวอักษร hex 32 ตัว) ไม่ใช่ id ของกลุ่ม"
+                      title={tr("users.the-line-user-id-from-the")}
                       value={lines[u.id] ?? u.line_user_id ?? ""}
                       onChange={(e) => setLines({ ...lines, [u.id]: e.target.value })}
                       maxLength={64}
@@ -302,12 +307,12 @@ export default function UsersPage() {
                       onClick={() => saveLine(u, lines[u.id] ?? u.line_user_id ?? "")}
                       disabled={busy}
                     >
-                      บันทึก LINE
+                      {tr("users.save-line")}
                     </button>{" "}
                     {u.is_active && (
                       <>
                         <button className="btn btn-sm" onClick={() => issueReset(u)} disabled={busy}>
-                          รีเซ็ต
+                          {tr("users.reset")}
                         </button>{" "}
                         {u.totp_enabled && (
                           <>
@@ -317,12 +322,12 @@ export default function UsersPage() {
                               onClick={() => reset2fa(u)}
                               disabled={busy}
                             >
-                              รีเซ็ต 2FA
+                              {tr("users.reset-2fa")}
                             </button>{" "}
                           </>
                         )}
                         <button className="btn btn-sm btn-danger" onClick={() => deactivate(u)} disabled={busy}>
-                          ปิด
+                          {tr("users.close")}
                         </button>
                       </>
                     )}

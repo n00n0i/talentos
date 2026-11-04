@@ -1,5 +1,9 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, gw, handleApiError, thDate } from "@/lib/api";
 
@@ -43,20 +47,20 @@ function writeQueue(items: QueuedPunch[]) {
   }
 }
 
-const STATUS: Record<string, { label: string; tone: string }> = {
-  pending: { label: "รออนุมัติ", tone: "warning" },
-  approved: { label: "อนุมัติแล้ว", tone: "success" },
+const STATUS: Record<string, { labelKey: TranslationKey; tone: string }> = {
+  pending: { labelKey: "clock.pending-approval", tone: "warning" },
+  approved: { labelKey: "clock.approved", tone: "success" },
 };
 
 const bangkokToday = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 
-const hm = (min: number) => `${Math.floor(min / 60)} ชม. ${min % 60} นาที`;
+const hm = (min: number) => tNow("clock.hoursMinutes", { hours: Math.floor(min / 60), minutes: min % 60 });
 
 function locate(): Promise<Fix> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง"));
+      reject(new Error(tNow("clock.this-device-does-not-support-geolocation")));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -66,8 +70,8 @@ function locate(): Promise<Fix> {
         reject(
           new Error(
             err.code === err.PERMISSION_DENIED
-              ? "ไม่ได้รับอนุญาตให้ใช้ตำแหน่ง — เปิดสิทธิ์ตำแหน่งในเบราว์เซอร์แล้วลองอีกครั้ง"
-              : "ไม่สามารถระบุตำแหน่งได้ ลองอีกครั้งในที่โล่ง",
+              ? tNow("clock.location-permission-not-available-turn-on")
+              : tNow("clock.unable-to-determine-location-try-again"),
           ),
         ),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
@@ -76,6 +80,7 @@ function locate(): Promise<Fix> {
 }
 
 export default function ClockPage() {
+  const { t: tr } = useI18N();
   const [today] = useState(bangkokToday);
   const [days, setDays] = useState<Day[] | null>(null);
   const [linked, setLinked] = useState(true);
@@ -145,8 +150,8 @@ export default function ClockPage() {
     writeQueue(readQueue().filter((q) => !handled.has(q.client_id)));
     if (synced > 0 || skipped > 0) {
       const parts = [];
-      if (synced > 0) parts.push(`ซิงก์แล้ว ${synced} รายการ`);
-      if (skipped > 0) parts.push(`ข้าม ${skipped} รายการ`);
+      if (synced > 0) parts.push(tNow("clock.syncedNotice", { n: synced }));
+      if (skipped > 0) parts.push(tNow("clock.skippedNotice", { n: skipped }));
       setSyncMsg(parts.join(" · "));
       await loadDays();
     }
@@ -204,7 +209,7 @@ export default function ClockPage() {
           accuracy_m: here.accuracy,
         }),
       });
-      setNotice(kind === "in" ? "บันทึกเวลาแล้ว: เข้างาน" : "บันทึกเวลาแล้ว: ออกงาน");
+      setNotice(kind === "in" ? tr("clock.clocked-in") : tr("clock.clocked-out"));
       await loadDays();
     } catch (e) {
       if (e instanceof ApiError) {
@@ -216,7 +221,7 @@ export default function ClockPage() {
         const queue = readQueue();
         queue.push({ client_id, kind, lat: here.lat, lng: here.lng, accuracy: here.accuracy, at });
         writeQueue(queue);
-        setNotice("บันทึกในเครื่องแล้ว จะซิงก์เมื่อออนไลน์");
+        setNotice(tr("clock.saved-on-the-machine-will-sync"));
       }
     } finally {
       setBusy(false);
@@ -229,10 +234,10 @@ export default function ClockPage() {
     return (
       <>
         <div className="page-head">
-          <h1>ลงเวลา</h1>
+          <h1>{tr("clock.time-clock")}</h1>
         </div>
         <div className="card">
-          <div className="empty">บัญชีนี้ไม่มีสิทธิ์ลงเวลา — ติดต่อ HR</div>
+          <div className="empty">{tr("clock.this-account-does-not-have-time")}</div>
         </div>
       </>
     );
@@ -242,15 +247,15 @@ export default function ClockPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ลงเวลา</h1>
-          <p className="page-sub">{thDate(today)} · ระบบบันทึกเวลาจากเซิร์ฟเวอร์</p>
+          <h1>{tr("clock.time-clock")}</h1>
+          <p className="page-sub">{thDate(today)} {tr("clock.text")}</p>
         </div>
       </div>
 
       {!linked && days !== null ? (
         <div className="card">
           <div className="empty">
-            ยังไม่ได้ผูกบัญชีนี้กับข้อมูลพนักงาน — ติดต่อ HR เพื่อเชื่อมบัญชี
+            {tr("clock.this-account-has-not-been-linked")}
           </div>
         </div>
       ) : (
@@ -262,15 +267,15 @@ export default function ClockPage() {
               </p>
             ) : fix ? (
               <p className="hint">
-                ตำแหน่งปัจจุบัน ±{Math.round(fix.accuracy)} ม.
+                {tr("clock.text-2")}{Math.round(fix.accuracy)} {tr("clock.text-3")}
               </p>
             ) : (
-              <p className="hint">กำลังระบุตำแหน่ง…</p>
+              <p className="hint">{tr("clock.locating")}</p>
             )}
 
             {distance && (
               <p className="error" role="alert">
-                อยู่นอกพื้นที่ลงเวลา — ห่างจุดลงเวลา {distance.away} ม. (อนุญาต {distance.allowed} ม.)
+                {tr("clock.text-4")} {distance.away} {tr("clock.text-5")} {distance.allowed} {tr("clock.text-6")}
               </p>
             )}
             {error && (
@@ -296,7 +301,7 @@ export default function ClockPage() {
                 disabled={busy || !!geoError}
                 onClick={() => punch("in")}
               >
-                เข้างาน
+                {tr("clock.clock-in")}
               </button>
               <button
                 className="btn"
@@ -304,46 +309,46 @@ export default function ClockPage() {
                 disabled={busy || !!geoError}
                 onClick={() => punch("out")}
               >
-                ออกงาน
+                {tr("clock.clock-out")}
               </button>
             </div>
             <button className="btn btn-sm" onClick={refreshLocation} disabled={busy}>
-              อัปเดตตำแหน่ง
+              {tr("clock.update-location")}
             </button>
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
             <div className="card-head">
-              <strong>วันนี้</strong>
+              <strong>{tr("clock.today")}</strong>
             </div>
             {todayRow ? (
               <div className="card-pad" data-testid="today-summary">
-                ทำงาน {hm(todayRow.worked_minutes)}
-                {todayRow.late_minutes > 0 && ` · สาย ${todayRow.late_minutes} นาที`}
-                {todayRow.incomplete && " · ยังไม่ครบเวลาเข้า/ออก"}
+                {tr("clock.work")} {hm(todayRow.worked_minutes)}
+                {todayRow.late_minutes > 0 && tNow("clock.lateNotice", { minutes: todayRow.late_minutes })}
+                {todayRow.incomplete && tr("clock.the-entry-exit-time-has-not")}
               </div>
             ) : (
-              <div className="empty">ยังไม่มีบันทึกวันนี้</div>
+              <div className="empty">{tr("clock.there-are-no-records-today")}</div>
             )}
           </div>
 
           <div className="card" style={{ marginTop: 16 }}>
             <div className="card-head">
-              <strong>เดือนนี้</strong>
+              <strong>{tr("clock.this-month")}</strong>
             </div>
             {days === null ? (
-              <div className="spinner">กำลังโหลด…</div>
+              <div className="spinner">{tr("clock.loading")}</div>
             ) : days.length === 0 ? (
-              <div className="empty">ยังไม่มีบันทึกเดือนนี้</div>
+              <div className="empty">{tr("clock.there-are-no-records-for-this")}</div>
             ) : (
               <table className="table">
                 <thead>
                   <tr>
-                    <th>วันที่</th>
-                    <th className="num">ทำงาน</th>
-                    <th className="num">สาย (นาที)</th>
-                    <th className="num">OT (นาที)</th>
-                    <th>สถานะ</th>
+                    <th scope="col">{tr("clock.date")}</th>
+                    <th scope="col" className="num">{tr("clock.work")}</th>
+                    <th scope="col" className="num">{tr("clock.late-minutes")}</th>
+                    <th scope="col" className="num">{tr("clock.ot-minute")}</th>
+                    <th scope="col">{tr("clock.status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -357,7 +362,7 @@ export default function ClockPage() {
                         <td className="num">{d.ot_minutes}</td>
                         <td>
                           <span className={`badge ${s.tone}`}>
-                            {d.incomplete ? "ไม่ครบ" : s.label}
+                            {d.incomplete ? tr("clock.not-complete") : tr(s.labelKey)}
                           </span>
                         </td>
                       </tr>

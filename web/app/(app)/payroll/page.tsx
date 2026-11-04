@@ -28,7 +28,7 @@ const RUNS_QUERY =
   "{ payrollRuns(limit: 24) { id periodStart periodEnd paymentDate status totalEmployees totalGross totalNet totalTax totalSso totalPf paidAt paymentReference } }";
 
 export default function PayrollPage() {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const defaults = useRef(monthDefaults());
   const [runs, setRuns] = useState<PayrollRun[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -187,8 +187,8 @@ export default function PayrollPage() {
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       <form className="card card-pad" onSubmit={createRun}>
         <h2 style={{ marginBottom: 14 }}>{t("payroll.createTitle")}</h2>
@@ -211,7 +211,7 @@ export default function PayrollPage() {
             <label htmlFor="entity">{t("payroll.entityId")}</label>
             <input
               id="entity"
-              placeholder="เว้นว่างได้เมื่อโทเคนผูกกับนิติบุคคลเดียว"
+              placeholder={t("payroll.this-can-be-left-blank-when")}
               value={entityId}
               onChange={(e) => setEntityId(e.target.value)}
             />
@@ -237,18 +237,18 @@ export default function PayrollPage() {
           <table className="table">
             <thead>
               <tr>
-                <th>{t("payroll.thPeriod")}</th>
-                <th>{t("payroll.paymentDate")}</th>
-                <th>{t("payroll.thStatus")}</th>
-                <th className="num">{t("payroll.thEmployees")}</th>
-                <th className="num">{t("payroll.thGross")}</th>
-                <th className="num">{t("payroll.thNet")}</th>
-                <th />
+                <th scope="col">{t("payroll.thPeriod")}</th>
+                <th scope="col">{t("payroll.paymentDate")}</th>
+                <th scope="col">{t("payroll.thStatus")}</th>
+                <th scope="col" className="num">{t("payroll.thEmployees")}</th>
+                <th scope="col" className="num">{t("payroll.thGross")}</th>
+                <th scope="col" className="num">{t("payroll.thNet")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
               {runs.map((run) => {
-                const status = RUN_STATUS[run.status] ?? { label: run.status, tone: "" };
+                const status = RUN_STATUS[run.status];
                 const open = expanded === run.id;
                 return (
                   <RunRow
@@ -291,7 +291,7 @@ function RunRow({
   onMarkPaid,
 }: {
   run: PayrollRun;
-  status: { label: string; tone: string };
+  status?: { labelKey: import("@/lib/i18n-catalog").TranslationKey; tone: string };
   open: boolean;
   payslips: Payslip[] | undefined;
   anomalies: PayrollAnomalies | undefined;
@@ -303,7 +303,7 @@ function RunRow({
   onSendPf: () => void;
   onMarkPaid: () => void;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   const anomalyCount = anomalies ? anomalies.counts.error + anomalies.counts.warning : 0;
   const needsReview = anomalyCount > 0 && !anomalies?.reviewed_at;
   return (
@@ -314,14 +314,14 @@ function RunRow({
         </td>
         <td>{thDate(run.paymentDate)}</td>
         <td>
-          <span className={`badge ${status.tone}`}>
+          <span className={`badge ${status?.tone ?? ""}`}>
             <span className="dot" />
-            {t(`payroll.status.${run.status}`)}
+            {status ? t(status.labelKey) : run.status}
           </span>
         </td>
         <td className="num">{run.totalEmployees}</td>
-        <td className="num">฿{thb(run.totalGross)}</td>
-        <td className="num">฿{thb(run.totalNet)}</td>
+        <td className="num">{t("payroll.text")}{thb(run.totalGross)}</td>
+        <td className="num">{t("payroll.text")}{thb(run.totalNet)}</td>
         <td className="num" onClick={(e) => e.stopPropagation()}>
           <a
             className="badge accent"
@@ -428,12 +428,12 @@ function RunRow({
               <table className="table">
                 <thead>
                   <tr>
-                    <th>{t("payroll.payslipEmployee")}</th>
-                    <th className="num">{t("payroll.payslipSalary")}</th>
-                    <th className="num">{t("payroll.payslipTax")}</th>
-                    <th className="num">{t("payroll.payslipSso")}</th>
-                    <th className="num">{t("payroll.payslipNet")}</th>
-                    <th>{t("payroll.payslipSlip")}</th>
+                    <th scope="col">{t("payroll.payslipEmployee")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipSalary")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipTax")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipSso")}</th>
+                    <th scope="col" className="num">{t("payroll.payslipNet")}</th>
+                    <th scope="col">{t("payroll.payslipSlip")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -443,10 +443,10 @@ function RunRow({
                         <div style={{ fontWeight: 500 }}>{p.employee_name}</div>
                         <div className="hint">{p.employee_code}</div>
                       </td>
-                      <td className="num">฿{thb(p.base_salary)}</td>
-                      <td className="num">฿{thb(p.tax_withheld)}</td>
-                      <td className="num">฿{thb(p.sso_employee)}</td>
-                      <td className="num">฿{thb(p.net_pay)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.base_salary)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.tax_withheld)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.sso_employee)}</td>
+                      <td className="num">{t("payroll.text")}{thb(p.net_pay)}</td>
                       <td>
                         <a
                           className="badge accent"
@@ -477,7 +477,7 @@ function AnomalyPanel({
   busy: boolean;
   onReview: () => void;
 }) {
-  const { t } = useI18N();
+  const { t, tDynamic } = useI18N();
   if (!anomalies) return null;
   const total = anomalies.counts.error + anomalies.counts.warning;
   return (
@@ -506,10 +506,10 @@ function AnomalyPanel({
           <table className="table">
             <thead>
               <tr>
-                <th>{t("payroll.anomalyEmployee")}</th>
-                <th>{t("payroll.anomalySeverity")}</th>
-                <th>{t("payroll.anomalyCode")}</th>
-                <th>{t("payroll.anomalyDetail")}</th>
+                <th scope="col">{t("payroll.anomalyEmployee")}</th>
+                <th scope="col">{t("payroll.anomalySeverity")}</th>
+                <th scope="col">{t("payroll.anomalyCode")}</th>
+                <th scope="col">{t("payroll.anomalyDetail")}</th>
               </tr>
             </thead>
             <tbody>

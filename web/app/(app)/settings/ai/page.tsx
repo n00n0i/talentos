@@ -116,7 +116,7 @@ function roleKey(providerId: string, model: string) {
 }
 
 export default function AiSettingsPage() {
-  const { t, lang } = useI18N();
+  const { t, tDynamic, lang } = useI18N();
   const [tab, setTab] = useState<Tab>("providers");
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<AiSettings | null>(null);
@@ -327,7 +327,7 @@ export default function AiSettingsPage() {
         }),
       });
       setRoles((current) => ({ ...current, [role]: draft }));
-      setNotice(t("ai.roleSaved", { role: t(ROLE_LABEL[role]) }));
+      setNotice(t("ai.roleSaved", { role: tDynamic(ROLE_LABEL[role]) }));
     } catch (e) {
       setRoleErrors((current) => ({ ...current, [role]: messageOf(e) }));
     } finally {
@@ -428,15 +428,15 @@ export default function AiSettingsPage() {
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
       {testResult && (
         <p className="badge success" data-testid="ai-test-result">
           {t("ai.testOk", { ms: testResult.latency_ms, model: testResult.model })}
         </p>
       )}
       {testError && (
-        <p className="error" data-testid="ai-test-error">
+        <p className="error" role="alert" data-testid="ai-test-error">
           {testError}
         </p>
       )}
@@ -552,7 +552,7 @@ export default function AiSettingsPage() {
                     )}
                   </div>
                   {modelErrors[provider.id] && (
-                    <p className="error" data-testid="ai-provider-error">
+                    <p className="error" role="alert" data-testid="ai-provider-error">
                       {modelErrors[provider.id]}
                     </p>
                   )}
@@ -630,7 +630,7 @@ export default function AiSettingsPage() {
             </div>
 
             {providerError && (
-              <p className="error" data-testid="ai-provider-form-error">
+              <p className="error" role="alert" data-testid="ai-provider-form-error">
                 {providerError}
               </p>
             )}
@@ -691,7 +691,7 @@ export default function AiSettingsPage() {
                     }}
                   >
                     <label htmlFor={`ai-role-select-${role}`} style={{ fontWeight: 600 }}>
-                      {t(ROLE_LABEL[role])}
+                      {tDynamic(ROLE_LABEL[role])}
                     </label>
                     {!draft?.model && (
                       <span className="badge warning" data-testid={`ai-role-warning-${role}`}>
@@ -740,7 +740,7 @@ export default function AiSettingsPage() {
                       {savingRole === role ? t("common.loading") : t("ai.save")}
                     </button>
                   </div>
-                  {roleErrors[role] && <p className="error">{roleErrors[role]}</p>}
+                  {roleErrors[role] && <p className="error" role="alert">{roleErrors[role]}</p>}
                   {roles[role]?.model && roles[role]?.model !== draft?.model && (
                     <p className="hint">{t("ai.roleUnsaved")}</p>
                   )}
@@ -873,7 +873,7 @@ export default function AiSettingsPage() {
                     >
                       {MODEL_ROLES.map((role) => (
                         <option key={role} value={role}>
-                          {t(ROLE_LABEL[role])}
+                          {tDynamic(ROLE_LABEL[role])}
                         </option>
                       ))}
                     </select>

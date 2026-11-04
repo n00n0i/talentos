@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N, tNow } from "@/lib/i18n";
+
 import { useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
 
@@ -44,6 +46,7 @@ function newKey(prefix: string, used: string[]) {
 }
 
 export default function FormsPage() {
+  const { t: tr } = useI18N();
   const [formType, setFormType] = useState<FormType>("50tawi");
   const [config, setConfig] = useState<Config | null>(null);
   const [version, setVersion] = useState<number | null>(null);
@@ -165,7 +168,7 @@ export default function FormsPage() {
       });
       setVersion(res.version);
       setIsOverride(true);
-      setNotice(`บันทึกแบบฟอร์มแล้ว (เวอร์ชัน ${res.version})`);
+      setNotice(tr("forms.savedVersion", { version: res.version }));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -192,35 +195,35 @@ export default function FormsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>แบบฟอร์ม</h1>
-          <p className="page-sub">แก้ไขแม่แบบเอกสารราชการ (50 ทวิ / สปส.1-10 / ภ.ง.ด.1 / ภ.ง.ด.1ก) ก่อนส่งมอบนักบัญชี</p>
+          <h1>{tr("forms.forms")}</h1>
+          <p className="page-sub">{tr("forms.edit-the-official-document-template-50")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="card card-pad" style={{ display: "grid", gap: 14 }}>
         <div className="form-row" style={{ gridTemplateColumns: "1fr 1fr" }}>
           <div className="field">
-            <label htmlFor="form-type">ประเภทแบบฟอร์ม</label>
+            <label htmlFor="form-type">{tr("forms.form-type")}</label>
             <select
               id="form-type"
               data-testid="form-type"
               value={formType}
               onChange={(e) => switchType(e.target.value as FormType)}
             >
-              <option value="50tawi">50 ทวิ (หนังสือรับรองการหักภาษี ณ ที่จ่าย)</option>
-              <option value="sso1_10">สปส.1-10 (รายการส่งเงินสมทบ)</option>
-              <option value="pnd1">ภ.ง.ด.1 (ภาษีหัก ณ ที่จ่ายรายเดือน)</option>
-              <option value="pnd1a">ภ.ง.ด.1ก (ภาษีหัก ณ ที่จ่ายรายปี)</option>
-              <option value="bank_payout">ไฟล์โอนเงิน (Bank Payout)</option>
+              <option value="50tawi">{tr("forms.50-bis-withholding-tax-certificate")}</option>
+              <option value="sso1_10">{tr("forms.sso-1-10-list-of-contributions")}</option>
+              <option value="pnd1">{tr("forms.p-n-d-1-monthly-withholding")}</option>
+              <option value="pnd1a">{tr("forms.p-n-d-1k-annual-withholding")}</option>
+              <option value="bank_payout">{tr("forms.bank-payout-file")}</option>
             </select>
           </div>
           <div className="field">
-            <label>สถานะ</label>
+            <label>{tr("forms.status")}</label>
             <p className="hint" style={{ marginTop: 4 }}>
-              {isOverride ? `ใช้แม่แบบขององค์กร · เวอร์ชัน ${version}` : `ใช้ค่าเริ่มต้น · เวอร์ชัน ${version}`}
+              {isOverride ? tr("forms.usingOrgTemplate", { version: version ?? "—" }) : tr("forms.usingDefault", { version: version ?? "—" })}
             </p>
           </div>
         </div>
@@ -228,7 +231,7 @@ export default function FormsPage() {
         {config ? (
           <form onSubmit={save} style={{ display: "grid", gap: 14 }}>
             <div className="field">
-              <label htmlFor="form-title">ชื่อเอกสาร</label>
+              <label htmlFor="form-title">{tr("forms.document-name")}</label>
               <input
                 id="form-title"
                 data-testid="form-title"
@@ -241,17 +244,17 @@ export default function FormsPage() {
             {formType === "50tawi" && (
               <div>
                 <div className="card-head" style={{ padding: "0 0 8px" }}>
-                  <h3>ช่องข้อมูล</h3>
+                  <h3>{tr("forms.data-fields")}</h3>
                   <button type="button" className="btn btn-sm" data-testid="form-add-row" onClick={addField}>
-                    เพิ่มช่อง
+                    {tr("forms.add-a-channel")}
                   </button>
                 </div>
                 <table className="table">
                   <thead>
                     <tr>
-                      <th>ป้ายกำกับ</th>
-                      <th>แหล่งข้อมูล</th>
-                      <th />
+                      <th scope="col">{tr("forms.label")}</th>
+                      <th scope="col">{tr("forms.resources")}</th>
+                      <th scope="col" />
                     </tr>
                   </thead>
                   <tbody>
@@ -262,7 +265,7 @@ export default function FormsPage() {
                             className="compact-input"
                             style={{ width: "100%" }}
                             value={f.label}
-                            placeholder="เช่น ผู้จ่ายเงิน"
+                            placeholder={tr("forms.such-as-the-payer")}
                             onChange={(e) => setField(i, { label: e.target.value })}
                           />
                         </td>
@@ -271,7 +274,7 @@ export default function FormsPage() {
                         </td>
                         <td className="num">
                           <button type="button" className="btn btn-sm btn-danger" onClick={() => removeField(i)}>
-                            ลบ
+                            {tr("forms.delete")}
                           </button>
                         </td>
                       </tr>
@@ -285,17 +288,17 @@ export default function FormsPage() {
               <>
                 <div>
                   <div className="card-head" style={{ padding: "0 0 8px" }}>
-                    <h3>ข้อมูลหัวเอกสาร</h3>
+                    <h3>{tr("forms.document-header-information")}</h3>
                     <button type="button" className="btn btn-sm" data-testid="form-add-row" onClick={addHeader}>
-                      เพิ่มแถว
+                      {tr("forms.add-a-row")}
                     </button>
                   </div>
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>ป้ายกำกับ</th>
-                        <th>แหล่งข้อมูล / ค่าคงที่</th>
-                        <th />
+                        <th scope="col">{tr("forms.label")}</th>
+                        <th scope="col">{tr("forms.data-source-constant")}</th>
+                        <th scope="col" />
                       </tr>
                     </thead>
                     <tbody>
@@ -306,7 +309,7 @@ export default function FormsPage() {
                               className="compact-input"
                               style={{ width: "100%" }}
                               value={h.label}
-                              placeholder="เช่น ชื่อสถานประกอบการ"
+                              placeholder={tr("forms.such-as-the-name-of-the")}
                               onChange={(e) => setHeader(i, { label: e.target.value })}
                             />
                           </td>
@@ -318,7 +321,7 @@ export default function FormsPage() {
                           </td>
                           <td className="num">
                             <button type="button" className="btn btn-sm btn-danger" onClick={() => removeHeader(i)}>
-                              ลบ
+                              {tr("forms.delete")}
                             </button>
                           </td>
                         </tr>
@@ -329,17 +332,17 @@ export default function FormsPage() {
 
                 <div>
                   <div className="card-head" style={{ padding: "0 0 8px" }}>
-                    <h3>คอลัมน์ตาราง</h3>
+                    <h3>{tr("forms.table-column")}</h3>
                     <button type="button" className="btn btn-sm" data-testid="form-add-row" onClick={addColumn}>
-                      เพิ่มคอลัมน์
+                      {tr("forms.add-a-column")}
                     </button>
                   </div>
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>หัวคอลัมน์</th>
-                        <th>แหล่งข้อมูล</th>
-                        <th />
+                        <th scope="col">{tr("forms.column-head")}</th>
+                        <th scope="col">{tr("forms.resources")}</th>
+                        <th scope="col" />
                       </tr>
                     </thead>
                     <tbody>
@@ -350,7 +353,7 @@ export default function FormsPage() {
                               className="compact-input"
                               style={{ width: "100%" }}
                               value={col.label}
-                              placeholder="เช่น เลขประจำตัวประชาชน"
+                              placeholder={tr("forms.such-as-national-identification-number")}
                               onChange={(e) => setColumn(i, { label: e.target.value })}
                             />
                           </td>
@@ -359,7 +362,7 @@ export default function FormsPage() {
                           </td>
                           <td className="num">
                             <button type="button" className="btn btn-sm btn-danger" onClick={() => removeColumn(i)}>
-                              ลบ
+                              {tr("forms.delete")}
                             </button>
                           </td>
                         </tr>
@@ -372,31 +375,31 @@ export default function FormsPage() {
 
             <div>
               <button className="btn btn-primary" data-testid="form-save" type="submit" disabled={busy}>
-                {busy ? "กำลังบันทึก…" : "บันทึกแม่แบบ"}
+                {busy ? tr("forms.saving") : tr("forms.save-the-template")}
               </button>
             </div>
           </form>
         ) : (
-          <p className="hint">กำลังโหลด…</p>
+          <p className="hint">{tr("forms.loading")}</p>
         )}
 
         <p className="hint" style={{ marginTop: 4 }}>
-          แหล่งข้อมูลที่ใช้ได้: {ALLOWED_SOURCES.join(", ")}
+          {tr("forms.text")} {ALLOWED_SOURCES.join(", ")}
         </p>
       </div>
 
       <div className="card card-pad" style={{ display: "grid", gap: 14 }}>
-        <h2>ดูตัวอย่าง</h2>
+        <h2>{tr("forms.preview")}</h2>
         {formType === "50tawi" ? (
           <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
             <div className="field">
-              <label htmlFor="preview-payslip-id">รหัสสลิป (payslip id)</label>
+              <label htmlFor="preview-payslip-id">{tr("forms.slip-id-payslip-id")}</label>
               <input
                 id="preview-payslip-id"
                 data-testid="preview-payslip-id"
                 value={payslipId}
                 onChange={(e) => setPayslipId(e.target.value)}
-                placeholder="uuid ของสลิปที่ผ่านมา"
+                placeholder={tr("forms.uuid-of-the-last-slip")}
               />
             </div>
             <div style={{ display: "flex", alignItems: "end" }}>
@@ -408,20 +411,20 @@ export default function FormsPage() {
                 rel="noreferrer"
                 aria-disabled={!payslipPreview}
               >
-                ดู 50 ทวิ
+                {tr("forms.view-50-tawi")}
               </a>
             </div>
           </div>
         ) : formType === "pnd1a" ? (
           <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
             <div className="field">
-              <label htmlFor="preview-year">ปีภาษี (คริสต์ศักราช)</label>
+              <label htmlFor="preview-year">{tr("forms.tax-year-gregorian")}</label>
               <input
                 id="preview-year"
                 data-testid="preview-year"
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
-                placeholder="เช่น 2026"
+                placeholder={tr("forms.such-as-2026")}
               />
             </div>
             <div style={{ display: "flex", alignItems: "end" }}>
@@ -433,20 +436,20 @@ export default function FormsPage() {
                 rel="noreferrer"
                 aria-disabled={!yearPreview}
               >
-                ดาวน์โหลด ภ.ง.ด.1ก
+                {tr("forms.download-p-n-d-1k")}
               </a>
             </div>
           </div>
         ) : (
           <div className="form-row" style={{ gridTemplateColumns: "1fr auto" }}>
             <div className="field">
-              <label htmlFor="preview-run-id">รหัสรอบเงินเดือน (run id)</label>
+              <label htmlFor="preview-run-id">{tr("forms.salary-cycle-code-run-id")}</label>
               <input
                 id="preview-run-id"
                 data-testid="preview-run-id"
                 value={runId}
                 onChange={(e) => setRunId(e.target.value)}
-                placeholder="uuid ของรอบที่อนุมัติแล้ว"
+                placeholder={tr("forms.uuid-of-the-approved-round")}
               />
             </div>
             <div style={{ display: "flex", alignItems: "end" }}>
@@ -458,7 +461,7 @@ export default function FormsPage() {
                 rel="noreferrer"
                 aria-disabled={!runPreview}
               >
-                ดาวน์โหลด {formType === "pnd1" ? "ภ.ง.ด.1" : formType === "bank_payout" ? "ไฟล์โอนเงิน" : "สปส.1-10"}
+                {tr("forms.download")} {formType === "pnd1" ? tr("forms.p-n-d-1") : formType === "bank_payout" ? tr("forms.bank-payout-file-2") : tr("forms.sso-1-10")}
               </a>
             </div>
           </div>
@@ -470,7 +473,7 @@ export default function FormsPage() {
 
 function SourceSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <select className="compact-input" style={{ width: "100%" }} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select className="compact-input" aria-label={tNow("forms.dataSource")} style={{ width: "100%" }} value={value} onChange={(e) => onChange(e.target.value)}>
       {ALLOWED_SOURCES.map((s) => (
         <option key={s} value={s}>
           {s}
@@ -487,6 +490,7 @@ function HeaderValueEditor({
   header: HeaderField;
   onChange: (patch: Partial<HeaderField>) => void;
 }) {
+  const { t: tr } = useI18N();
   const isStatic = header.source === null || header.source === undefined || header.source === "";
   return (
     <div className="form-row" style={{ gridTemplateColumns: "auto 1fr" }}>
@@ -498,14 +502,14 @@ function HeaderValueEditor({
           else onChange({ source: "entity_name", value: null });
         }}
       >
-        <option value="source">แหล่งข้อมูล</option>
-        <option value="value">ค่าคงที่</option>
+        <option value="source">{tr("forms.resources")}</option>
+        <option value="value">{tr("forms.constant")}</option>
       </select>
       {isStatic ? (
         <input
           className="compact-input"
           value={header.value ?? ""}
-          placeholder="เช่น 0000000000"
+          placeholder={tr("forms.for-example-0000000000")}
           onChange={(e) => onChange({ value: e.target.value })}
         />
       ) : (

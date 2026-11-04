@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import ThaiDateInput from "@/components/ThaiDateInput";
 
 import { useCallback, useEffect, useState } from "react";
@@ -48,6 +50,7 @@ const emptyCycle = { name: "", period_start: "", period_end: "" };
 type Draft = { rating: string; strengths: string; improvements: string };
 
 export default function PerformancePage() {
+  const { t: tr } = useI18N();
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [selected, setSelected] = useState<Cycle | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -119,7 +122,7 @@ export default function PerformancePage() {
 
   async function saveCalibration() {
     if (!selected || !calibrationEmployee || !calibrationRating) {
-      setError("เลือกพนักงานและคะแนนก่อนบันทึก");
+      setError(tr("performance.select-employees-and-scores-before-saving"));
       return;
     }
     setBusy(true);
@@ -137,7 +140,7 @@ export default function PerformancePage() {
       setCalibrationNotes("");
       setCalibrationRating("");
       await loadCalibrations(selected.id);
-      setNotice("บันทึกการจัดวางระดับแล้ว");
+      setNotice(tr("performance.level-layout-saved"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -195,7 +198,7 @@ export default function PerformancePage() {
       setForm(emptyCycle);
       await loadCycles();
       setSelected(created.cycle);
-      setNotice("สร้างรอบประเมินแล้ว");
+      setNotice(tr("performance.an-evaluation-round-has-been-created"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -209,7 +212,7 @@ export default function PerformancePage() {
     try {
       await gw(`api/v1/performance/cycles/${cycle.id}/${action}`, { method: "POST" });
       await loadCycles();
-      setNotice(action === "start" ? "เริ่มรอบประเมินแล้ว" : "ปิดรอบประเมินแล้ว");
+      setNotice(action === "start" ? tr("performance.the-evaluation-round-has-begun") : tr("performance.the-evaluation-round-has-closed"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -218,14 +221,14 @@ export default function PerformancePage() {
   }
 
   async function removeCycle(cycle: Cycle) {
-    if (!confirm(`ลบรอบ ${cycle.name} และผลประเมินทั้งหมดหรือไม่?`)) return;
+    if (!confirm(tr("performance.deleteCycleConfirm", { name: cycle.name }))) return;
     setBusy(true);
     setError("");
     try {
       await gw(`api/v1/performance/cycles/${cycle.id}`, { method: "DELETE" });
       if (selected?.id === cycle.id) setSelected(null);
       await loadCycles();
-      setNotice("ลบรอบประเมินแล้ว");
+      setNotice(tr("performance.evaluation-round-deleted"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -236,7 +239,7 @@ export default function PerformancePage() {
   async function submitReview(review: Review) {
     const draft = drafts[review.id];
     if (!draft?.rating) {
-      setError("เลือกคะแนนก่อนบันทึก");
+      setError(tr("performance.select-score-before-saving"));
       return;
     }
     setBusy(true);
@@ -251,7 +254,7 @@ export default function PerformancePage() {
         }),
       });
       await Promise.all([loadReviews(review.cycle_id), loadCycles()]);
-      setNotice("บันทึกผลประเมินแล้ว");
+      setNotice(tr("performance.evaluation-results-recorded"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -263,21 +266,21 @@ export default function PerformancePage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ประเมินผลการทำงาน</h1>
-          <p className="page-sub">รอบประเมิน คะแนน และข้อคิดเห็นรายพนักงาน</p>
+          <h1>{tr("performance.performance-reviews")}</h1>
+          <p className="page-sub">{tr("performance.review-cycles-ratings-and-per-employee")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       {canWrite && (
         <div className="card card-pad" style={{ marginBottom: 12 }}>
-          <h2 style={{ fontSize: 16, marginBottom: 10 }}>สร้างรอบประเมิน</h2>
+          <h2 style={{ fontSize: 16, marginBottom: 10 }}>{tr("performance.create-an-evaluation-round")}</h2>
           <form onSubmit={createCycle} style={{ display: "grid", gap: 10 }}>
             <div className="grid-2" style={{ gridTemplateColumns: "2fr 1fr 1fr", gap: 12 }}>
               <label>
-                ชื่อรอบ
+                {tr("performance.cycle-name")}
                 <input
                   data-testid="cycle-name"
                   value={form.name}
@@ -286,16 +289,16 @@ export default function PerformancePage() {
                 />
               </label>
               <label>
-                เริ่ม
+                {tr("performance.start")}
                 <ThaiDateInput testId="cycle-start" value={form.period_start} onChange={(v) => setForm({ ...form, period_start: v })} required />
               </label>
               <label>
-                สิ้นสุด
+                {tr("performance.end")}
                 <ThaiDateInput testId="cycle-end" value={form.period_end} onChange={(v) => setForm({ ...form, period_end: v })} required />
               </label>
             </div>
             <button className="btn btn-primary" data-testid="create-cycle" type="submit" disabled={busy}>
-              สร้างรอบ
+              {tr("performance.create-a-round")}
             </button>
           </form>
         </div>
@@ -303,16 +306,16 @@ export default function PerformancePage() {
 
       <div className="card" style={{ marginBottom: 12 }}>
         {cycles.length === 0 ? (
-          <div className="empty">ยังไม่มีรอบประเมิน</div>
+          <div className="empty">{tr("performance.there-is-no-evaluation-round-yet")}</div>
         ) : (
           <table className="table">
             <thead>
               <tr>
-                <th>รอบ</th>
-                <th>ช่วงเวลา</th>
-                <th>สถานะ</th>
-                <th>ส่งแล้ว</th>
-                <th />
+                <th scope="col">{tr("performance.cycle")}</th>
+                <th scope="col">{tr("performance.period")}</th>
+                <th scope="col">{tr("performance.status")}</th>
+                <th scope="col">{tr("performance.sent")}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
@@ -332,7 +335,7 @@ export default function PerformancePage() {
                   </td>
                   <td>
                     <span className={`badge ${cycle.status === "active" ? "success" : ""}`}>
-                      {cycle.status === "active" ? "กำลังประเมิน" : cycle.status === "closed" ? "ปิดแล้ว" : "ร่าง"}
+                      {cycle.status === "active" ? tr("performance.evaluating") : cycle.status === "closed" ? tr("performance.closed") : tr("performance.draft")}
                     </span>
                   </td>
                   <td>
@@ -349,7 +352,7 @@ export default function PerformancePage() {
                             onClick={() => transition(cycle, "start")}
                             style={{ marginRight: 6 }}
                           >
-                            เริ่มรอบ
+                            {tr("performance.start-the-round")}
                           </button>
                         )}
                         {cycle.status === "active" && (
@@ -360,7 +363,7 @@ export default function PerformancePage() {
                             onClick={() => transition(cycle, "close")}
                             style={{ marginRight: 6 }}
                           >
-                            ปิดรอบ
+                            {tr("performance.close-cycle")}
                           </button>
                         )}
                         {cycle.status === "draft" && (
@@ -370,7 +373,7 @@ export default function PerformancePage() {
                             disabled={busy}
                             onClick={() => removeCycle(cycle)}
                           >
-                            ลบ
+                            {tr("performance.delete")}
                           </button>
                         )}
                       </>
@@ -387,27 +390,27 @@ export default function PerformancePage() {
         <div className="card card-pad">
           <div className="card-head">
             <h2 style={{ fontSize: 16 }}>
-              ผลประเมิน: {selected.name}{" "}
+              {tr("performance.text")} {selected.name}{" "}
               {selected.status === "closed" ? (
-                <span className="badge warning">ปิดรอบแล้ว — แก้ไขไม่ได้</span>
+                <span className="badge warning">{tr("performance.round-closed-cannot-be-edited")}</span>
               ) : selected.status === "draft" ? (
-                <span className="badge warning">ต้องเริ่มรอบก่อนจึงจะบันทึกได้</span>
+                <span className="badge warning">{tr("performance.a-round-must-be-started-before")}</span>
               ) : null}
             </h2>
           </div>
 
           {reviews.length === 0 ? (
-            <div className="empty">ยังไม่มีผลประเมินในรอบนี้ — กด “เริ่มรอบ” เพื่อสร้างรายการ</div>
+            <div className="empty">{tr("performance.there-are-no-evaluation-results-for")}</div>
           ) : (
             <table className="table">
               <thead>
                 <tr>
-                  <th>พนักงาน</th>
-                  <th>สถานะ</th>
-                  <th>คะแนน (1–5)</th>
-                  <th>จุดเด่น</th>
-                  <th>สิ่งที่ควรพัฒนา</th>
-                  <th />
+                  <th scope="col">{tr("performance.employee")}</th>
+                  <th scope="col">{tr("performance.status")}</th>
+                  <th scope="col">{tr("performance.score-1-5")}</th>
+                  <th scope="col">{tr("performance.strengths")}</th>
+                  <th scope="col">{tr("performance.things-that-should-be-developed")}</th>
+                  <th scope="col" />
                 </tr>
               </thead>
               <tbody>
@@ -434,10 +437,10 @@ export default function PerformancePage() {
                           }`}
                         >
                           {review.status === "acknowledged"
-                            ? "รับทราบแล้ว"
+                            ? tr("performance.acknowledged")
                             : review.status === "submitted"
-                              ? "ส่งแล้ว"
-                              : "รอประเมิน"}
+                              ? tr("performance.sent")
+                              : tr("performance.waiting-for-evaluation")}
                         </span>
                       </td>
                       <td>
@@ -479,7 +482,7 @@ export default function PerformancePage() {
                             disabled={busy}
                             onClick={() => submitReview(review)}
                           >
-                            บันทึก
+                            {tr("performance.save")}
                           </button>
                         )}
                       </td>
@@ -495,17 +498,17 @@ export default function PerformancePage() {
       {selected && canDirect && (
         <div className="card card-pad" style={{ marginTop: 12 }}>
           <h2 style={{ fontSize: 16, marginBottom: 10 }}>
-            การจัดวางระดับ (Calibration) — ลูกทีมที่รายงานตรง
+            {tr("performance.calibration-direct-reports")}
           </h2>
           {calibrations.length === 0 ? (
-            <div className="empty">ยงไม่มีกำรจัดวางระดัยในรอบนี้</div>
+            <div className="empty">{tr("performance.no-calibration-for-this-cycle-yet")}</div>
           ) : (
             <table className="table" style={{ marginBottom: 14 }}>
               <thead>
                 <tr>
-                  <th>พนักงาน</th>
-                  <th>คะแนนที่จัดวาง</th>
-                  <th>หมายเหตุ</th>
+                  <th scope="col">{tr("performance.employee")}</th>
+                  <th scope="col">{tr("performance.calibration-score")}</th>
+                  <th scope="col">{tr("performance.notes")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -528,7 +531,7 @@ export default function PerformancePage() {
                 value={calibrationEmployee}
                 onChange={(e) => setCalibrationEmployee(e.target.value)}
               >
-                <option value="">— เลือกพนักงาน —</option>
+                <option value="">{tr("performance.select-employee")}</option>
                 {directReports.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.employee_code} · {r.employee_name}
@@ -549,7 +552,7 @@ export default function PerformancePage() {
               </select>
               <input
                 data-testid="calibration-notes"
-                placeholder="หมายเหตุ (ไมบั งคัก)"
+                placeholder={tr("performance.notes-optional")}
                 value={calibrationNotes}
                 onChange={(e) => setCalibrationNotes(e.target.value)}
               />
@@ -560,7 +563,7 @@ export default function PerformancePage() {
               disabled={busy}
               onClick={saveCalibration}
             >
-              บันทักลงกำรจัดวางระดัย
+              {tr("performance.save-calibration")}
             </button>
           </div>
         </div>

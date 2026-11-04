@@ -1,11 +1,14 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Icon from "@/components/Icon";
 
 export default function LoginPage() {
+  const { t: tr } = useI18N();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,17 +33,17 @@ export default function LoginPage() {
         if (res.status === 401 && (body.error === "totp_required" || body.error === "invalid_totp")) {
           setErrorCode(body.error);
           setTotp("");
-          setError(body.error === "invalid_totp" ? "รหัสยืนยันไม่ถูกต้อง ลองอีกครั้ง" : "");
+          setError(body.error === "invalid_totp" ? tr("auth.login.verification-code-is-incorrect-try-again") : "");
           return;
         }
         throw new Error(
           [body.message, ...((body.details ?? []) as Array<{ field: string; message: string }>)
-            .map((d) => `${d.field}: ${d.message}`)].join(" — ") || "เข้าสู่ระบบไม่สำเร็จ");
+            .map((d) => `${d.field}: ${d.message}`)].join(" — ") || tr("auth.login.login-failed"));
       }
       router.replace("/");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "เข้าสู่ระบบไม่สำเร็จ");
+      setError(err instanceof Error ? err.message : tr("auth.login.login-failed"));
     } finally {
       setBusy(false);
     }
@@ -52,15 +55,17 @@ export default function LoginPage() {
         <div className="login-brand">
           <span className="brand-mark"><Icon name="clover" size={20} /></span> talentos
         </div>
-        <h1 style={{ fontSize: 20, marginBottom: 4 }}>เข้าสู่ระบบ</h1>
+        <h1 style={{ fontSize: 20, marginBottom: 4 }}>{tr("auth.login.login")}</h1>
         <p className="hint" style={{ marginBottom: 20 }}>
-          ระบบ HR และเงินเดือนสำหรับองค์กรไทย
+          {tr("auth.login.hr-and-salary-system-for-thai")}
         </p>
         <form onSubmit={submit}>
           <div className="field">
-            <label htmlFor="tenant">องค์กร</label>
+            <label htmlFor="tenant">{tr("auth.login.organization")}</label>
             <input
               id="tenant"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "login-error" : undefined}
               value={tenant}
               onChange={(e) => {
                 setTenant(e.target.value);
@@ -72,9 +77,11 @@ export default function LoginPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="email">อีเมล</label>
+            <label htmlFor="email">{tr("auth.login.email")}</label>
             <input
               id="email"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "login-error" : undefined}
               type="email"
               autoComplete="username"
               value={email}
@@ -88,9 +95,11 @@ export default function LoginPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="password">รหัสผ่าน</label>
+            <label htmlFor="password">{tr("auth.login.password")}</label>
             <input
               id="password"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "login-error" : undefined}
               type="password"
               autoComplete="current-password"
               value={password}
@@ -100,9 +109,11 @@ export default function LoginPage() {
           </div>
           {errorCode && (
             <div className="field">
-              <label htmlFor="totp">กรอกรหัสจากแอป Authenticator</label>
+              <label htmlFor="totp">{tr("auth.login.enter-the-code-from-the-app")}</label>
               <input
                 id="totp"
+              aria-invalid={error ? true : undefined}
+              aria-describedby={error ? "login-error" : undefined}
                 data-testid="login-totp"
                 autoComplete="one-time-code"
                 pattern="[A-Z0-9\-]{6,9}"
@@ -114,13 +125,13 @@ export default function LoginPage() {
               />
             </div>
           )}
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error" id="login-error" role="alert">{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={busy}>
-            {busy ? "กำลังเข้าสู่ระบบ…" : "เข้าสู่ระบบ"}
+            {busy ? tr("auth.login.logging-in") : tr("auth.login.login")}
           </button>
         </form>
         <p className="hint" style={{ marginTop: 16 }}>
-          <Link href="/setup">ติดตั้งระบบครั้งแรก</Link>
+          <Link href="/setup">{tr("auth.login.install-the-system-for-the-first")}</Link>
         </p>
       </div>
     </div>

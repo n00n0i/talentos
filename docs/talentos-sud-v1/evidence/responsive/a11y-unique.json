@@ -5,406 +5,323 @@
       "route": "/",
       "overflow": 0,
       "h1": 1,
-      "small": 4,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 320,
       "route": "/employees",
       "overflow": 0,
       "h1": 1,
-      "small": 9,
-      "unlabeled": 0,
-      "inputs": 4
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 320,
       "route": "/users",
       "overflow": 0,
       "h1": 1,
-      "small": 12,
-      "unlabeled": 0,
-      "inputs": 10
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 320,
       "route": "/payroll",
       "overflow": 0,
       "h1": 1,
-      "small": 8,
-      "unlabeled": 0,
-      "inputs": 5
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 320,
       "route": "/team",
       "overflow": 0,
       "h1": 1,
-      "small": 3,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 320,
       "route": "/claims",
       "overflow": 0,
       "h1": 1,
-      "small": 3,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 320,
       "route": "/recruitment",
       "overflow": 0,
       "h1": 1,
-      "small": 6,
-      "unlabeled": 0,
-      "inputs": 6
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 320,
       "route": "/settings",
       "overflow": 0,
       "h1": 1,
-      "small": 25,
-      "unlabeled": 16,
-      "inputs": 28
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/",
       "overflow": 0,
       "h1": 1,
-      "small": 4,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/employees",
       "overflow": 0,
       "h1": 1,
-      "small": 9,
-      "unlabeled": 0,
-      "inputs": 4
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/users",
       "overflow": 0,
       "h1": 1,
-      "small": 12,
-      "unlabeled": 0,
-      "inputs": 10
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/payroll",
       "overflow": 0,
       "h1": 1,
-      "small": 8,
-      "unlabeled": 0,
-      "inputs": 5
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/team",
       "overflow": 0,
       "h1": 1,
-      "small": 3,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/claims",
       "overflow": 0,
       "h1": 1,
-      "small": 3,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/recruitment",
       "overflow": 0,
       "h1": 1,
-      "small": 6,
-      "unlabeled": 0,
-      "inputs": 6
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 390,
       "route": "/settings",
       "overflow": 0,
       "h1": 1,
-      "small": 25,
-      "unlabeled": 16,
-      "inputs": 28
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/",
       "overflow": 0,
       "h1": 1,
-      "small": 4,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/employees",
       "overflow": 0,
       "h1": 1,
-      "small": 9,
-      "unlabeled": 0,
-      "inputs": 4
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/users",
       "overflow": 0,
       "h1": 1,
-      "small": 12,
-      "unlabeled": 0,
-      "inputs": 10
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/payroll",
       "overflow": 0,
       "h1": 1,
-      "small": 8,
-      "unlabeled": 0,
-      "inputs": 5
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/team",
       "overflow": 0,
       "h1": 1,
-      "small": 3,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/claims",
       "overflow": 0,
       "h1": 1,
-      "small": 3,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/recruitment",
       "overflow": 0,
       "h1": 1,
-      "small": 6,
-      "unlabeled": 0,
-      "inputs": 6
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 760,
       "route": "/settings",
       "overflow": 0,
       "h1": 1,
-      "small": 25,
-      "unlabeled": 16,
-      "inputs": 28
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/",
       "overflow": 0,
       "h1": 1,
-      "small": 31,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/employees",
       "overflow": 0,
       "h1": 1,
-      "small": 36,
-      "unlabeled": 0,
-      "inputs": 4
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/users",
       "overflow": 0,
       "h1": 1,
-      "small": 39,
-      "unlabeled": 0,
-      "inputs": 10
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/payroll",
       "overflow": 0,
       "h1": 1,
-      "small": 35,
-      "unlabeled": 0,
-      "inputs": 5
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/team",
       "overflow": 0,
       "h1": 1,
-      "small": 30,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/claims",
       "overflow": 0,
       "h1": 1,
-      "small": 30,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/recruitment",
       "overflow": 0,
       "h1": 1,
-      "small": 33,
-      "unlabeled": 0,
-      "inputs": 6
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1024,
       "route": "/settings",
       "overflow": 0,
       "h1": 1,
-      "small": 52,
-      "unlabeled": 16,
-      "inputs": 28
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/",
       "overflow": 0,
       "h1": 1,
-      "small": 31,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/employees",
       "overflow": 0,
       "h1": 1,
-      "small": 36,
-      "unlabeled": 0,
-      "inputs": 4
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/users",
       "overflow": 0,
       "h1": 1,
-      "small": 39,
-      "unlabeled": 0,
-      "inputs": 10
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/payroll",
       "overflow": 0,
       "h1": 1,
-      "small": 35,
-      "unlabeled": 0,
-      "inputs": 5
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/team",
       "overflow": 0,
       "h1": 1,
-      "small": 30,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/claims",
       "overflow": 0,
       "h1": 1,
-      "small": 30,
-      "unlabeled": 0,
-      "inputs": 1
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/recruitment",
       "overflow": 0,
       "h1": 1,
-      "small": 33,
-      "unlabeled": 0,
-      "inputs": 6
+      "small": 0,
+      "unlabeled": 0
     },
     {
       "width": 1440,
       "route": "/settings",
       "overflow": 0,
       "h1": 1,
-      "small": 52,
-      "unlabeled": 16,
-      "inputs": 28
+      "small": 0,
+      "unlabeled": 0
     }
   ],
-  "uniqueSmallTargets": 53,
-  "uniqueUnlabeledInputs": 14,
-  "smallSamples": [
-    "BUTTON|menu-btn|☰",
-    "BUTTON|lang-toggle|EN",
-    "BUTTON|icon-btn|ออกจากระบบ",
-    "A|summary-cta|ดูรอบเงินเดือน",
-    "BUTTON|btn btn-sm|แก้ไข",
-    "BUTTON|btn btn-sm btn-danger|ปิดสถานะ",
-    "BUTTON|btn btn-sm|บันทึก LINE",
-    "BUTTON|btn btn-sm|รีเซ็ต",
-    "BUTTON|btn btn-sm btn-danger|ปิด",
-    "BUTTON|thai-date-picker|▣",
-    "A|badge accent|CSV",
-    "A|badge accent|ดาวน์โหลดไฟล์โอน",
-    "BUTTON|btn btn-sm|นักพัฒนาระบบ E2E",
-    "BUTTON|btn btn-sm|ปิดรับ",
-    "BUTTON|btn btn-sm|ลบ",
-    "BUTTON|btn btn-sm btn-danger|ออกจากอุปกรณ์นี้",
-    "BUTTON|btn btn-sm|บันทึก",
-    "A|active|ภาพรวม",
-    "A||พนักงาน",
-    "A||ทีมของฉัน"
-  ],
-  "unlabeledSamples": [
-    "INPUT|number|divisor|",
-    "INPUT|number||",
-    "INPUT|text|gl-salary|",
-    "INPUT|text|gl-net|",
-    "INPUT|text|gl-tax|",
-    "INPUT|text|gl-sso|",
-    "INPUT|text|gl-pf|",
-    "INPUT|text|gl-loan|",
-    "INPUT|text|gl-claim|",
-    "SELECT|select-one|rule-type|",
-    "SELECT|select-one|rule-chain|",
-    "INPUT|text|oidc-client-id|",
-    "INPUT|text||",
-    "INPUT|text||compact-input"
-  ],
-  "focus": {
-    "tag": "A",
-    "text": "TalentOSE2E Co",
-    "outline": "1px"
-  },
-  "ariaSnapshot": "- main:\n  - heading \"พนักงาน\" [level=1]\n  - paragraph: ข้อมูลพนักงานในองค์กรของคุณ\n  - checkbox \"รวมที่พ้นสภาพ\"\n  - text: รวมที่พ้นสภาพ\n  - textbox \"ค้นหารหัส ชื่อ หรือตำแหน่ง\"\n  - button \"เพิ่มพนักงาน\"\n  - heading \"นำเข้าพนักงานจากไฟล์ CSV\" [level=2]\n  - paragraph: \"คอลัมน์ที่จำเป็น: employee_code, first_name_th, last_name_th, position_title, base_salary, hire_date · ไม่บังคับ: department, first_name_en, last_name_en, tax_filing_status, pf_member, sso_enrolled (ไฟล์ไม่เกิน 2 MB และ 1000 แถว)\"\n  - text: เลือกไฟล์ CSV พนักงาน\n  - button \"เลือกไฟล์ CSV พนักงาน\"\n  - table:\n    - rowgroup:\n      - row \"รหัส ชื่อ ตำแหน่ง แผนก ผู้ดูแล เงินเดือน สถานะ\":\n        - cell \"รหัส\"\n        - cell \"ชื่อ\"\n        - cell \"ตำแหน่ง\"\n        - cell \"แผนก\"\n        - cell \"ผู้ดูแล\"\n        - cell \"เงินเดือน\"\n        - cell \"สถานะ\"\n        - cell\n    - rowgroup:\n      - row \"E2E001 สมชาย ทดสอบ Engineer — — ฿40,000.00 ทำงานอยู่ แก้ไข ปิดสถานะ\":\n        - cell \"E2E001\"\n        - cell \"สมชาย ทดสอบ\"\n        - cell \"Engineer\"\n        - cell \"—\"\n        - cell \"—\"\n        - cell \"฿40,000.00\"\n        - cell \"ทำงานอยู่\"\n        - cell \"แก้ไข ปิดสถานะ\":\n          - button \"แก้ไข\"\n          - button \"ปิดสถานะ\"\n      - row \"E2E002 สมสรี ลู่กข่า E2E Junior Engineer — E2E001 · สมชาย ทดสอบ ฿20,000.00 ทำงานอยู่ แก้ไข ปิดสถานะ\":\n        - cell \"E2E002\"\n        - cell \"สมสรี ลู่กข่า E2E\"\n        - cell \"Junior Engineer\"\n        - cell \"—\"\n        - cell \"E2E001 · สมชาย ทดสอบ\"\n        - cell \"฿20,000.00\"\n        - cell \"ทำงานอยู่\"\n        - cell \"แก้ไข ปิดสถานะ\":\n          - button \"แก้ไข\"\n          - button \"ปิดสถานะ\"\n      - row \"E2E-IMP-1 นำเข้า ทดสอบ, ซีเอสวี นักพัฒนา ไอที — ฿25,000.00 ทำงานอยู่ แก้ไข ปิดสถานะ\":\n        - cell \"E2E-IMP-1\"\n        - cell \"นำเข้า ทดสอบ, ซีเอสวี\"\n        - cell \"นักพัฒนา\"\n        - cell \"ไอที\"\n        - cell \"—\"\n        - cell \"฿25,000.00\"\n        - cell \"ทำงานอยู่\"\n        - cell \"แก้ไข ปิดสถานะ\":\n          - button \"แก้ไข\"\n          - button \"ปิดสถานะ\""
+  "uniqueSmallTargets": 0,
+  "uniqueUnlabeledInputs": 0,
+  "unlabeledSamples": []
 }

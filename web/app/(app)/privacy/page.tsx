@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18N } from "@/lib/i18n";
+
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, gw, handleApiError, thDate } from "@/lib/api";
 
@@ -9,6 +11,7 @@ const bangkokToday = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 
 export default function PrivacyPage() {
+  const { t: tr } = useI18N();
   const [status, setStatus] = useState<PrivacyStatus | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -32,7 +35,7 @@ export default function PrivacyPage() {
         body: JSON.stringify({ version: status.notice_version }),
       });
       setStatus(res);
-      setNotice("บันทึกการรับทราบแล้ว");
+      setNotice(tr("privacy.acknowledgment-has-been-recorded"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -54,7 +57,7 @@ export default function PrivacyPage() {
       a.download = `talentos-personal-data-${bangkokToday()}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setNotice("ดาวน์โหลดข้อมูลส่วนบุคคลแล้ว");
+      setNotice(tr("privacy.personal-information-has-been-downloaded"));
     } catch (e) {
       handleApiError(e, setError);
     } finally {
@@ -66,71 +69,63 @@ export default function PrivacyPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>ความเป็นส่วนตัวและข้อมูลส่วนบุคคล</h1>
-          <p className="page-sub">ประกาศความเป็นส่วนตัว สิทธิของเจ้าของข้อมูล และการส่งออกข้อมูล</p>
+          <h1>{tr("privacy.privacy-and-personal-information")}</h1>
+          <p className="page-sub">{tr("privacy.privacy-notice-rights-of-the-data")}</p>
         </div>
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="card card-pad" style={{ display: "grid", gap: 14 }}>
         <section>
-          <h2 style={{ fontSize: 16 }}>ข้อมูลที่เราเก็บ</h2>
+          <h2 style={{ fontSize: 16 }}>{tr("privacy.information-we-collect")}</h2>
           <p>
-            ข้อมูลระบุตัวตนและข้อมูลติดต่อ ข้อมูลการจ้างงาน ค่าจ้าง ภาษี ประกันสังคม
-            กองทุนสำรองเลี้ยงชีพ การลงเวลาและตำแหน่งขณะลงเวลา การลา OT ค่าใช้จ่าย
-            เงินกู้ และเอกสารที่เกี่ยวข้องกับงานบุคคล
+            {tr("privacy.text")}
           </p>
         </section>
         <section>
-          <h2 style={{ fontSize: 16 }}>วัตถุประสงค์</h2>
+          <h2 style={{ fontSize: 16 }}>{tr("privacy.objective")}</h2>
           <p>
-            เพื่อบริหารงานบุคคล จ่ายค่าจ้าง คำนวณภาษีและเงินสมทบ จัดการสวัสดิการ
-            ปฏิบัติตามกฎหมายแรงงานและภาษี และปกป้องสิทธิของทั้งพนักงานและองค์กร
+            {tr("privacy.text-2")}
           </p>
         </section>
         <section>
-          <h2 style={{ fontSize: 16 }}>ระยะเวลาการเก็บรักษา</h2>
+          <h2 style={{ fontSize: 16 }}>{tr("privacy.storage-period")}</h2>
           <p>
-            เก็บเท่าที่จำเป็นต่อการจ้างงาน และเก็บต่อตามที่กฎหมายกำหนด เช่น เอกสารภาษี
-            และบัญชีค่าจ้างอย่างน้อย 5 ปี เมื่อพ้นกำหนด องค์กรจะลบหรือทำให้ anonymise
-            ตามนโยบายที่ใช้บังคับ
+            {tr("privacy.text-3")}
           </p>
         </section>
         <section>
-          <h2 style={{ fontSize: 16 }}>สิทธิของท่าน</h2>
+          <h2 style={{ fontSize: 16 }}>{tr("privacy.your-rights")}</h2>
           <p>
-            ขอเข้าถึงและรับสำเนาข้อมูล ขอแก้ไขข้อมูลที่ไม่ถูกต้อง ขอให้ลบหรือทำลายเมื่อพ้น
-            ระยะเก็บรักษา คัดค้านหรือจำกัดการประมวลผล และร้องเรียนต่อหน่วยงานกำกับดูแล
-            ติดต่อฝ่ายบุคคลขององค์กรเพื่อใช้สิทธิ
+            {tr("privacy.text-4")}
           </p>
         </section>
         <section>
-          <h2 style={{ fontSize: 16 }}>ส่งออกข้อมูลของฉัน (DSAR)</h2>
+          <h2 style={{ fontSize: 16 }}>{tr("privacy.export-my-data-dsar")}</h2>
           <p>
-            ดาวน์โหลดข้อมูลส่วนบุคคลที่ระบบเก็บเกี่ยวกับบัญชีนี้ในรูปแบบ JSON
-            รวมถึงข้อมูลพนักงาน การลงเวลา การลา OT ค่าใช้จ่าย เงินกู้ และสลิปค่าจ้าง
+            {tr("privacy.text-5")}
           </p>
           <button className="btn btn-primary" data-testid="export-data" disabled={busy} onClick={exportData}>
-            ดาวน์โหลดข้อมูลของฉัน
+            {tr("privacy.download-my-data")}
           </button>
         </section>
       </div>
 
       <div className="card card-pad" style={{ marginTop: 12 }}>
         {status === null ? (
-          <div className="spinner">กำลังโหลด…</div>
+          <div className="spinner">{tr("privacy.loading")}</div>
         ) : status.accepted_at ? (
           <p data-testid="consent-status">
-            รับทราบประกาศความเป็นส่วนตัว version {status.notice_version} เมื่อ{" "}
+            {tr("privacy.text-6")} {status.notice_version} {tr("privacy.text-7")}{" "}
             {thDate(status.accepted_at.slice(0, 10))}
           </p>
         ) : (
           <>
-            <p>ท่านยังไม่ได้ยืนยันการรับทราบประกาศความเป็นส่วนตัว version {status.notice_version}</p>
+            <p>{tr("privacy.text-8")} {status.notice_version}</p>
             <button className="btn btn-primary" data-testid="accept-consent" disabled={busy} onClick={accept}>
-              ยอมรับและรับทราบประกาศ
+              {tr("privacy.accept-and-acknowledge-the-announcement")}
             </button>
           </>
         )}

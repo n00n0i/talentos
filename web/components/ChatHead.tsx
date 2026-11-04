@@ -93,12 +93,12 @@ export default function ChatHead() {
               <p className="hint">{t("chat.hint")}</p>
             )}
             {forbidden && (
-              <p className="error" data-testid="chat-forbidden">
+              <p className="error" role="alert" data-testid="chat-forbidden">
                 {t("chat.forbidden")}
               </p>
             )}
             {unavailable && (
-              <p className="error" data-testid="chat-unavailable">
+              <p className="error" role="alert" data-testid="chat-unavailable">
                 {t("chat.unavailable")}{" "}
                 <Link
                   href="/settings/ai"

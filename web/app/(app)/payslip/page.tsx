@@ -1,5 +1,9 @@
 "use client";
 
+import type { TranslationKey } from "@/lib/i18n-catalog";
+
+import { useI18N, tNow } from "@/lib/i18n";
+
 import { useEffect, useMemo, useState } from "react";
 import { gw, gql, handleApiError, PayrollRun, Payslip, thDate } from "@/lib/api";
 
@@ -14,13 +18,13 @@ type Template = {
 
 type Pick = { label: string; id: string };
 
-const FIELDS: { key: string; label: string }[] = [
-  { key: "ot", label: "ค่าล่วงเวลา" },
-  { key: "sso", label: "ประกันสังคม" },
-  { key: "pf", label: "กองทุนสำรองเลี้ยงชีพ" },
-  { key: "tax", label: "ภาษีหัก ณ ที่จ่าย" },
-  { key: "anomalies", label: "รายการผิดปกติ" },
-  { key: "bank", label: "บัญชีธนาคาร" },
+const FIELDS: { key: string; labelKey: TranslationKey }[] = [
+  { key: "ot", labelKey: "payslip.overtime" },
+  { key: "sso", labelKey: "payslip.social-security" },
+  { key: "pf", labelKey: "payslip.provident-fund" },
+  { key: "tax", labelKey: "payslip.withholding-tax" },
+  { key: "anomalies", labelKey: "payslip.unusual-item" },
+  { key: "bank", labelKey: "payslip.bank-account" },
 ];
 
 const EMPTY: Template = {
@@ -33,6 +37,7 @@ const EMPTY: Template = {
 };
 
 export default function PayslipPage() {
+  const { t: tr } = useI18N();
   const [template, setTemplate] = useState<Template | null>(null);
   const [picks, setPicks] = useState<Pick[]>([]);
   const [selected, setSelected] = useState("");
@@ -99,7 +104,7 @@ export default function PayslipPage() {
         footer_text: template.footer_text?.trim() || null,
       };
       await gw("api/v1/payslip/template", { method: "PUT", body: JSON.stringify(body) });
-      setNotice("บันทึกแบบฟอร์มแล้ว");
+      setNotice(tr("payslip.form-saved"));
       setVersion((v) => v + 1);
     } catch (e) {
       handleApiError(e, setError);
@@ -109,40 +114,40 @@ export default function PayslipPage() {
   }
 
   if (!template) {
-    return <div className="spinner">{error || "กำลังโหลด…"}</div>;
+    return <div className="spinner">{error || tr("payslip.loading")}</div>;
   }
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>แบบฟอร์มสลิป</h1>
-          <p className="page-sub">ปรับหัวสลิป สี และรายการที่แสดง — ตัวอย่างด้านขวาใช้ข้อมูลจริง</p>
+          <h1>{tr("payslip.payslip-form")}</h1>
+          <p className="page-sub">{tr("payslip.adjust-the-slip-header-colors-and")}</p>
         </div>
         {selected && (
           <a className="btn" href={`/api/gw/api/v1/payroll/payslips/${selected}/pdf`} target="_blank">
-            ดาวน์โหลด PDF
+            {tr("payslip.download-pdf")}
           </a>
         )}
       </div>
 
-      {error && <p className="error">{error}</p>}
-      {notice && <p className="badge success">{notice}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {notice && <p className="badge success" role="status" aria-live="polite">{notice}</p>}
 
       <div className="editor">
         <form className="card card-pad" onSubmit={save} style={{ display: "grid", gap: 16 }}>
           <div className="field">
-            <label htmlFor="company">ชื่อบริษัทบนสลิป</label>
+            <label htmlFor="company">{tr("payslip.company-name-on-the-slip")}</label>
             <input
               id="company"
-              placeholder="เว้นว่างเพื่อใช้ชื่อนิติบุคคล"
+              placeholder={tr("payslip.leave-blank-to-use-the-name")}
               value={template.company_display_name ?? ""}
               onChange={(e) => update("company_display_name", e.target.value)}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="logo">URL โลโก้ (https)</label>
+            <label htmlFor="logo">{tr("payslip.logo-url-https")}</label>
             <input
               id="logo"
               placeholder="https://…"
@@ -152,7 +157,7 @@ export default function PayslipPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="color">สีหลัก</label>
+            <label htmlFor="color">{tr("payslip.main-color")}</label>
             <div className="color-row">
               <input
                 id="color"
@@ -161,7 +166,7 @@ export default function PayslipPage() {
                 onChange={(e) => update("accent_color", e.target.value)}
               />
               <input
-                aria-label="รหัสสี"
+                aria-label={tr("payslip.color-code")}
                 value={template.accent_color}
                 onChange={(e) => update("accent_color", e.target.value)}
               />
@@ -169,7 +174,7 @@ export default function PayslipPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="paper">ขนาดกระดาษ</label>
+            <label htmlFor="paper">{tr("payslip.paper-size")}</label>
             <select id="paper" value={template.paper_size} onChange={(e) => update("paper_size", e.target.value)}>
               <option value="A4">A4</option>
               <option value="A5">A5</option>
@@ -178,7 +183,7 @@ export default function PayslipPage() {
           </div>
 
           <div className="field">
-            <label>รายการที่แสดง</label>
+            <label>{tr("payslip.displayed-items")}</label>
             <div className="fields-grid">
               {FIELDS.map((f) => (
                 <label className="check" key={f.key}>
@@ -187,33 +192,33 @@ export default function PayslipPage() {
                     checked={template.show_fields.includes(f.key)}
                     onChange={() => toggleField(f.key)}
                   />
-                  {f.label}
+                  {tr(f.labelKey)}
                 </label>
               ))}
             </div>
           </div>
 
           <div className="field">
-            <label htmlFor="footer">ข้อความท้ายสลิป</label>
+            <label htmlFor="footer">{tr("payslip.message-at-the-end-of-the")}</label>
             <textarea
               id="footer"
               maxLength={500}
               value={template.footer_text ?? ""}
               onChange={(e) => update("footer_text", e.target.value)}
             />
-            <span className="hint">ไม่เกิน 500 ตัวอักษร</span>
+            <span className="hint">{tr("payslip.max-500-characters")}</span>
           </div>
 
           <button className="btn btn-primary" type="submit" disabled={busy}>
-            {busy ? "กำลังบันทึก…" : "บันทึกแบบฟอร์ม"}
+            {busy ? tr("payslip.saving") : tr("payslip.save-the-form")}
           </button>
         </form>
 
         <div style={{ display: "grid", gap: 10 }}>
           <div className="field">
-            <label htmlFor="payslip">ตัวอย่างจากสลิป</label>
+            <label htmlFor="payslip">{tr("payslip.example-from-the-slip")}</label>
             <select id="payslip" value={selected} onChange={(e) => setSelected(e.target.value)}>
-              {picks.length === 0 && <option value="">ยังไม่มีสลิปในระบบ</option>}
+              {picks.length === 0 && <option value="">{tr("payslip.there-is-no-slip-in-the")}</option>}
               {picks.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label}
@@ -222,9 +227,9 @@ export default function PayslipPage() {
             </select>
           </div>
           {previewUrl ? (
-            <iframe key={previewUrl} className="preview-frame" src={previewUrl} title="ตัวอย่างสลิป" />
+            <iframe key={previewUrl} className="preview-frame" src={previewUrl} title={tr("payslip.sample-slip")} />
           ) : (
-            <div className="card empty">สร้างรอบเงินเดือนก่อนเพื่อดูตัวอย่างสลิปจริง</div>
+            <div className="card empty">{tr("payslip.create-a-salary-cycle-first-to")}</div>
           )}
         </div>
       </div>

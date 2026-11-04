@@ -1,3 +1,5 @@
+> **Closure update:** final counts are in `15-acceptance-matrix.md` / `18`–`20`.
+
 # SUD-05 — Security & Regression
 
 **Gate:** `SUD-A5_SECURITY_REGRESSION_PASS` — **PASS**
@@ -11,7 +13,7 @@
 | `tsc --noEmit` | clean |
 | `vitest run` | **47 passed** |
 | `npm run build` | success |
-| Playwright (isolated stack `:3100` / DB `talentos_e2e`) | **64/64 passed** |
+| Playwright (isolated stack `:3100` / DB `talentos_e2e`) | **68/68 passed** (closure) |
 | E2E guard negative tests | **5/5 refused** |
 | Migrations | 72 applied |
 

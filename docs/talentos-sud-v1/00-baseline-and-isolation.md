@@ -43,7 +43,9 @@ the UI baseline; no WS2 files were modified by this campaign.
 - Local `talentos_e2e` was migrated to **72** migrations before the run. The dev
   database was not used for the final E2E evidence.
 
-## Baseline vs final test record
+## Baseline vs final test record (first SUD pass)
+
+> Closure counts are in `15`/`20`: 535 Rust, 53 Vitest, 68 Playwright, 72 migrations.
 
 At the reported UI baseline `c298055` (before campaign changes):
 

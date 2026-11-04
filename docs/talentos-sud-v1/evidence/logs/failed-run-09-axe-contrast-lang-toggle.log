@@ -1,0 +1,7 @@
+violation records 52 distinct 2
+color-contrast|serious x 26 e.g. / [
+  '.side-brand-name',
+  '.side-brand-sub',
+  '.side-group:nth-child(2) > .side-group-label'
+]
+label-content-name-mismatch|serious x 26 e.g. / [ '.lang-toggle' ]

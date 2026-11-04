@@ -1,0 +1,68 @@
+
+Running 3 tests using 1 worker
+
+  ✘  1 [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 390px (30.3s)
+  -  2 [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 760px
+  -  3 [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 1440px
+
+
+  1) [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 390px ───────────────
+
+    Error: [
+      {
+        "route": "/",
+        "id": "color-contrast",
+        "impact": "serious",
+        "nodes": [
+          [
+            ".summary-empty"
+          ]
+        ]
+      }
+    ]
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoEqual[2m([22m[32mexpected[39m[2m) // deep equality[22m
+
+    [32m- Expected  -  1[39m
+    [31m+ Received  + 12[39m
+
+    [32m- Array [][39m
+    [31m+ Array [[39m
+    [31m+   Object {[39m
+    [31m+     "id": "color-contrast",[39m
+    [31m+     "impact": "serious",[39m
+    [31m+     "nodes": Array [[39m
+    [31m+       Array [[39m
+    [31m+         ".summary-empty",[39m
+    [31m+       ],[39m
+    [31m+     ],[39m
+    [31m+     "route": "/",[39m
+    [31m+   },[39m
+    [31m+ ][39m
+
+      106 |       expect(controls.small, `${route} targets under 36px`).toBe(0);
+      107 |     }
+    > 108 |     expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
+          |                                                             ^
+      109 |   });
+      110 | }
+      111 |
+        at /home/opc/content-creator/talentos/web/e2e/a11y.spec.ts:108:61
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/a11y-axe-WCAG-2-1-AA-and-target-sizing-at-390px-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/a11y-axe-WCAG-2-1-AA-and-target-sizing-at-390px-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/a11y-axe-WCAG-2-1-AA-and-target-sizing-at-390px-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/a11y-axe-WCAG-2-1-AA-and-target-sizing-at-390px-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › e2e/a11y.spec.ts:62:7 › axe WCAG 2.1 AA and target sizing at 390px ────────────────
+  2 did not run

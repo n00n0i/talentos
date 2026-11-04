@@ -1,6 +1,7 @@
 # SUD-21 — Release Hygiene
 
 **Gate:** `SUD-A6_RELEASE_HYGIENE_READY` — **READY (no push)**  
+**Candidate:** `397864a`  
 **Evidence:** `evidence/logs/git-state.log`, `evidence/logs/secret-scan.log`,
 `evidence/logs/e2e-stack-status.log`
 
@@ -27,7 +28,7 @@
 
 - Migrations: **72**; isolated `talentos_e2e` was reset and migrated from scratch.
 - `cargo test --workspace` **535 passed / 1 ignored**, clippy clean, `tsc` clean,
-  vitest **50**, Next build success, Playwright **68/68** on the isolated stack.
+  vitest **53**, Next build success, Playwright **68/68** on the isolated stack.
 - `scripts/e2e-reset.sh` guard tests **5/5 refused**; stack status archived.
 
 ## CI status

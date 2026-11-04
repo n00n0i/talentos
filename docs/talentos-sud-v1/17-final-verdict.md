@@ -1,48 +1,63 @@
 # SUD-17 — Final Verdict
 
 **Campaign:** `TALENTOS-SUD-V1`  
+**Candidate:** `397864a` (branch `sud-closure`, based on `e73ce01`)  
 **Date:** 2026-11-04  
 **Target:** `STABILIZATION_ACCEPTED_UXUI_DESIGN_READY`
 
-## Verdict: **NOT ACCEPTED — CONDITIONAL**
+## Verdict: **ACCEPTED (engineering) — `STABILIZATION_ACCEPTED_UXUI_DESIGN_READY`**
 
-The stabilization work is green on security/regression and the UX/UI discovery is
-complete enough to brief design, but two Track A gates are not fully met:
+All mandatory engineering gates pass and were independently verified on the frozen
+candidate. Native-language review, physical-device/AT UAT and remote CI remain
+explicit external validation items and do not block this engineering acceptance.
 
-- **A2 PARTIAL:** all screens translate in EN, but the key-based architecture is not
-  yet used for every critical form/dialog/validation; the DOM bridge remains and the
-  English copy is machine-generated.
-- **A4 PARTIAL:** responsive layout and route checks pass (0 overflow, 82 screens), but
-  14 unique settings inputs still lack associated labels, 53 unique small targets
-  remain, and there was no physical-device or axe/screen-reader verification.
+## Gate results
 
-## Passed
+| Gate | Result |
+|---|---|
+| SUD-G0 Baseline & isolation | **PASS** |
+| SUD-A1 Manager team security | **PASS** |
+| SUD-A2 Localization engineering | **PASS** |
+| SUD-A3 Thai dates | **PASS** |
+| SUD-A4 Responsive & accessibility | **PASS (engineering)** |
+| SUD-A5 Security & regression | **PASS** |
+| SUD-A6 Release hygiene | **PASS (no push; CI NOT_EVALUATED)** |
+| SUD-B UX/UI discovery | **PARTIAL (external)** — deliverables and prototype complete |
 
-- **G0** baseline/isolation (guarded `talentos_e2e`, 72 migrations).
-- **A1** manager team access (backend scope, 403, cross-tenant, no PII).
-- **A3** Thai dates (unit + E2E; leap/invalid/empty/time).
-- **A5** security regression (535 Rust, 47 vitest, 64/64 E2E, guard 5/5).
-- **A6** release hygiene ready (no push, secret scan, push plan).
+## What changed in the closure
 
-## Partially complete
+- **Localization:** typed key catalog (1,388 keys), TH/EN parity enforced by `tsc`,
+  EN→TH→key fallback, missing-key diagnostics, interpolation, pluralization,
+  locale-aware dates/numbers/relative time. The DOM bridge and `th-en.ts` were
+  deleted; no screen text or user data is mutated. Raw-key dropdown regression fixed.
+- **Accessibility:** all 14 unlabeled inputs and 53 undersized targets closed (0/0),
+  `scope`, `role=alert/status`, focus-visible styles, touch targets, axe-core in
+  Playwright with 72 clean scans at 390/760/1440 and in English mode.
+- **Regression:** 535 Rust / 53 Vitest / 68 Playwright / 5 guard tests / 72 migrations;
+  clippy, tsc and Next build clean.
+- **UX/UI handoff:** verified inventory, journeys, IA, interaction contracts,
+  capability register and an isolated mocked prototype.
 
-- **B** discovery artifacts/prototype: screen inventory, journeys, IA, contracts,
-  design system and static prototype are complete, but B remains **PARTIAL** because
-  there was no native language/device review and the Integration Studio runtime is
-  proposed (see `15`).
+## Independent verification
 
-## Required before acceptance
+The independent verifier ran three passes. The first two rejected acceptance and
+found real defects (Thai formatting in EN, stale docs, raw keys in three dropdowns).
+After bounded remediation, the final pass on `397864a` returned PASS for A1–A6 and
+PARTIAL only for B's external items (see `20`).
 
-1. Migrate critical forms/dialogs/validation to typed keys; reduce/remove the DOM layer;
-   complete native English review for payroll/legal.
-2. Fix settings labels and touch targets; add axe-core + real-device pass.
-3. Independent verifier sign-off (see `14-independent-verification.md`).
-4. Owner-approved push/CI plan; do not push all 81 local commits blindly.
+## Still pending (does not block engineering acceptance)
+
+1. Native Thai/English business review of payroll/legal copy.
+2. Physical-device and screen-reader UAT (axe is not proof of WCAG compliance).
+3. Push and CI on the candidate SHA (`NOT_EVALUATED`); no push/tag/deploy occurred.
+4. WS2 flow engine, executor and secret writer (PROPOSED; only connector registry and
+   connection storage are verified).
+5. Native-quality English for legal/financial wording may still need refinement.
 
 ## Evidence
 
-`evidence/logs/playwright-isolated.log`, `evidence/logs/cargo-test-workspace.log`,
-`evidence/logs/e2e-guard-tests.log`, `evidence/responsive/checks.json`,
-`evidence/responsive/a11y.json`, `evidence/responsive/a11y-unique.json`,
-`evidence/responsive/en-routes.json`, `evidence/screens/`, `evidence/prototype/`.
-Evidence commit: `1bc9bc2`.
+`docs/talentos-sud-v1/evidence/` — logs (`playwright-isolated.log` 68 passed,
+`playwright-axe.log` 4 passed, `vitest.log` 53, `cargo-test-workspace.log` 535,
+`e2e-guard-tests.log` 5/5), `responsive/checks.json` (82 screens, 0 failures),
+`responsive/en-routes.json` (30 routes), `responsive/a11y-unique.json` (0/0),
+`screens/`, `prototype/`.

@@ -1,4 +1,6 @@
-# SUD-14 — Independent Verification
+# SUD-14 — Independent Verification (first SUD pass)
+
+> Closure re-verification is recorded in `20-independent-reverification.md`.
 
 **Verifier:** separate subagent context (read-only; no subagents; no push). It read the
 campaign docs, code, `checks.json`, `a11y.json`, the E2E/Rust/guard logs and the static

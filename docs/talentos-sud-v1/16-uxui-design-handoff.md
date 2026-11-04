@@ -36,3 +36,30 @@ It is intentionally mocked and isolated.
 - Do not wire the prototype to write APIs.
 - Do not treat WS2 Slice 1 (registry/connections) as an executor.
 - Do not claim native English or physical-device accessibility without review.
+
+---
+
+## Closure update (SUD-V1 engineering acceptance)
+
+**Verified inventory:** 34 routes across public auth, HR, payroll, time, employee
+self-service, AI settings, administration; 82 screenshots in `evidence/screens/`.
+Journeys (`08`), IA (`09`), interaction contracts (`10`), design tokens (`11`) and the
+capability register (`13`) are current.
+
+**Localization requirements now met:** every screen renders from a typed TH/EN catalog
+(1,388 keys); no DOM translation bridge; no API/user data is translated; dates,
+relative times, currency and numbers follow the active language; raw-key labels are
+covered by an automated check.
+
+**Accessibility requirements now met (engineering):** labels, `scope`, `role=alert/
+status`, focus-visible styling, 36–40 px targets, and axe-core in CI with 72 clean
+scans. Native-language review and physical-device/AT UAT remain external.
+
+**Backend capability matrix:** connector registry and connection storage are verified;
+flow engine, executor, secret writer, simulation and run monitoring remain PROPOSED.
+The prototype is mocked and isolated (`prototype/index.html`, no API calls).
+
+**Remaining external validation:** native Thai/English payroll/legal review;
+physical-device and screen-reader UAT; remote CI on the candidate SHA; real SSO,
+e-signature and bank/e-filing credentials. These restrict production release
+readiness, not the engineering acceptance of this campaign.

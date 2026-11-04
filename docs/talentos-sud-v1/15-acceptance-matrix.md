@@ -1,22 +1,33 @@
 # SUD-15 — Acceptance Matrix
 
-| Gate | Result | Evidence / reason |
+**Candidate:** `397864a` (branch `sud-closure`, based on `e73ce01`)  
+**Date:** 2026-11-04
+
+| Gate | Result | Evidence |
 |---|---|---|
-| SUD-G0 Baseline & isolation | **PASS** | `00` + reset/stack logs; isolated `talentos_e2e` |
-| SUD-A1 Manager team security | **PASS** | `01`; service test + E2E 403/cross-tenant/PII |
-| SUD-A2 i18n engineering | **PARTIAL** | `02`; all screens translate, but key-based migration and native review incomplete |
-| SUD-A3 Thai dates | **PASS** | `03`; 6 unit cases + 64 E2E; Thai display/ISO storage |
-| SUD-A4 Responsive/a11y | **PARTIAL** | `04`; 0 overflow/82 screens, but 14 unique unlabeled settings inputs, 53 unique small targets, no device/axe |
-| SUD-A5 Security regression | **PASS** | `05`; 535 Rust, 47 vitest, 64 E2E, guard 5/5 |
-| SUD-A6 Release hygiene | **READY** | `06`; no push, secret scan, push plan |
-| SUD-B UX/UI discovery | **PARTIAL** | `07`–`13`; inventory/journeys/IA/contracts/design/prototype complete; native language and device review outstanding |
-| Target `STABILIZATION_ACCEPTED_UXUI_DESIGN_READY` | **NOT ACCEPTED** | A2/A4 partial; see `17-final-verdict.md` |
+| SUD-G0 Baseline & isolation | **PASS** | `00`; isolated `talentos_e2e`, 72 migrations, guard 5/5 |
+| SUD-A1 Manager team security | **PASS** | `01`; backend team scope, tenant predicate, 403, no PII; unchanged by closure |
+| SUD-A2 Localization engineering | **PASS** | `18`; 1,388 typed keys, bridge removed, 17 i18n tests, EN crawl 30/30, EN axe |
+| SUD-A3 Thai dates | **PASS** | `03`; 6 date unit tests + E2E, Buddhist display/ISO storage |
+| SUD-A4 Responsive & accessibility | **PASS (engineering)** | `19`; 0 unlabeled, 0 undersized, 4/4 axe tests (72 scans), 0 overflow |
+| SUD-A5 Security & regression | **PASS** | `05`; 535 Rust, 53 vitest, 68/68 Playwright, clippy/tsc/build, guard 5/5 |
+| SUD-A6 Release hygiene | **PASS (no push)** | `21`; secret scan clean, debug file preserved, push plan; CI NOT_EVALUATED |
+| SUD-B UX/UI discovery | **PARTIAL (external)** | `07`–`13`, `16`; handoff complete, prototype isolated; native review/device UAT and WS2 runtime pending |
+| Target `STABILIZATION_ACCEPTED_UXUI_DESIGN_READY` | **ACCEPTED** | `17`; engineering gates pass; external validation explicitly pending |
 
-## Counts
+## Final counts
 
-- Rust: **535 passed**, 1 ignored.
-- Vitest: **47 passed**.
-- Playwright: **64/64** on isolated `talentos_e2e`.
-- Migrations: **72**.
-- Screens: **82**; prototype screens **10** + 1 video.
-- E2E guard: **5/5** refused.
+- Rust: **535 passed**, 0 failed, 1 ignored.
+- Vitest: **53 passed** (6 files; 17 i18n/format/plural).
+- Playwright: **68/68** on isolated `talentos_e2e` (64 product + 4 axe/a11y).
+- axe: 72 scans (22 routes × 3 widths, Thai UI + 6 routes EN), **0** serious/critical.
+- Accessibility audit: 40 checks, **0** unlabeled controls, **0** targets <36 px.
+- Screens: **82**, 0 failures; prototype 10 screens + 1 video.
+- Migrations: **72**; E2E guard **5/5**.
+
+## External validation still pending
+
+- Native Thai/English review of payroll/legal copy.
+- Physical-device and screen-reader (NVDA/VoiceOver) UAT.
+- Live CI on a remote SHA (NOT_EVALUATED).
+- WS2 flow engine/executor/secret writer is PROPOSED, not implemented.

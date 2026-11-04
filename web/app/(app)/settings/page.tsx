@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { gw, handleApiError, Me } from "@/lib/api";
+import { formatDateTime } from "@/lib/i18n-format";
 import { useI18N, tNow } from "@/lib/i18n";
 
 type Num = string | number;
@@ -1085,8 +1086,8 @@ export default function SettingsPage() {
           <tbody>
             {sessions.map((s) => (
               <tr key={s.id} data-testid="session-row">
-                <td>{new Date(s.created_at).toLocaleString("th-TH")}</td>
-                <td>{new Date(s.expires_at).toLocaleString("th-TH")}</td>
+                <td>{formatDateTime(s.created_at)}</td>
+                <td>{formatDateTime(s.expires_at)}</td>
                 <td>{s.ip_address || "—"}</td>
                 <td className="hint">{s.user_agent || "—"}</td>
                 <td className="num">

@@ -32,7 +32,7 @@ export default function ResetPasswordPage() {
         body: JSON.stringify({ token: params.token, password }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || tr("auth.reset.unable-to-set-a-new-password"));
+      if (!res.ok) throw new Error((body.error === "gateway_unreachable" ? tr("common.serverUnreachable") : body.message) || tr("auth.reset.unable-to-set-a-new-password"));
       setDone(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : tr("auth.reset.unable-to-set-a-new-password"));

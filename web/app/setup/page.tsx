@@ -41,7 +41,7 @@ export default function SetupPage() {
         }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message || tr("auth.setup.system-setup-failed"));
+      if (!res.ok) throw new Error((body.error === "gateway_unreachable" ? tr("common.serverUnreachable") : body.message) || tr("auth.setup.system-setup-failed"));
       router.replace("/login");
     } catch (err) {
       setError(err instanceof Error ? err.message : tr("auth.setup.system-setup-failed"));

@@ -17,9 +17,9 @@ One shared register. No PROPOSED capability is treated as operational.
 
 ## IMPLEMENTED_NOT_VERIFIED
 
-- Full key-based i18n for every legacy screen (DOM bridge remains).
+- Full key-based i18n is now implemented; the DOM bridge is removed (see `18`).
 - Mobile card tables/accessibility at production-device level.
-- Native-quality English for payroll/legal copy.
+- Native-quality English review for payroll/legal copy (engineering coverage is complete).
 - Manager team directory beyond direct reports (org chart).
 
 ## PROPOSED
@@ -34,7 +34,7 @@ One shared register. No PROPOSED capability is treated as operational.
 
 ## DEFERRED
 
-- English native review and full removal of the DOM translation layer.
+- English native review (the DOM translation layer has been removed).
 - Real-device accessibility certification.
 - Load/soak beyond 600 employees and production WAL/PITR.
 

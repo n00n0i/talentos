@@ -1,4 +1,4 @@
-import { currentLanguage } from "@/lib/i18n";
+import { currentLanguage, tNow } from "@/lib/i18n";
 import type { TranslationKey } from "@/lib/i18n-catalog";
 
 export class ApiError extends Error {
@@ -20,7 +20,9 @@ export async function gw<T>(path: string, init?: RequestInit): Promise<T> {
     let message = res.statusText || `HTTP ${res.status}`;
     try {
       const body = await res.json();
-      message = body.message || body.error || message;
+      message = body.error === "gateway_unreachable"
+        ? tNow("common.serverUnreachable")
+        : body.message || body.error || message;
     } catch {
       // non-JSON error body
     }
@@ -136,5 +138,5 @@ export function handleApiError(e: unknown, setError: (message: string) => void) 
     window.location.href = "/login";
     return;
   }
-  setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด");
+  setError(e instanceof Error ? e.message : tNow("common.error"));
 }

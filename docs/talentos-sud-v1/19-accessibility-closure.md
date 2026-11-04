@@ -34,11 +34,12 @@ per page. Evidence: `a11y-unique.json`.
 ## axe-core integration
 
 `@axe-core/playwright` is a dev dependency. `web/e2e/a11y.spec.ts` scans **22
-representative routes** at **390, 760 and 1440 px** (66 scans) with tags
-`wcag2a`, `wcag2aa`, `wcag21a`, `wcag21aa`, and fails on any `critical`/`serious`
-violation or on any unlabeled control / target under 36 px.
+representative routes** at **390, 760 and 1440 px** (66 scans, Thai UI), plus **6
+routes in English mode** (72 scans total) with tags `wcag2a`, `wcag2aa`, `wcag21a`,
+`wcag21aa`. It fails on any `critical`/`serious` violation, any unlabeled control, or
+any target under 36 px. The EN test also fails on React #418/hydration errors.
 
-**Result: 66/66 scans, 0 critical/serious violations.** Fixed during closure:
+**Result: 72/72 scans, 0 critical/serious violations, 4/4 tests passed.** Fixed during closure:
 sidebar muted-token contrast, badge and summary contrast, language-toggle accessible
 name, shift/forms select names, empty-state contrast.
 

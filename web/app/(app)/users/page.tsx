@@ -6,6 +6,7 @@ import { useI18N, tNow } from "@/lib/i18n";
 
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
+import { formatDateTime } from "@/lib/i18n-format";
 
 type User = {
   id: string;
@@ -272,7 +273,7 @@ export default function UsersPage() {
                       {u.is_active ? tr("users.use") : tr("users.close")}
                     </span>
                   </td>
-                  <td>{u.last_login_at ? new Date(u.last_login_at).toLocaleString("th-TH") : "—"}</td>
+                  <td>{u.last_login_at ? formatDateTime(u.last_login_at) : "—"}</td>
                   <td className="num" style={{ whiteSpace: "normal" }}>
                     <div className="row-actions">
                     <select

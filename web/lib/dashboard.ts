@@ -1,4 +1,5 @@
 import type { Me } from "@/lib/api";
+import { currentLanguage } from "@/lib/i18n";
 
 export type Role = "hr_admin" | "payroll_manager" | "manager" | "employee";
 
@@ -52,29 +53,31 @@ export function sectionsFor(role: Role): SectionId[] {
 
 const MILLION = 1_000_000;
 
-/** ฿1,234,567 → "฿1.23 ล้าน"; anything smaller keeps exact baht. */
+/** ฿1,234,567 → "฿1.23 ล้าน" (TH) / "฿1.23M" (EN). */
 export function compactThb(n: number | string): string {
   const v = Number(n);
+  const en = currentLanguage() === "en";
   if (!Number.isFinite(v)) return "฿0";
-  if (Math.abs(v) >= MILLION) return `฿${(v / MILLION).toFixed(2)} ล้าน`;
-  return `฿${new Intl.NumberFormat("th-TH", { maximumFractionDigits: 0 }).format(v)}`;
+  if (Math.abs(v) >= MILLION) return `฿${(v / MILLION).toFixed(2)}${en ? "M" : " ล้าน"}`;
+  return `฿${new Intl.NumberFormat(en ? "en-GB" : "th-TH", { maximumFractionDigits: 0 }).format(v)}`;
 }
 
-// "always" + "short" gives "2 ชม. ที่แล้ว" / "2 วันที่แล้ว"; "auto" would
-// render -2 days as "เมื่อวานซืน", which hides the day count.
-const RTF = new Intl.RelativeTimeFormat("th", { numeric: "always", style: "short" });
-
-/** Thai relative time: minutes → hours → days → plain date after 30 days. */
+/** Locale-aware relative time: minutes → hours → days → date after 30 days. */
 export function relativeTh(iso: string, now: Date = new Date()): string {
+  const en = currentLanguage() === "en";
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return iso;
   const diff = now.getTime() - then.getTime();
   const abs = Math.abs(diff);
   const sign = diff >= 0 ? -1 : 1;
-  if (abs < 60 * 60_000) return RTF.format(sign * Math.round(abs / 60_000), "minute");
-  if (abs < 24 * 60 * 60_000) return RTF.format(sign * Math.round(abs / 3_600_000), "hour");
-  if (abs < 30 * 24 * 60 * 60_000) return RTF.format(sign * Math.round(abs / 86_400_000), "day");
-  return then.toLocaleDateString("th-TH");
+  const rtf = new Intl.RelativeTimeFormat(en ? "en-GB" : "th", {
+    numeric: "always",
+    style: "short",
+  });
+  if (abs < 60 * 60_000) return rtf.format(sign * Math.round(abs / 60_000), "minute");
+  if (abs < 24 * 60 * 60_000) return rtf.format(sign * Math.round(abs / 3_600_000), "hour");
+  if (abs < 30 * 24 * 60 * 60_000) return rtf.format(sign * Math.round(abs / 86_400_000), "day");
+  return then.toLocaleDateString(en ? "en-GB" : "th-TH");
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");

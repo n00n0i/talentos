@@ -40,13 +40,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setToday(
-      new Intl.DateTimeFormat("th-TH", {
+      new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "th-TH", {
         day: "numeric",
         month: "short",
         year: "numeric",
       }).format(new Date()),
     );
-  }, []);
+  }, [lang]);
 
   // Register the offline service worker (network-first, cache fallback for
   // navigations). Best-effort: failures must never affect the app.

@@ -17,7 +17,7 @@
   hook. Module-level label/status maps store `TranslationKey` values and translate at
   render, so changing language never leaves a stale label.
 - Fallback chain: **EN → TH → key**. Missing keys are collected by `missingKeys()`,
-  logged once outside production, and covered by a unit test. Because `en` is typed as
+  warned outside production, and covered by a unit test. Because `en` is typed as
   a complete record, a missing English key fails `tsc`.
 - Interpolation: `{name}` placeholders (`translate`), e.g.
   `employees.importedNotice` with `{n}`.
@@ -32,23 +32,29 @@
 - The DOM translation bridge (`web/components/Translate.tsx`) and
   `web/lib/th-en.ts` are **deleted**; `<Translate>` was removed from the shell.
   Remaining bridge coverage: **0 screens / 0 strings**.
-- Every Thai string literal in `web/app/**` and `web/components/**` was migrated to a
+- Every Thai string literal in user-facing page/component source was migrated to a
   typed key (JSX text, labels, placeholders, aria labels, validation, notices,
-  confirms/prompts, and template strings that used interpolation). The only remaining
-  Thai literal is the server-rendered `metadata.description` in `app/layout.tsx`
-  (not user-facing UI).
-- Because the bridge is gone, the UI no longer walks or mutates the DOM. User-entered
-  values, employee/organisation names and all API data are rendered verbatim and are
-  never translated.
+  confirms/prompts, and template strings that used interpolation). Server-rendered
+  `metadata.description` stays Thai by design (not visible UI). The four session/proxy
+  routes still contain an internal Thai "gateway unreachable" fallback string; the
+  client now maps `error: "gateway_unreachable"` to a translated message, so it is not
+  displayed untranslated.
+- The translation bridge is gone, so nothing walks or mutates page text. `TableLabels`
+  only annotates table cells with `data-label`, and the shell sets `<html lang>`.
+  User-entered values, employee/organisation names and all API data are rendered
+  verbatim and are never translated.
+- Dates, relative times, numbers and compact currency now follow the active language
+  (sidebar date chip, dashboard month labels/"M vs ล้าน", relative time, session/audit
+  timestamps, recruitment timestamps).
 
 ## Verification
 
 | Check | Result |
 |---|---|
-| `npx vitest run` | **50 passed** (8 i18n/format/plural tests) |
-| EN crawl, 30 admin routes at 1440 | **0 bad**: one `h1`, `lang=en`, 0 horizontal overflow |
-| EN toggle + hydration | no React #418; headings and copy switch; data stays untouched |
-| Full isolated E2E | **67/67** (includes axe + EN/i18n assertions) |
+| `npx vitest run` | **50 passed** (`test/i18n.test.ts` has **14** tests) |
+| EN crawl, 30 admin routes at 1440 | **0 bad**: one `h1`, `lang=en`, 0 horizontal overflow; remaining Thai strings are business data (names, Thai labels from the API, seeded content) |
+| EN toggle + runtime | Playwright EN test asserts `lang=en`, 6 axe scans clean, and **no React #418/hydration console error** |
+| Full isolated E2E | **68/68** (includes 4 axe/i18n tests) |
 
 Evidence: `evidence/responsive/en-routes.json`, `evidence/logs/vitest.log`,
 `evidence/screens/en/`, `evidence/logs/playwright-isolated.log`.

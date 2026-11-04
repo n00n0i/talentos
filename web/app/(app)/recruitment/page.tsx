@@ -1,12 +1,13 @@
 "use client";
 
-import { useI18N, tNow } from "@/lib/i18n";
+import { currentLanguage, tNow, useI18N } from "@/lib/i18n";
 
 import ThaiDateInput from "@/components/ThaiDateInput";
 import { ThaiDateTimeInput } from "@/components/ThaiDateTimeInput";
 
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
+import { formatDateTime, formatNumber } from "@/lib/i18n-format";
 
 type Job = {
   id: string;
@@ -871,7 +872,7 @@ export default function RecruitmentPage() {
                 <ul className="list">
                   {offers.map((offer) => (
                     <li key={offer.id} data-testid="offer-row">
-                      {offer.position_title} · {Number(offer.salary).toLocaleString("th-TH")} {tr("recruitment.text-4")} {offer.start_date}
+                      {offer.position_title} · {formatNumber(offer.salary, currentLanguage(), 0)} {tr("recruitment.text-4")} {offer.start_date}
                       <a
                         className="badge accent"
                         data-testid="offer-pdf"
@@ -987,7 +988,7 @@ export default function RecruitmentPage() {
                 <ul className="list">
                   {interviews.map((interview) => (
                     <li key={interview.id} data-testid="interview-row">
-                      {new Date(interview.scheduled_at).toLocaleString("th-TH")} ·{" "}
+                      {formatDateTime(interview.scheduled_at)} ·{" "}
                       {interview.mode === "online"
                         ? tr("recruitment.online")
                         : interview.mode === "phone"
@@ -1035,7 +1036,7 @@ export default function RecruitmentPage() {
                     {event.from_stage ? (event.from_stage in STAGES ? tr(STAGES[event.from_stage]) : event.from_stage) : tr("recruitment.start")} →{" "}
                     {event.to_stage in STAGES ? tr(STAGES[event.to_stage]) : event.to_stage}
                     <span style={{ marginLeft: 8, color: "var(--muted)" }}>
-                      {new Date(event.changed_at).toLocaleString("th-TH")}
+                      {formatDateTime(event.changed_at)}
                     </span>
                   </li>
                 ))}

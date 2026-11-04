@@ -37,7 +37,7 @@ export default function LoginPage() {
           return;
         }
         throw new Error(
-          [body.message, ...((body.details ?? []) as Array<{ field: string; message: string }>)
+          [body.error === "gateway_unreachable" ? tr("common.serverUnreachable") : body.message, ...((body.details ?? []) as Array<{ field: string; message: string }>)
             .map((d) => `${d.field}: ${d.message}`)].join(" — ") || tr("auth.login.login-failed"));
       }
       router.replace("/");

@@ -108,3 +108,29 @@ for (const width of [390, 760, 1440]) {
     expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
   });
 }
+
+test("axe WCAG 2.1 AA in English mode", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("console", (m) => {
+    if (m.type() === "error" && /418|hydrat/i.test(m.text())) errors.push(m.text());
+  });
+  await login(page);
+  await page.getByTestId("lang-toggle").click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  const violations: unknown[] = [];
+  for (const route of ["/", "/employees", "/payroll", "/settings", "/leave", "/team"]) {
+    await page.goto(route, { waitUntil: "networkidle" });
+    const result = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+      .analyze();
+    for (const v of result.violations) {
+      if (v.impact === "critical" || v.impact === "serious") {
+        violations.push({ route, id: v.id, nodes: v.nodes.map((n) => n.target) });
+      }
+    }
+  }
+  expect(violations, JSON.stringify(violations, null, 2)).toEqual([]);
+  expect(errors, `EN runtime errors: ${errors.join(" | ")}`).toEqual([]);
+});

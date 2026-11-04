@@ -12,7 +12,7 @@ import {
   sectionsFor,
   type SectionId,
 } from "@/lib/dashboard";
-import { useI18N } from "@/lib/i18n";
+import { currentLanguage, useI18N } from "@/lib/i18n";
 
 type Headcount = {
   active: number;
@@ -357,7 +357,10 @@ const CHART_LABEL_H = 22;
 function monthLabel(month: string) {
   const [year, monthIndex] = month.split("-").map(Number);
   if (!year || !monthIndex) return month;
-  return new Date(year, monthIndex - 1, 1).toLocaleDateString("th-TH", { month: "short" });
+  return new Date(year, monthIndex - 1, 1).toLocaleDateString(
+    currentLanguage() === "en" ? "en-GB" : "th-TH",
+    { month: "short" },
+  );
 }
 
 function OtChart({ rows, failed }: { rows: OtRow[] | null; failed: boolean }) {

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
+import { formatDateTime } from "@/lib/i18n-format";
 import { useI18N } from "@/lib/i18n";
 import {
   filledCounts,
@@ -170,7 +171,7 @@ export default function KnowledgeGraphPage() {
           {t("kg.lastRebuilt")}:{" "}
           <strong data-testid="kg-last-rebuilt">
             {counts?.last_rebuilt_at
-              ? new Date(counts.last_rebuilt_at).toLocaleString("th-TH")
+              ? formatDateTime(counts.last_rebuilt_at)
               : t("kg.never")}
           </strong>
         </span>

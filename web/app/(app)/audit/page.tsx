@@ -4,6 +4,7 @@ import { useI18N } from "@/lib/i18n";
 
 import { useEffect, useState } from "react";
 import { gw, handleApiError } from "@/lib/api";
+import { formatDateTime } from "@/lib/i18n-format";
 
 type Entry = {
   id: number;
@@ -66,7 +67,7 @@ export default function AuditPage() {
             <tbody>
               {rows.map((e) => (
                 <tr key={e.id}>
-                  <td>{new Date(e.created_at).toLocaleString("th-TH")}</td>
+                  <td>{formatDateTime(e.created_at)}</td>
                   <td>
                     <div>{e.actor_type}</div>
                     <div className="hint">{e.actor_id.slice(0, 12)}</div>

@@ -1,4 +1,4 @@
-import type { Lang } from "@/lib/i18n";
+import { currentLanguage, type Lang } from "@/lib/i18n";
 
 /** Locale-aware date for date-only ISO values (no timezone shift). */
 export function formatDate(iso: string, lang: Lang): string {
@@ -20,4 +20,12 @@ export function formatNumber(value: string | number, lang: Lang, digits = 2): st
 
 export function formatCurrency(value: string | number, lang: Lang): string {
   return `฿${formatNumber(value, lang)}`;
+}
+
+/** Locale-aware timestamp for API datetimes. */
+export function formatDateTime(iso: string, lang: Lang = currentLanguage()): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(lang === "en" ? "en-GB" : "th-TH");
 }

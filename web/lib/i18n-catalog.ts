@@ -1388,6 +1388,8 @@ export const th = {
   "leave.hrRole": "HR",
   "settings.branchName": "ชื่อสาขา/นิติบุคคล",
   "forms.dataSource": "แหล่งข้อมูล",
+  "common.serverUnreachable": "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้",
+  "common.error": "เกิดข้อผิดพลาด",
 } as const;
 
 export type TranslationKey = keyof typeof th;
@@ -2779,4 +2781,6 @@ export const en: Record<TranslationKey, string> = {
   "leave.hrRole": "HR",
   "settings.branchName": "Branch / legal entity name",
   "forms.dataSource": "Data source",
+  "common.serverUnreachable": "Cannot reach the server",
+  "common.error": "Something went wrong",
 };

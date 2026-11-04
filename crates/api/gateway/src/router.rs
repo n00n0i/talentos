@@ -10,7 +10,7 @@ use crate::handlers::{
     ai, ai_providers, attendance, audit, auth, bank_templates, calendar, claims, delegations,
     documents, employees, forms, goals, graphql, health, integration, leave, loans, mcp, me,
     memory, notifications, oidc, onboarding, ot, payroll, pdpa, performance, pf, plugins, privacy,
-    recruitment, reports, settings, settlement, setup, training, users,
+    recruitment, reports, settings, settlement, setup, team, training, users,
 };
 use crate::middleware::auth::auth_middleware;
 use crate::middleware::logging::log_request;
@@ -120,6 +120,7 @@ pub fn build(state: AppState) -> Router {
             patch(performance::submit_review),
         )
         .route("/api/v1/me/reviews", get(performance::me_reviews))
+        .route("/api/v1/me/team", get(team::my_team))
         .route(
             "/api/v1/me/reviews/:id/acknowledge",
             post(performance::me_acknowledge),

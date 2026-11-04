@@ -5,6 +5,7 @@ export const th: Dict = {
   // Shell: nav labels
   "nav.overview": "ภาพรวม",
   "nav.employees": "พนักงาน",
+  "nav.team": "ทีมของฉัน",
   "nav.documents": "เอกสาร",
   "nav.onboarding": "เริ่มงาน",
   "nav.recruitment": "สรรหาบุคลากร",
@@ -370,6 +371,7 @@ export const th: Dict = {
 export const en: Dict = {
   "nav.overview": "Overview",
   "nav.employees": "Employees",
+  "nav.team": "My team",
   "nav.documents": "Documents",
   "nav.onboarding": "Onboarding",
   "nav.recruitment": "Recruitment",

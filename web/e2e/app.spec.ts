@@ -105,7 +105,7 @@ test("mobile navigation drawer and menu search work", async ({ page }) => {
   await expect(nav).not.toHaveClass(/open/);
 
   await page.getByTestId("menu-toggle").click();
-  await page.getByTestId("side-backdrop").click();
+  await page.getByTestId("side-backdrop").click({ position: { x: 360, y: 400 } });
   await expect(nav).not.toHaveClass(/open/);
   await page.setViewportSize({ width: 1440, height: 900 });
 });
@@ -469,6 +469,7 @@ test("offline punch is queued locally and syncs when back online", async ({ page
   await context.grantPermissions(["geolocation"]);
   await context.setGeolocation({ latitude: 13.7563, longitude: 100.5018 });
   await page.goto("/clock");
+  await expect(page.getByRole("button", { name: "เข้างาน" })).toBeVisible();
 
   await context.setOffline(true);
   await page.getByRole("button", { name: "เข้างาน" }).click();
@@ -1658,6 +1659,29 @@ test("manager workflow: reporting line, calibration, goal check-in", async ({ pa
   await expect(
     page.getByTestId("checkin-row").filter({ hasText: "คืืบหน่าตำแผน" }),
   ).toBeVisible();
+});
+
+test("manager team directory is scoped and read-only", async ({ page }) => {
+  await login(page);
+  await switchUser(page, managerEmail, "ManagerPass123!");
+  await page.goto("/team");
+  await expect(page.getByRole("heading", { name: "ทีมของฉัน" })).toBeVisible();
+  const report = page.getByTestId("team-row").filter({ hasText: "E2E002" });
+  await expect(report).toBeVisible();
+  await expect(page.getByTestId("team-row").filter({ hasText: "E2E001" })).toHaveCount(0);
+  const text = await report.innerText();
+  expect(text).not.toContain("20000");
+  expect(text).not.toContain("เงินเดือน");
+  expect(text).not.toContain("เลขบัญชี");
+
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await page.goto("/team");
+  await expect(page).toHaveURL(/\/clock$/);
+  const status = await page.evaluate(async () => {
+    const res = await fetch("/api/gw/api/v1/me/team");
+    return res.status;
+  });
+  expect(status).toBe(403);
 });
 
 test("employee acknowledges their performance review", async ({ page }) => {

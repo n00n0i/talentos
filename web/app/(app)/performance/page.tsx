@@ -503,7 +503,7 @@ export default function PerformancePage() {
             <table className="table" style={{ marginBottom: 14 }}>
               <thead>
                 <tr>
-                  <th>พนั กงาน</th>
+                  <th>พนักงาน</th>
                   <th>คะแนนที่จัดวาง</th>
                   <th>หมายเหตุ</th>
                 </tr>
@@ -528,7 +528,7 @@ export default function PerformancePage() {
                 value={calibrationEmployee}
                 onChange={(e) => setCalibrationEmployee(e.target.value)}
               >
-                <option value="">— เลือกพนั กงาน —</option>
+                <option value="">— เลือกพนักงาน —</option>
                 {directReports.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.employee_code} · {r.employee_name}

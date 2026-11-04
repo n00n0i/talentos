@@ -29,6 +29,7 @@ pub mod privacy;
 pub mod recruitment;
 pub mod reports;
 pub mod settlement;
+pub mod team;
 pub mod training;
 
 pub use approval_rules::{

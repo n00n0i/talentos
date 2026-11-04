@@ -34,5 +34,6 @@ pub mod reports;
 pub mod settings;
 pub mod settlement;
 pub mod setup;
+pub mod team;
 pub mod training;
 pub mod users;

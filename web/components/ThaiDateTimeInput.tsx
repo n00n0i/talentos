@@ -1,54 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-const pad = (n: number) => String(n).padStart(2, "0");
-
-function toThaiMonth(iso: string): string {
-  const [y, m] = iso.split("-");
-  return y && m ? `${m}/${Number(y) + 543}` : "";
-}
-function parseMonth(raw: string): string | null {
-  const value = raw.trim();
-  if (/^\d{4}-\d{2}$/.test(value)) return value;
-  const match = /^(\d{1,2})\/(\d{4})$/.exec(value);
-  if (!match) return null;
-  let year = Number(match[2]);
-  if (year > 2400) year -= 543;
-  const month = Number(match[1]);
-  if (month < 1 || month > 12) return null;
-  return `${year}-${pad(month)}`;
-}
-
-function toThaiDateTime(iso: string): string {
-  if (!iso) return "";
-  const [date, time = "00:00"] = iso.split("T");
-  const [y, m, d] = date.split("-");
-  return y && m && d ? `${d}/${m}/${Number(y) + 543} ${time.slice(0, 5)}` : "";
-}
-function parseDateTime(raw: string): string | null {
-  const value = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return value.slice(0, 16);
-  const match = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})\s+(\d{1,2}):(\d{2})$/.exec(value);
-  if (!match) return null;
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  let year = Number(match[3]);
-  if (year > 2400) year -= 543;
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const date = new Date(Date.UTC(year, month - 1, day, hour, minute));
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day ||
-    hour > 23 ||
-    minute > 59
-  ) {
-    return null;
-  }
-  return `${year}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}`;
-}
+import {
+  parseThaiDateTime,
+  parseThaiMonth,
+  toThaiDateTime,
+  toThaiMonth,
+} from "@/lib/thai-date";
 
 function picker(ref: React.RefObject<HTMLInputElement | null>) {
   return () => {
@@ -87,11 +45,11 @@ export function ThaiMonthInput({
 
   function change(raw: string) {
     setText(raw);
-    const iso = parseMonth(raw);
+    const iso = parseThaiMonth(raw);
     if (iso && iso !== value) onChange(iso);
   }
   function blur() {
-    const iso = parseMonth(text);
+    const iso = parseThaiMonth(text);
     if (iso) {
       setText(toThaiMonth(iso));
       if (iso !== value) onChange(iso);
@@ -152,11 +110,11 @@ export function ThaiDateTimeInput({
 
   function change(raw: string) {
     setText(raw);
-    const iso = parseDateTime(raw);
+    const iso = parseThaiDateTime(raw);
     if (iso && iso !== value) onChange(iso);
   }
   function blur() {
-    const iso = parseDateTime(text);
+    const iso = parseThaiDateTime(text);
     if (iso) {
       setText(toThaiDateTime(iso));
       if (iso !== value) onChange(iso);

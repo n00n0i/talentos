@@ -1,0 +1,1496 @@
+{
+  "checks": [
+    {
+      "width": 320,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 4,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "ดูรอบเงินเดือน",
+          "w": 98,
+          "h": 32
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 320,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 9,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "แก้ไข",
+          "w": 52,
+          "h": 30
+        },
+        {
+          "t": "ปิดสถานะ",
+          "w": 74,
+          "h": 30
+        }
+      ],
+      "inputs": 4,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 24,
+      "iconButtons": 0
+    },
+    {
+      "width": 320,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 12,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "บันทึก LINE",
+          "w": 88,
+          "h": 30
+        },
+        {
+          "t": "รีเซ็ต",
+          "w": 51,
+          "h": 30
+        }
+      ],
+      "inputs": 10,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 18,
+      "iconButtons": 0
+    },
+    {
+      "width": 320,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 8,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "▣",
+          "w": 30,
+          "h": 30
+        },
+        {
+          "t": "▣",
+          "w": 30,
+          "h": 30
+        }
+      ],
+      "inputs": 8,
+      "unlabeledInputs": 3,
+      "tables": 1,
+      "labelledCells": 7,
+      "iconButtons": 0
+    },
+    {
+      "width": 320,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 3,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 320,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 3,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 320,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 6,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "นักพัฒนาระบบ E2E",
+          "w": 128,
+          "h": 30
+        },
+        {
+          "t": "ปิดรับ",
+          "w": 56,
+          "h": 30
+        }
+      ],
+      "inputs": 6,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 6,
+      "iconButtons": 0
+    },
+    {
+      "width": 320,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 24,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "ออกจากอุปกรณ์นี้",
+          "w": 116,
+          "h": 30
+        },
+        {
+          "t": "ออกจากอุปกรณ์นี้",
+          "w": 116,
+          "h": 30
+        }
+      ],
+      "inputs": 28,
+      "unlabeledInputs": 16,
+      "tables": 4,
+      "labelledCells": 219,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 4,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "ดูรอบเงินเดือน",
+          "w": 98,
+          "h": 32
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 9,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "แก้ไข",
+          "w": 52,
+          "h": 30
+        },
+        {
+          "t": "ปิดสถานะ",
+          "w": 74,
+          "h": 30
+        }
+      ],
+      "inputs": 4,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 24,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 12,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "บันทึก LINE",
+          "w": 88,
+          "h": 30
+        },
+        {
+          "t": "รีเซ็ต",
+          "w": 51,
+          "h": 30
+        }
+      ],
+      "inputs": 10,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 18,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 8,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "▣",
+          "w": 30,
+          "h": 30
+        },
+        {
+          "t": "▣",
+          "w": 30,
+          "h": 30
+        }
+      ],
+      "inputs": 8,
+      "unlabeledInputs": 3,
+      "tables": 1,
+      "labelledCells": 7,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 3,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 3,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 6,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "นักพัฒนาระบบ E2E",
+          "w": 128,
+          "h": 30
+        },
+        {
+          "t": "ปิดรับ",
+          "w": 56,
+          "h": 30
+        }
+      ],
+      "inputs": 6,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 6,
+      "iconButtons": 0
+    },
+    {
+      "width": 390,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 24,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "ออกจากอุปกรณ์นี้",
+          "w": 116,
+          "h": 30
+        },
+        {
+          "t": "ออกจากอุปกรณ์นี้",
+          "w": 116,
+          "h": 30
+        }
+      ],
+      "inputs": 28,
+      "unlabeledInputs": 16,
+      "tables": 4,
+      "labelledCells": 219,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 4,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "ดูรอบเงินเดือน",
+          "w": 98,
+          "h": 32
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 9,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "แก้ไข",
+          "w": 52,
+          "h": 30
+        },
+        {
+          "t": "ปิดสถานะ",
+          "w": 74,
+          "h": 30
+        }
+      ],
+      "inputs": 4,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 24,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 12,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "บันทึก LINE",
+          "w": 88,
+          "h": 30
+        },
+        {
+          "t": "รีเซ็ต",
+          "w": 51,
+          "h": 30
+        }
+      ],
+      "inputs": 10,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 18,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 8,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "▣",
+          "w": 30,
+          "h": 30
+        },
+        {
+          "t": "▣",
+          "w": 30,
+          "h": 30
+        }
+      ],
+      "inputs": 8,
+      "unlabeledInputs": 3,
+      "tables": 1,
+      "labelledCells": 7,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 3,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 3,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 6,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "นักพัฒนาระบบ E2E",
+          "w": 128,
+          "h": 30
+        },
+        {
+          "t": "ปิดรับ",
+          "w": 56,
+          "h": 30
+        }
+      ],
+      "inputs": 6,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 6,
+      "iconButtons": 0
+    },
+    {
+      "width": 760,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 24,
+      "worstTargets": [
+        {
+          "t": "☰",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "EN",
+          "w": 40,
+          "h": 34
+        },
+        {
+          "t": "ออกจากระบบ",
+          "w": 34,
+          "h": 34
+        },
+        {
+          "t": "ออกจากอุปกรณ์นี้",
+          "w": 116,
+          "h": 30
+        },
+        {
+          "t": "ออกจากอุปกรณ์นี้",
+          "w": 116,
+          "h": 30
+        }
+      ],
+      "inputs": 28,
+      "unlabeledInputs": 16,
+      "tables": 4,
+      "labelledCells": 219,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 31,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 36,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 4,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 24,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 39,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 10,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 18,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 35,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 8,
+      "unlabeledInputs": 3,
+      "tables": 1,
+      "labelledCells": 7,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 30,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 30,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 33,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 6,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 6,
+      "iconButtons": 0
+    },
+    {
+      "width": 1024,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 51,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 28,
+      "unlabeledInputs": 16,
+      "tables": 4,
+      "labelledCells": 219,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 31,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/employees",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 36,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 4,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 24,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/users",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 39,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 10,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 18,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/payroll",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 35,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 8,
+      "unlabeledInputs": 3,
+      "tables": 1,
+      "labelledCells": 7,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/team",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 30,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/claims",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 30,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 1,
+      "unlabeledInputs": 0,
+      "tables": 0,
+      "labelledCells": 0,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/recruitment",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 33,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 6,
+      "unlabeledInputs": 0,
+      "tables": 1,
+      "labelledCells": 6,
+      "iconButtons": 0
+    },
+    {
+      "width": 1440,
+      "route": "/settings",
+      "overflow": 0,
+      "h1": 1,
+      "smallTargets": 51,
+      "worstTargets": [
+        {
+          "t": "ภาพรวม",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "พนักงาน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "ทีมของฉัน",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เอกสาร",
+          "w": 211,
+          "h": 34
+        },
+        {
+          "t": "เริ่มงาน",
+          "w": 211,
+          "h": 34
+        }
+      ],
+      "inputs": 28,
+      "unlabeledInputs": 16,
+      "tables": 4,
+      "labelledCells": 219,
+      "iconButtons": 0
+    }
+  ],
+  "focus": {
+    "tag": "A",
+    "text": "TalentOSE2E Co",
+    "outline": "1px",
+    "boxShadow": "none"
+  },
+  "ariaSnapshot": "- main:\n  - heading \"พนักงาน\" [level=1]\n  - paragraph: ข้อมูลพนักงานในองค์กรของคุณ\n  - checkbox \"รวมที่พ้นสภาพ\"\n  - text: รวมที่พ้นสภาพ\n  - textbox \"ค้นหารหัส ชื่อ หรือตำแหน่ง\"\n  - button \"เพิ่มพนักงาน\"\n  - heading \"นำเข้าพนักงานจากไฟล์ CSV\" [level=2]\n  - paragraph: \"คอลัมน์ที่จำเป็น: employee_code, first_name_th, last_name_th, position_title, base_salary, hire_date · ไม่บังคับ: department, first_name_en, last_name_en, tax_filing_status, pf_member, sso_enrolled (ไฟล์ไม่เกิน 2 MB และ 1000 แถว)\"\n  - text: เลือกไฟล์ CSV พนักงาน\n  - button \"เลือกไฟล์ CSV พนักงาน\"\n  - table:\n    - rowgroup:\n      - row \"รหัส ชื่อ ตำแหน่ง แผนก ผู้ดูแล เงินเดือน สถานะ\":\n        - cell \"รหัส\"\n        - cell \"ชื่อ\"\n        - cell \"ตำแหน่ง\"\n        - cell \"แผนก\"\n        - cell \"ผู้ดูแล\"\n        - cell \"เงินเดือน\"\n        - cell \"สถานะ\"\n        - cell\n    - rowgroup:\n      - row \"E2E001 สมชาย ทดสอบ Engineer — — ฿40,000.00 ทำงานอยู่ แก้ไข ปิดสถานะ\":\n        - cell \"E2E001\"\n        - cell \"สมชาย ทดสอบ\"\n        - cell \"Engineer\"\n        - cell \"—\"\n        - cell \"—\"\n        - cell \"฿40,000.00\"\n        - cell \"ทำงานอยู่\"\n        - cell \"แก้ไข ปิดสถานะ\":\n          - button \"แก้ไข\"\n          - button \"ปิดสถานะ\"\n      - row \"E2E002 สมสรี ลู่กข่า E2E Junior Engineer — E2E001 · สมชาย ทดสอบ ฿20,000.00 ทำงานอยู่ แก้ไข ปิดสถานะ\":\n        - cell \"E2E002\"\n        - cell \"สมสรี ลู่กข่า E2E\"\n        - cell \"Junior Engineer\"\n        - cell \"—\"\n        - cell \"E2E001 · สมชาย ทดสอบ\"\n        - cell \"฿20,000.00\"\n        - cell \"ทำงานอยู่\"\n        - cell \"แก้ไข ปิดสถานะ\":\n          - button \"แก้ไข\"\n          - button \"ปิดสถานะ\"\n      - row \"E2E-IMP-1 นำเข้า ทดสอบ, ซีเอสวี นักพัฒนา ไอที — ฿25,000.00 ทำงานอยู่ แก้ไข ปิดสถานะ\":\n        - cell \"E2E-IMP-1\"\n        - cell \"นำเข้า ทดสอบ, ซีเอสวี\"\n        - cell \"นักพัฒนา\"\n        - cell \"ไอที\"\n        - cell \"—\"\n        - cell \"฿25,000.00\"\n        - cell \"ทำงานอยู่\"\n        - cell \"แก้ไข ปิดสถานะ\":\n          - button \"แก้ไข\"\n          - button \"ปิดสถานะ\""
+}

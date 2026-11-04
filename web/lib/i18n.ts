@@ -23,10 +23,13 @@ function setLangCookie(lang: Lang) {
 }
 
 export function useI18N() {
-  const [lang, setLangState] = useState<Lang>(readCookie);
+  // Start with Thai on the server and first client render to keep hydration
+  // deterministic; read the cookie immediately after mount.
+  const [lang, setLangState] = useState<Lang>("th");
 
   useEffect(() => {
     const sync = () => setLangState(readCookie());
+    sync();
     window.addEventListener(LANG_EVENT, sync);
     return () => window.removeEventListener(LANG_EVENT, sync);
   }, []);

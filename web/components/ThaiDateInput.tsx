@@ -1,35 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
-const pad = (n: number) => String(n).padStart(2, "0");
-
-function toThai(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  if (!y || !m || !d) return "";
-  return `${d}/${m}/${Number(y) + 543}`;
-}
-
-function parse(raw: string): string | null {
-  const value = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const match = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(value);
-  if (!match) return null;
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  let year = Number(match[3]);
-  if (year > 2400) year -= 543;
-  const date = new Date(Date.UTC(year, month - 1, day));
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
-    return null;
-  }
-  return `${year}-${pad(month)}-${pad(day)}`;
-}
+import { parseThaiDate, toThaiDate } from "@/lib/thai-date";
 
 type Props = {
   value: string;
@@ -55,26 +27,26 @@ export default function ThaiDateInput({
   ariaLabel,
   disabled,
 }: Props) {
-  const [text, setText] = useState(() => toThai(value));
+  const [text, setText] = useState(() => toThaiDate(value));
   const native = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setText(toThai(value));
+    setText(toThaiDate(value));
   }, [value]);
 
   function change(raw: string) {
     setText(raw);
-    const iso = parse(raw);
+    const iso = parseThaiDate(raw);
     if (iso && iso !== value) onChange(iso);
   }
 
   function blur() {
-    const iso = parse(text);
+    const iso = parseThaiDate(text);
     if (iso) {
-      setText(toThai(iso));
+      setText(toThaiDate(iso));
       if (iso !== value) onChange(iso);
     } else if (value) {
-      setText(toThai(value));
+      setText(toThaiDate(value));
     }
   }
 

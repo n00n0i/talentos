@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { gw, handleApiError, RUN_STATUS, thb, thDate } from "@/lib/api";
+import { uiPrompt } from "@/lib/dialogs";
 
 type SelfPayslip = {
   id: string;
@@ -45,7 +46,7 @@ export default function MyPayslipsPage() {
   }
 
   async function signPayslip(id: string) {
-    const name = window.prompt("กรอกชื่อของคุณเพื่อยืนยันลายมือชื่อ");
+    const name = uiPrompt("กรอกชื่อของคุณเพื่อยืนยันลายมือชื่อ");
     if (!name || !name.trim()) return;
     setBusy(true);
     setError("");

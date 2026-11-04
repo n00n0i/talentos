@@ -8,6 +8,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: "overview", labelKey: null, items: [{ href: "/", labelKey: "nav.overview", icon: "overview" }] },
   { id: "people", labelKey: "nav.group.people", items: [
     { href: "/employees", labelKey: "nav.employees", icon: "users" },
+    { href: "/team", labelKey: "nav.team", icon: "users" },
     { href: "/documents", labelKey: "nav.documents", icon: "file" },
     { href: "/onboarding", labelKey: "nav.onboarding", icon: "users" },
     { href: "/recruitment", labelKey: "nav.recruitment", icon: "users" },
@@ -73,6 +74,7 @@ export function visibleHrefs(me: Me | null): Set<string> {
   // Role-shaped dashboard (spec §14): everyone gets ภาพรวม.
   const allowed = new Set(["/", ...EMPLOYEE_ONLY]);
   if (canDirect) DIRECT_ONLY.forEach((h) => allowed.add(h));
+  if (me.permissions.includes("employee.read_own_team")) allowed.add("/team");
   if (canAttend) ATTENDANCE_ONLY.forEach((h) => allowed.add(h));
   return allowed;
 }

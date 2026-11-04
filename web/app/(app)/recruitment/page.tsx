@@ -5,6 +5,7 @@ import { ThaiDateTimeInput } from "@/components/ThaiDateTimeInput";
 
 import { useCallback, useEffect, useState } from "react";
 import { gw, handleApiError, Me, thDate } from "@/lib/api";
+import { uiPrompt } from "@/lib/dialogs";
 
 type Job = {
   id: string;
@@ -342,7 +343,7 @@ export default function RecruitmentPage() {
   }
 
   async function signOffer(id: string) {
-    const name = window.prompt("กรอกชื่อผู้สมัครเพื่อลงนามในข้อเสนอ");
+    const name = uiPrompt("กรอกชื่อผู้สมัครเพื่อลงนามในข้อเสนอ");
     if (!name || !name.trim()) return;
     setBusy(true);
     setError("");

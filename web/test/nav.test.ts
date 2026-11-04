@@ -10,14 +10,14 @@ const me = (roles: string[], permissions: string[]): Me => ({
 
 const HR = me(["hr_admin"], ["employee.read_all", "attendance.read", "payroll_run.export_report", "audit_log.read"]);
 const PAYROLL = me(["payroll_manager"], ["employee.read_all", "attendance.read", "payroll_run.export_report"]);
-const MANAGER = me(["manager"], ["performance.manage_direct", "attendance.read"]);
+const MANAGER = me(["manager"], ["performance.manage_direct", "attendance.read", "employee.read_own_team"]);
 const EMPLOYEE = me(["employee"], []);
 
 const ALL_HREFS = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
 // The base set today's shell shows while /api/v1/auth/me is still loading.
 const BASE_HREFS = [
   "/", "/employees", "/documents", "/onboarding", "/recruitment", "/training", "/performance",
-  "/goals", "/me/reviews", "/attendance", "/calendar", "/clock", "/leave", "/ot", "/claims",
+  "/goals", "/team", "/me/reviews", "/attendance", "/calendar", "/clock", "/leave", "/ot", "/claims",
   "/payroll", "/payslip", "/me/payslips", "/privacy",
 ];
 
@@ -41,7 +41,7 @@ describe("visibleHrefs", () => {
       [
         "/", "/attendance", "/calendar", "/claims", "/clock", "/documents", "/employees", "/goals",
         "/leave", "/me/payslips", "/me/reviews", "/onboarding", "/ot", "/payroll", "/performance",
-        "/privacy", "/recruitment", "/reports", "/training",
+        "/privacy", "/recruitment", "/reports", "/team", "/training",
       ].sort(),
     );
   });
@@ -70,7 +70,7 @@ describe("visibleHrefs", () => {
     expect([...hrefs].sort()).toEqual(
       [
         "/", "/attendance", "/calendar", "/claims", "/clock", "/goals", "/leave", "/me/payslips",
-        "/me/reviews", "/ot", "/performance", "/privacy",
+        "/me/reviews", "/ot", "/performance", "/privacy", "/team",
       ].sort(),
     );
   });

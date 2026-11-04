@@ -76,7 +76,35 @@ test("switches to English via the lang-toggle and sees EN nav labels", async ({ 
   // Reload and confirm it persists
   await page.reload();
   await expect(page.getByRole("link", { name: "Employees" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await context.clearCookies();
+});
+
+test("mobile navigation drawer and menu search work", async ({ page }) => {
+  await login(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const nav = page.getByTestId("side-nav");
+  await expect(nav).not.toHaveClass(/open/);
+
+  await page.getByTestId("menu-toggle").click();
+  await expect(nav).toHaveClass(/open/);
+  const search = page.getByLabel("ค้นหาเมนู");
+  await search.fill("เงินเดือน");
+  await expect(nav.getByRole("link", { name: "รอบเงินเดือน" })).toBeVisible();
+  await expect(nav.getByRole("link", { name: "พนักงาน", exact: true })).toHaveCount(0);
+
+  await search.fill("zzzz");
+  await expect(nav.getByText("ไม่พบเมนู")).toBeVisible();
+  await search.fill("");
+  await nav.getByRole("link", { name: "พนักงาน", exact: true }).click();
+  await expect(page).toHaveURL(/\/employees$/);
+  await expect(nav).not.toHaveClass(/open/);
+
+  await page.getByTestId("menu-toggle").click();
+  await page.getByTestId("side-backdrop").click();
+  await expect(nav).not.toHaveClass(/open/);
+  await page.setViewportSize({ width: 1440, height: 900 });
 });
 
 test("settings persist across reload", async ({ page }) => {
@@ -243,7 +271,7 @@ test("creates an employee, records OT, runs and approves payroll", async ({ page
   // The run carries an anomaly (SSO cap on a 40k salary), so it must be reviewed first.
   await page.getByText("รออนุมัติ").first().click();
   await page.getByTestId("review-anomalies").click();
-  await expect(page.getByText("ตรวจสอบความผิดปกติแล้ว")).toBeVisible();
+  await expect(page.getByTestId("anomaly-reviewed")).toBeVisible();
 
   await page.getByTestId("approve-run").click();
   await expect(page.getByText("อนุมัติรอบเงินเดือนแล้ว")).toBeVisible();
@@ -1649,4 +1677,99 @@ test("employee acknowledges their performance review", async ({ page }) => {
   await expect(
     page.getByTestId("my-review").filter({ hasText: /(?:รอบประเมิน E2E)(?!-)/ }),
   ).toContainText("รับทราบแล้ว");
+});
+
+test("all permitted routes render cleanly on desktop and mobile", async ({ page, context }) => {
+  test.setTimeout(300_000);
+  const consoleErrors: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error") consoleErrors.push(m.text());
+  });
+  page.on("pageerror", (e) => consoleErrors.push(`PAGEERROR ${e.message}`));
+
+  const routes = (list: string[], role: string) =>
+    list.map((route) => ({
+      route,
+      role,
+      active:
+        route === "/"
+          ? "/"
+          : route.startsWith("/settings/ai")
+            ? "/settings/ai"
+            : route.startsWith("/settings")
+              ? "/settings"
+              : route.startsWith("/attendance")
+                ? "/attendance"
+                : route,
+    }));
+
+  const adminRoutes = routes(
+    [
+      "/", "/employees", "/documents", "/onboarding", "/recruitment", "/training",
+      "/performance", "/goals", "/attendance", "/attendance/shifts", "/calendar",
+      "/clock", "/leave", "/ot", "/claims", "/payroll", "/loans", "/final-settlement",
+      "/reports", "/payslip", "/me/payslips", "/me/reviews", "/privacy", "/users",
+      "/settings", "/settings/ai", "/settings/ai/graph", "/forms", "/audit",
+    ],
+    "admin",
+  );
+  const employeeRoutes = routes(
+    ["/", "/clock", "/leave", "/ot", "/claims", "/me/payslips", "/me/reviews", "/privacy"],
+    "employee",
+  );
+  const managerRoutes = routes(
+    [
+      "/", "/attendance", "/calendar", "/clock", "/leave", "/ot", "/claims",
+      "/performance", "/goals", "/payroll", "/reports", "/me/payslips", "/me/reviews",
+      "/privacy",
+    ],
+    "manager",
+  );
+
+  async function audit(list: ReturnType<typeof routes>) {
+    for (const { route, role, active } of list) {
+      for (const viewport of [
+        { width: 1440, height: 900 },
+        { width: 390, height: 844 },
+      ]) {
+        consoleErrors.length = 0;
+        await page.setViewportSize(viewport);
+        await page.goto(route, { waitUntil: "networkidle" });
+        await expect(page.locator("h1")).toHaveCount(1);
+        await expect(page.locator(".error:visible")).toHaveCount(0);
+        const activeHref = await page.locator("nav a.active").first().getAttribute("href");
+        expect(activeHref, `${role} ${route} active nav`).toBe(active);
+        const overflow = await page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        );
+        expect(overflow, `${role} ${route} horizontal overflow`).toBeLessThanOrEqual(1);
+        const appError = await page.getByText(/Application error|Unhandled Runtime Error/).count();
+        expect(appError, `${role} ${route} app error`).toBe(0);
+        // Ignore auth/refresh noise from the previous session on the login screen.
+        const realErrors = consoleErrors.filter((e) => !e.includes("401"));
+        expect(realErrors, `${role} ${route} console errors`).toEqual([]);
+      }
+    }
+  }
+
+  await login(page);
+  await audit(adminRoutes);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/performance", { waitUntil: "networkidle" });
+  const columns = await page
+    .locator(".grid-2")
+    .first()
+    .evaluate((el) => getComputedStyle(el).gridTemplateColumns);
+  expect(columns.trim().split(/\s+/)).toHaveLength(1);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await context.grantPermissions(["geolocation"]);
+  await context.setGeolocation({ latitude: 13.7563, longitude: 100.5018 });
+  await switchUser(page, invitedEmail, "ResetPass123!");
+  await audit(employeeRoutes);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await switchUser(page, managerEmail, "ManagerPass123!");
+  await audit(managerRoutes);
 });

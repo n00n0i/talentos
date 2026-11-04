@@ -83,3 +83,14 @@ export function visibleNav(me: Me | null): NavGroup[] {
     .map((g) => ({ ...g, items: g.items.filter((i) => allowed.has(i.href)) }))
     .filter((g) => g.items.length > 0);
 }
+
+
+/** The single nav href that should be highlighted for the current path. */
+export function activeHref(pathname: string): string | undefined {
+  const hrefs = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
+  return hrefs
+    .filter((href) =>
+      href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`),
+    )
+    .sort((a, b) => b.length - a.length)[0];
+}

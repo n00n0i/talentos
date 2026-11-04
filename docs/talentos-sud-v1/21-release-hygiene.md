@@ -38,8 +38,12 @@ conflicted with `vite@8` peer requirements (pre-existing dependency drift). Fixe
 bumping `@types/node` to `^22.20.5`; `npm ci --dry-run` now resolves, and tsc/vitest/
 build are green locally. CI is rerun on the pushed branch.
 
-**CI on the pre-push candidate SHA: NOT_EVALUATED.** No remote push was authorised, so no CI
-run exists for this commit. Local gates above are the evidence.
+**CI executed on PR #1 head `5090f68`:** `web`, `quality`, `e2e`, `build-release` and
+`Strix AI Pentest` all **passed**. Evidence: `evidence/logs/ci-pr-checks.log`.
+
+The first run failed the `web` job at `npm ci` because `@types/node@20.16.11`
+conflicted with `vite@8`; fixed by bumping `@types/node` to `^22.20.5`. A docs-only
+commit after the green run is formally `NOT_EVALUATED`, but it changes no code.
 
 ## Safe push plan (requires owner authorisation)
 
